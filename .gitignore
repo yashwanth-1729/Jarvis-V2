@@ -1,0 +1,30 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# --- Secrets & local config ------------------------------------------------
+.env
+.env.local
+!.env.example
+!.env.local.example
+
+# --- Database --------------------------------------------------------------
+backend/storage/*.db
+backend/storage/*.db-wal
+backend/storage/*.db-shm
+
+# --- Node / Next -----------------------------------------------------------
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# --- Editors / OS ----------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

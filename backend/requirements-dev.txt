@@ -1,0 +1,5 @@
+# Test-only dependencies. Install alongside requirements.txt to run tests/smoke_test.py
+-r requirements.txt
+
+# Drives fastapi.testclient
+httpx>=0.28.0

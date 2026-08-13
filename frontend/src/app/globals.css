@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+   JARVIS design tokens — "Graphite & Ember"
+   ---------------------------------------------------------------------------
+   A warm-ink command center, not a blue-slate dashboard. The canvas is a warm
+   near-black; everything structural is a neutral from the same warm ramp; and
+   exactly one accent (ember amber) carries brand, focus and "active work".
+   Semantic hues are rationed: vermilion = needs attention, mint = resolved.
+
+   Every foreground token below is contrast-checked against --surface-0.
+   =========================================================================== */
+
+@layer base {
+  :root {
+    /* --- Warm neutral ramp ------------------------------------------------ */
+    --surface-0: 30 11% 4%; /* app canvas            #0A0908 */
+    --surface-1: 24 9% 6%; /* panels                #100E0D */
+    --surface-2: 24 8% 8%; /* cards, rows           #161413 */
+    --surface-3: 24 7% 11%; /* hover, raised         #1E1B19 */
+    --surface-4: 24 6% 16%; /* pressed, selected     #2B2724 */
+
+    --line: 24 6% 13%; /* hairline divider      #232120 */
+    --line-strong: 24 6% 20%; /* emphasised border     #36312D */
+
+    --ink: 38 24% 93%; /* primary text  ~18:1  #F1ECE3 */
+    --ink-muted: 34 9% 76%; /* secondary text ~11:1 #C8C0B6 */
+    --ink-dim: 30 6% 62%; /* tertiary text  ~7:1  #A69C90 */
+    --ink-faint: 26 6% 50%; /* smallest usable ~4.9:1 #877D70 */
+
+    /* --- Signal hues (rationed) ------------------------------------------ */
+    --ember: 36 79% 57%; /* brand / focus / active  #E8A33D  8.9:1 */
+    --ember-ink: 30 11% 4%; /* text on ember surfaces */
+    --ember-dim: 36 42% 22%; /* ember at panel weight */
+
+    --critical: 358 75% 59%; /* overdue / high / destructive #E5484D  5.1:1 */
+    --critical-dim: 358 40% 20%;
+
+    --positive: 151 50% 53%; /* completed #4CC38A  8.9:1 */
+    --positive-dim: 151 32% 18%;
+
+    --radius: 0.375rem; /* 6px panels */
+    --radius-sm: 0.25rem; /* 4px controls */
+
+    /* Rail + console widths are shared by the shell grid and sticky offsets. */
+    --rail-w: 3.5rem;
+    --console-w: 25rem;
+  }
+
+  * {
+    @apply border-[hsl(var(--line))];
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-[hsl(var(--surface-0))] text-[hsl(var(--ink))] antialiased;
+    font-feature-settings:
+      "cv02" 1,
+      "cv03" 1,
+      "cv04" 1;
+  }
+
+  /* Data alignment: every number in the product uses tabular figures so
+     columns never jitter as values change. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  ::selection {
+    @apply bg-[hsl(var(--ember)/0.28)] text-[hsl(var(--ink))];
+  }
+
+  /* One focus treatment for the whole product. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ember));
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+@layer components {
+  /* Panel: the single surface primitive. Hairline border, no shadow — depth
+     comes from the neutral ramp, per the Swiss/flat direction. */
+  .panel {
+    @apply rounded-[var(--radius)] border border-[hsl(var(--line))] bg-[hsl(var(--surface-1))];
+  }
+
+  /* Eyebrow: the small uppercase mono label used for every section header and
+     metadata key. It is the product's most repeated typographic gesture. */
+  .eyebrow {
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-[hsl(var(--ink-faint))];
+  }
+
+  /* Hairline grid texture — sits under the shader scrim to give the canvas
+     the drafting-table structure the Swiss direction calls for. */
+  .grid-texture {
+    background-image:
+      linear-gradient(to right, hsl(var(--line) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--line) / 0.5) 1px, transparent 1px);
+    background-size: 96px 96px;
+  }
+
+  /* Markdown rendered inside assistant messages. */
+  .prose-jarvis {
+    @apply text-[13px] leading-[1.65] text-[hsl(var(--ink-muted))];
+  }
+  .prose-jarvis > * + * {
+    @apply mt-3;
+  }
+  .prose-jarvis h1,
+  .prose-jarvis h2,
+  .prose-jarvis h3 {
+    @apply mt-4 font-sans text-[13px] font-semibold tracking-tight text-[hsl(var(--ink))];
+  }
+  .prose-jarvis strong {
+    @apply font-semibold text-[hsl(var(--ink))];
+  }
+  .prose-jarvis a {
+    @apply text-[hsl(var(--ember))] underline decoration-[hsl(var(--ember)/0.4)] underline-offset-2 hover:decoration-[hsl(var(--ember))];
+  }
+  .prose-jarvis ul {
+    @apply list-none space-y-1.5 pl-0;
+  }
+  .prose-jarvis ul > li {
+    @apply relative pl-4 before:absolute before:left-0 before:top-[0.6em] before:h-[3px] before:w-[3px] before:rounded-full before:bg-[hsl(var(--ember)/0.8)] before:content-[''];
+  }
+  .prose-jarvis ol {
+    @apply list-decimal space-y-1.5 pl-5 marker:font-mono marker:text-[11px] marker:text-[hsl(var(--ink-faint))];
+  }
+  .prose-jarvis code {
+    @apply rounded-[3px] bg-[hsl(var(--surface-3))] px-1.5 py-0.5 font-mono text-[0.85em] text-[hsl(var(--ember))];
+  }
+  .prose-jarvis pre {
+    @apply overflow-x-auto rounded-[var(--radius-sm)] border border-[hsl(var(--line))] bg-[hsl(var(--surface-0))] p-3;
+  }
+  .prose-jarvis pre code {
+    @apply bg-transparent p-0 text-[hsl(var(--ink-muted))];
+  }
+  .prose-jarvis blockquote {
+    @apply border-l-2 border-[hsl(var(--ember)/0.5)] pl-3 text-[hsl(var(--ink-dim))];
+  }
+  .prose-jarvis table {
+    @apply w-full border-collapse text-[12px];
+  }
+  .prose-jarvis th {
+    @apply border-b border-[hsl(var(--line-strong))] px-2 py-1.5 text-left font-mono text-[10px] uppercase tracking-wider text-[hsl(var(--ink-faint))];
+  }
+  .prose-jarvis td {
+    @apply border-b border-[hsl(var(--line))] px-2 py-1.5;
+  }
+  .prose-jarvis hr {
+    @apply border-[hsl(var(--line))];
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--surface-4)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--surface-4));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--line-strong));
+  }
+
+  /* Fades the top/bottom edge of a scroll region into its container so long
+     lists don't terminate in a hard cut under sticky chrome. */
+  .mask-fade-y {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 12px,
+      #000 calc(100% - 16px),
+      transparent 100%
+    );
+  }
+}
+
+/* Honour the OS setting globally — individual components additionally opt out
+   of their own animation work (see ShaderBackground). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
