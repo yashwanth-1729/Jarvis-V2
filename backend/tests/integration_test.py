@@ -6,6 +6,7 @@ voice endpoints.
 """
 
 import asyncio
+import io
 import os
 import sys
 import tempfile
@@ -14,6 +15,10 @@ from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
+
+# Replies contain non-Latin script and typographic punctuation; the Windows
+# console defaults to cp1252 and would raise UnicodeEncodeError on both.
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 TMP_DB = Path(tempfile.gettempdir()) / "jarvis_integration.db"
 for suffix in ("", "-wal", "-shm"):

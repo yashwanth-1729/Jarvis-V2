@@ -26,6 +26,7 @@ from typing import Any, AsyncIterator, Iterable, Sequence
 import aiosqlite
 
 from app.core.config import settings
+from app.db import migrations
 
 logger = logging.getLogger("jarvis.db")
 
@@ -101,6 +102,11 @@ class Database:
         return conn
 
     async def _apply_schema(self, conn: aiosqlite.Connection) -> None:
+        # Migrations run *first*: `schema.sql` declares indexes over columns that
+        # only exist after an upgrade, so running it against a pre-migration
+        # table fails with "no such column". On a fresh database the migrations
+        # are no-ops and `schema.sql` creates the current shape directly.
+        await migrations.apply(conn)
         await conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         await conn.commit()
 
@@ -144,12 +150,35 @@ class Database:
         return row[0] if row else default
 
     async def execute(self, sql: str, params: Sequence[Any] = ()) -> int:
-        """Run a write and return ``lastrowid`` (INSERT) or ``rowcount`` (UPDATE/DELETE)."""
+        """Run a write and return ``lastrowid`` (INSERT) or ``rowcount`` (UPDATE/DELETE).
+
+        Use :meth:`execute_count` instead when you need "how many rows did that
+        touch". The fallback below is only reached when ``lastrowid`` is falsy,
+        and there is exactly one writer connection for the whole process — so
+        ``lastrowid`` keeps pointing at the last row *any* INSERT created, and an
+        UPDATE that matched nothing returns that stale id rather than 0.
+        Measured: after inserting row 2, a conflicting insert reports
+        ``lastrowid=2, rowcount=0``.
+        """
         async with self.write() as conn:
             cursor = await conn.execute(sql, params)
             try:
                 await conn.commit()
                 return cursor.lastrowid if cursor.lastrowid else cursor.rowcount
+            finally:
+                await cursor.close()
+
+    async def execute_count(self, sql: str, params: Sequence[Any] = ()) -> int:
+        """Run a write and return how many rows it actually changed.
+
+        The honest answer for UPDATE and DELETE, where :meth:`execute` cannot
+        give one.
+        """
+        async with self.write() as conn:
+            cursor = await conn.execute(sql, params)
+            try:
+                await conn.commit()
+                return cursor.rowcount
             finally:
                 await cursor.close()
 

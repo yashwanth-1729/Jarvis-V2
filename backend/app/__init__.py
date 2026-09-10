@@ -1,3 +1,3 @@
-"""JARVIS v1 — backend application package."""
+"""JARVIS backend application package."""
 
-__version__ = "1.0.0"
+__version__ = "3.0.0"

@@ -46,7 +46,10 @@ def check(label: str, condition: bool, detail: str = "") -> None:
 
 
 async def main() -> int:
+    from datetime import timedelta
+
     from app.core.config import settings
+    from app.core.languages import LANGUAGES
     from app.core.timeutil import days_from_now, now, to_iso
     from app.db import crud
     from app.db.database import db
@@ -73,7 +76,28 @@ async def main() -> int:
 
     # --------------------------------------------------------- tool schemas
     print("\n== tool schemas ==")
-    check("7 tools registered", len(TOOL_SCHEMAS) == 7, str(len(TOOL_SCHEMAS)))
+    # The core set is the contract: fourteen tools over the user's own data,
+    # available on every platform. System tools (shell and, later, files and
+    # network) are counted separately because they are gated off on mobile, so
+    # a bare total would fail on the phone build for the right reason and look
+    # like the wrong one.
+    from app.llm.tools import TOOL_REGISTRY
+
+    core = [s for s in TOOL_REGISTRY if s.capability == "core"]
+    # Bump deliberately when a core tool is added — the point of pinning it is
+    # to notice, since every tool costs ~230 tokens on every single request.
+    check("19 core tools registered", len(core) == 19, str(len(core)))
+    check("set_reminder is one of them", any(s.name == "set_reminder" for s in core))
+    check(
+        "configure_notifications is one of them",
+        any(s.name == "configure_notifications" for s in core),
+    )
+
+    check(
+        "schema view mirrors the registry",
+        len(TOOL_SCHEMAS) == len(TOOL_REGISTRY),
+        f"{len(TOOL_SCHEMAS)} vs {len(TOOL_REGISTRY)}",
+    )
     for spec in TOOL_SCHEMAS:
         well_formed = (
             bool(spec["name"])
@@ -202,6 +226,9 @@ async def main() -> int:
     first_id = (await crud.list_tasks())[0]["id"]
     updated = await execute_tool("update_task_status", {"task_id": first_id, "status": "COMPLETED"})
     check("status updated", not updated.is_error, updated.content)
+    # Completing is also a removal: the board holds outstanding work only.
+    check("completing clears the task off the board", await crud.get_task(first_id) is None)
+    check("model is told it was cleared, not asked to delete", "cleared" in updated.content)
     check(
         "missing id is a recoverable error, not an exception",
         (await execute_tool("update_task_status", {"task_id": 999_999, "status": "COMPLETED"})).is_error,
@@ -210,8 +237,11 @@ async def main() -> int:
     # ------------------------------------------------ get_dashboard_summary
     print("\n== tool: get_dashboard_summary ==")
     summary = await execute_tool("get_dashboard_summary", {})
-    check("summary lists open tasks", "OPEN TASKS" in summary.content)
-    check("summary lists today's schedule", "TODAY'S SCHEDULE" in summary.content)
+    check("summary lists the task board", "TASK BOARD" in summary.content)
+    check("summary separates the college timetable", "COLLEGE TIMETABLE" in summary.content)
+    check("summary separates day routines", "DAY ROUTINES" in summary.content)
+    check("summary separates booked sessions", "BOOKED SESSIONS" in summary.content)
+    check("summary tells the model the stores are distinct", "SEPARATE store" in summary.content)
 
     # --------------------------------------------- generate_proactive_brief
     print("\n== tool: generate_proactive_brief ==")
@@ -267,7 +297,370 @@ async def main() -> int:
     args, err = _parse_arguments("")
     check("empty arguments treated as no-args", args == {} and err is None)
 
+    # --------------------------------------------------- edit + delete gate
+    print("\n== edit and delete ==")
+    edit_target = await crud.create_task("Temp task", None, "LOW", "TEST")
+    r = await execute_tool(
+        "update_task", {"task_id": edit_target["id"], "priority": "HIGH", "status": "IN_PROGRESS"}
+    )
+    row = await crud.get_task(edit_target["id"])
+    check("update_task applies changes", row["priority"] == "HIGH" and row["status"] == "IN_PROGRESS")
+    check("update_task leaves other fields", row["category"] == "TEST", row["category"])
+    check(
+        "empty update rejected",
+        (await execute_tool("update_task", {"task_id": edit_target["id"]})).is_error,
+    )
+
+    gate = await execute_tool(
+        "delete_record", {"record_type": "task", "record_id": edit_target["id"]}
+    )
+    check("delete requires confirmation", "CONFIRMATION REQUIRED" in gate.content)
+    check("nothing deleted before confirming", await crud.get_task(edit_target["id"]) is not None)
+    check("unconfirmed delete refreshes nothing", gate.refresh == set(), str(gate.refresh))
+
+    done = await execute_tool(
+        "delete_record",
+        {"record_type": "task", "record_id": edit_target["id"], "confirmed": True},
+    )
+    check("confirmed delete removes the row", await crud.get_task(edit_target["id"]) is None)
+    check("delete reports what went", "Temp task" in done.content, done.content[:70])
+
+    # ------------------------------------------------------- bulk deletion
+    # The user asked for a whole board to go and was interrogated task by task
+    # instead; one confirmation must cover the entire set.
+    print("\n== bulk delete ==")
+    for title in ("Bulk A", "Bulk B", "Bulk C"):
+        await crud.create_task(title, None, "LOW", "BULK")
+
+    bulk_gate = await execute_tool("bulk_delete_tasks", {"scope": "all"})
+    check("bulk delete asks once", "CONFIRMATION REQUIRED" in bulk_gate.content)
+    check("bulk delete states the count", "task(s)" in bulk_gate.content)
+    check(
+        "bulk delete forbids one-by-one questioning",
+        "one by one" in bulk_gate.content or "one at a time" in bulk_gate.content,
+    )
+    check("nothing removed before confirming", len(await crud.list_tasks()) >= 3)
+
+    # Confirming now requires the count the tool quoted. See
+    # tests/bulk_delete_test.py: a consent obtained for three once deleted
+    # nineteen, because relaying the number was left to the model.
+    before = len(await crud.list_tasks())
+    naked = await execute_tool("bulk_delete_tasks", {"scope": "all", "confirmed": True})
+    check("confirming without a count is refused", naked.is_error, naked.content[:80])
+    check("  ...and nothing was deleted", len(await crud.list_tasks()) == before)
+
+    wrong = await execute_tool(
+        "bulk_delete_tasks", {"scope": "all", "confirmed": True, "expect_count": 1}
+    )
+    check("a wrong count is refused", wrong.is_error, wrong.content[:80])
+    check("  ...and nothing was deleted", len(await crud.list_tasks()) == before)
+
+    bulk_done = await execute_tool(
+        "bulk_delete_tasks", {"scope": "all", "confirmed": True, "expect_count": before}
+    )
+    check("confirmed bulk delete clears the board", len(await crud.list_tasks()) == 0)
+    check("bulk delete reports the count", "Deleted" in bulk_done.content)
+    check(
+        "empty board handled cleanly",
+        "No " in (await execute_tool("bulk_delete_tasks", {"scope": "all"})).content,
+    )
+    check(
+        "unknown scope rejected",
+        (await execute_tool("bulk_delete_tasks", {"scope": "everything"})).is_error,
+    )
+
+    # The bulk test just emptied the board; restore a working set for the HTTP
+    # route checks further down.
+    await crud.create_task("Renew the domain", days_from_now(1), "HIGH", "ADMIN")
+    await crud.create_task("File the tax return", days_from_now(-2), "HIGH", "FINANCE")
+    await crud.create_task("Read the Anthropic docs", None, "LOW", "GENERAL")
+
+    # ------------------------------------------------------ schedule kinds
+    print("\n== schedule kinds ==")
+    college = await execute_tool(
+        "add_schedule_event",
+        {
+            "event_name": "Java Lab",
+            "kind": "COLLEGE",
+            "day_of_week": 0,
+            "start_time": "14:00",
+            "end_time": "15:30",
+        },
+    )
+    check("college class saved", not college.is_error, college.content[:80])
+    check("college kind recorded", college.display["kind"] == "COLLEGE")
+
+    routine = await execute_tool(
+        "add_schedule_event",
+        {
+            "event_name": "Study block",
+            "kind": "ROUTINE",
+            "day_of_week": 0,
+            "start_time": "18:00",
+            "end_time": "23:20",
+        },
+    )
+    check("routine saved", not routine.is_error, routine.content[:80])
+    check("routine did not clash with the class", "OVERLAP" not in routine.content)
+
+    # A one-off session landing inside that Monday routine fills the block:
+    # saved, and deliberately not reported as a clash (the user's choice).
+    monday = now().date()
+    monday += timedelta(days=(0 - monday.weekday()) % 7 or 7)
+    session = await execute_tool(
+        "add_schedule_event",
+        {
+            "event_name": "C revision",
+            "kind": "SESSION",
+            "time_start": f"{monday.isoformat()}T19:00:00",
+            "time_end": f"{monday.isoformat()}T20:00:00",
+        },
+    )
+    check("one-off session saved", not session.is_error, session.content[:80])
+    check("session inside a routine does not warn", "OVERLAP" not in session.content, session.content[:160])
+    check("session inside a routine is saved", session.display.get("id") is not None)
+
+    # Other clashes still warn: a session on top of a college class.
+    lab_clash = await execute_tool(
+        "add_schedule_event",
+        {
+            "event_name": "Viva prep",
+            "kind": "SESSION",
+            "time_start": f"{monday.isoformat()}T14:30:00",
+            "time_end": f"{monday.isoformat()}T15:00:00",
+        },
+    )
+    check("session over a college class warns", "OVERLAP WARNING" in lab_clash.content, lab_clash.content[:160])
+    check("clash is a warning, not a refusal", lab_clash.display.get("id") is not None)
+
+    groups = await crud.grouped_schedules()
+    check(
+        "three kinds are stored separately",
+        len(groups["COLLEGE"]) == 1 and len(groups["ROUTINE"]) == 1 and len(groups["SESSION"]) >= 1,
+        f"college={len(groups['COLLEGE'])} routine={len(groups['ROUTINE'])} "
+        f"session={len(groups['SESSION'])}",
+    )
+    check(
+        "every stored entry carries a kind",
+        all(row["kind"] in crud.SCHEDULE_KINDS for row in await crud.list_schedules()),
+    )
+
+    weekly_summary = (await execute_tool("get_dashboard_summary", {})).content
+    check("weekly entries are grouped by day name", "Monday:" in weekly_summary)
+
+    check(
+        "recurring entry without a day is rejected with guidance",
+        "day_of_week" in (
+            await execute_tool(
+                "add_schedule_event", {"event_name": "Broken", "kind": "ROUTINE"}
+            )
+        ).content,
+    )
+
+    # ------------------------------------------------------ speech numbers
+    # Telugu TTS reads a bare numeral in Telugu, so digits are rewritten as
+    # English words before synthesis.
+    print("\n== spoken numbers ==")
+    from app.core.speechtext import spell_numbers_in_english
+    from app.services.speech import prepare
+
+    check("clock times spelled out", spell_numbers_in_english("at 7:30 PM") == "at seven thirty PM")
+    check("on-the-hour drops the minutes", spell_numbers_in_english("at 6:00 PM") == "at six PM")
+    check("minutes under ten use 'oh'", spell_numbers_in_english("7:05") == "seven oh five")
+    check("counts spelled out", spell_numbers_in_english("3 tasks") == "three tasks")
+    check("years read naturally", spell_numbers_in_english("in 2026") == "in twenty twenty-six")
+    check("ordinals handled", spell_numbers_in_english("the 21st") == "the twenty-first")
+    check("text without digits is untouched", spell_numbers_in_english("no digits") == "no digits")
+    check("english keeps its digits", prepare("at 7:30 PM", "en-IN") == "at 7:30 PM")
+    check("telugu gets english words", "seven thirty" in prepare("7:30 PM కి", "te-IN"))
+
+    # ---------------------------------------------------------------- voices
+    print("\n== voices ==")
+    from app.core.voices import VOICES, match as match_voice
+
+    check("voice catalogue is populated", len(VOICES) >= 8, str(len(VOICES)))
+    check("both genders offered", {v.gender for v in VOICES} == {"female", "male"})
+    check("a spoken gender resolves", (match_voice("a girl's voice") or None) is not None)
+    check("female request picks a female voice", match_voice("female").gender == "female")
+    check("male request picks a male voice", match_voice("male voice").gender == "male")
+    check("a name resolves", match_voice("Kavya").id == "kavya")
+    check("nonsense voice rejected", match_voice("zzzz") is None)
+
+    voice_set = await execute_tool("set_voice", {"voice": "girl"})
+    check("set_voice accepts a gender", not voice_set.is_error, voice_set.content[:70])
+    check(
+        "voice persisted",
+        bool(await crud.get_preference(crud.PREF_VOICE_SPEAKER, "")),
+    )
+
+    # --------------------------------------------------- per-language pace
+    from app.core.languages import resolve as resolve_language
+
+    check(
+        "telugu speaks faster than english",
+        resolve_language("te-IN").pace > resolve_language("en-IN").pace,
+    )
+    check(
+        "pace stays short of flash speed",
+        all(1.0 <= lang.pace <= 1.3 for lang in LANGUAGES),
+    )
+
+    # ------------------------------------------------- voice turn boundary
+    # Regression: the tail of a reply (typically its closing line) was still
+    # queued when the user asked the next question, so it played *before* the
+    # new answer. Every turn now announces itself and stamps its audio, giving
+    # the client a way to drop anything belonging to a superseded turn.
+    print("\n== voice turn boundary ==")
+    from app.api.realtime import VoiceSession
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.frames: list[dict] = []
+
+        async def send_json(self, payload: dict) -> None:
+            self.frames.append(payload)
+
+    socket = FakeSocket()
+    session = VoiceSession(socket)  # type: ignore[arg-type]
+
+    # Keep this offline: the boundary logic is what is under test, not the agent.
+    async def _noop(text: str, generation: int) -> None:
+        return None
+
+    session._guarded_turn = _noop  # type: ignore[assignment,method-assign]
+
+    await session.start_turn("first question")
+    first_turn = [f for f in socket.frames if f["type"] == "turn"]
+    check("starting a turn announces it", len(first_turn) == 1, str(socket.frames))
+    first_gen = first_turn[0]["gen"]
+
+    await session.start_turn("second question")
+    turns = [f for f in socket.frames if f["type"] == "turn"]
+    check("each turn announces itself", len(turns) == 2)
+    check(
+        "the turn id advances so older audio can be identified",
+        turns[1]["gen"] > first_gen,
+        f"{first_gen} -> {turns[1]['gen']}",
+    )
+    check(
+        "a superseded turn is no longer current",
+        session._generation == turns[1]["gen"],
+    )
+
+    # ------------------------------------------------------------- language
+    print("\n== language ==")
+    from app.core.languages import DEFAULT_LANGUAGE, reply_directive, reply_reminder
+
+    # English used to be the one language with no per-turn reminder, on the
+    # assumption that the default needed no defending. It did: with only a line
+    # at the top of the system prompt, an English session answered an English
+    # question ("2 squared is 4") in Telugu, and greeting it with "Namaste"
+    # flipped it outright. Every language now gets the same anti-mirror anchor.
+    check("english gets a reminder too", "English" in (reply_reminder("en-IN") or ""))
+    check(
+        "english reminder forbids mirroring",
+        "not mirror" in (reply_reminder("en-IN") or ""),
+    )
+    check(
+        "english directive forbids mirroring",
+        "NOT a request to switch" in reply_directive("en-IN"),
+    )
+    check("telugu gets a reminder", "Telugu" in (reply_reminder("te-IN") or ""))
+    check(
+        "telugu directive demands code-mix",
+        "times" in reply_directive("te-IN") and "Latin script" in reply_directive("te-IN"),
+    )
+    check(
+        "unknown code falls back to default",
+        reply_reminder("xx-XX") == reply_reminder(DEFAULT_LANGUAGE),
+    )
+
+    lang = await execute_tool("set_language", {"language": "Telugu"})
+    check("set_language accepts a plain name", not lang.is_error, lang.content[:70])
+    check(
+        "language persisted",
+        await crud.get_preference(crud.PREF_VOICE_LANGUAGE, "") == "te-IN",
+    )
+    check(
+        "native script accepted",
+        not (await execute_tool("set_language", {"language": "తెలుగు"})).is_error,
+    )
+    check(
+        "nonsense language rejected",
+        (await execute_tool("set_language", {"language": "Klingon"})).is_error,
+    )
+    await crud.set_preference(crud.PREF_VOICE_LANGUAGE, DEFAULT_LANGUAGE)
+
+    # --- every handler actually runs ---------------------------------------
+    #
+    # `set_reminder` shipped with a missing import. Nothing caught it, because
+    # `execute_tool` turns any exception into readable text — so the tool
+    # "worked", returning "set_reminder failed: name 'parse_datetime' is not
+    # defined" to the model, which dutifully retried it eight times and burned
+    # the entire iteration budget on one broken import.
+    #
+    # That is the trade-off of never raising: a crash is indistinguishable from
+    # a refusal unless something looks. This looks. Every tool must be invoked
+    # here with a plausible payload, and a Python-level failure is a test
+    # failure rather than a message.
+    print("\n== every tool handler is wired ==")
+    probes: dict[str, dict] = {
+        "add_task": {"title": "wiring probe"},
+        "update_task_status": {"task_id": 999_999, "status": "PENDING"},
+        "get_dashboard_summary": {},
+        "save_idea_or_note": {"title": "probe", "content": "probe"},
+        "search_memory": {"query": "probe"},
+        "generate_proactive_brief": {},
+        "add_schedule_event": {"event_name": "probe", "day_of_week": 0, "start_time": "09:00"},
+        "bulk_delete_tasks": {"scope": "completed"},
+        "update_task": {"task_id": 999_999, "title": "probe"},
+        "update_schedule_event": {
+            "event_id": 999_999,
+            "matching": "probe",
+            "event_name": "probe",
+        },
+        "set_voice": {"voice": "female"},
+        "update_idea": {"idea_id": 999_999, "title": "probe"},
+        "delete_record": {"record_type": "task", "title": "probe-that-does-not-exist"},
+        "set_language": {"language": "English"},
+        "configure_notifications": {},
+        "set_reminder": {
+            "text": "probe",
+            "remind_at": days_from_now(1),
+            "time_expression": "tomorrow",
+        },
+        # Reaches the network. The check here is that the handler does not
+        # *raise* — an unreachable weather service must come back as an error
+        # outcome the model can read, which is exactly what this loop verifies,
+        # so it stays meaningful offline.
+        "get_weather": {"location": "Nellore", "days": 1},
+        "web_search": {"query": "python asyncio", "limit": 2},
+        "fetch_url": {"url": "https://example.com"},
+        "run_command": {"command": "echo probe"},
+        "read_file": {"path": "no-such-file-probe.txt"},
+        "write_file": {"path": "storage/wiring_probe.txt", "content": "probe"},
+        "edit_file": {"path": "no-such-file-probe.txt", "old_text": "a", "new_text": "b"},
+        "list_dir": {"path": "."},
+        "search_files": {"query": "probe", "path": "storage"},
+    }
+
+    missing = [s.name for s in TOOL_REGISTRY if s.name not in probes]
+    check("every registered tool has a probe", not missing, missing)
+
+    crashes = []
+    for spec in TOOL_REGISTRY:
+        payload = probes.get(spec.name)
+        if payload is None:
+            continue
+        outcome = await execute_tool(spec.name, payload)
+        # `handler raised` is rendered as "{name} failed: {exception}".
+        if f"{spec.name} failed:" in outcome.content:
+            crashes.append(f"{spec.name}: {outcome.content[:100]}")
+    check("no handler raised", not crashes, crashes)
+    Path("storage/wiring_probe.txt").unlink(missing_ok=True)
+
     await db.disconnect()
+
 
     # ------------------------------------------------------------ HTTP API
     print("\n== HTTP routes ==")
@@ -337,6 +730,7 @@ async def main() -> int:
             client.post("/api/chat", json={"message": ""}).status_code == 422,
         )
         check("DELETE /api/chat/history -> 204", client.delete("/api/chat/history").status_code == 204)
+
 
     print("\n" + "=" * 60)
     if failures:

@@ -44,7 +44,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn("inline-flex items-center gap-px rounded bg-surface-2 p-px", className)}
+      className={cn("ui-segmented inline-flex items-center gap-px rounded bg-surface-2 p-px", className)}
     >
       {options.map((option, index) => {
         const selected = option.value === value;
@@ -61,6 +61,11 @@ export function Segmented<T extends string>({
             onKeyDown={(event) => onKeyDown(event, index)}
             className={cn(
               "cursor-pointer rounded-[3px] px-2 py-1 text-xs transition-colors duration-150",
+              // 24px tall as drawn, which is not a touch target. The segments
+              // sit flush against each other, so the box is expanded only
+              // vertically — expanding sideways would have each segment
+              // stealing taps from the one beside it.
+              "relative before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-['']",
               selected
                 ? "bg-surface-4 font-medium text-ink"
                 : "text-ink-faint hover:text-ink-muted",

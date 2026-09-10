@@ -7,8 +7,10 @@ from fastapi import APIRouter, Query
 from app.api.schemas import (
     BriefOut,
     DashboardOut,
+    GroupedScheduleOut,
     IdeaOut,
     MemoryOut,
+    ScheduleConflictOut,
     ScheduleEventOut,
     TaskCounts,
     TaskOut,
@@ -48,6 +50,8 @@ async def get_dashboard(
     ),
     horizon_days: int = Query(default=14, ge=1, le=90),
 ) -> DashboardOut:
+    await crud.expire_sessions()
+    await crud.expire_memories()
     statuses = (
         ("PENDING", "IN_PROGRESS", "COMPLETED")
         if include_completed
@@ -57,17 +61,35 @@ async def get_dashboard(
     tasks = await crud.list_tasks(statuses=statuses)
     today = await crud.todays_schedule()
     upcoming = await crud.upcoming_schedule(days=horizon_days)
+    groups = await crud.grouped_schedules()
+    conflicts = await crud.all_schedule_conflicts()
     ideas = await crud.list_ideas()
     memories = await crud.list_memories(limit=50)
     brief = await proactive.get_or_build_brief()
 
     return DashboardOut(
+        note_pages=await crud.list_note_pages(),
         generated_at=now_iso(),
         counts=await _counts(),
         brief=_brief_payload(brief),
         tasks=[TaskOut(**task) for task in tasks],
         today=[ScheduleEventOut(**event) for event in today],
         upcoming=[ScheduleEventOut(**event) for event in upcoming],
+        schedule=GroupedScheduleOut(
+            college=[ScheduleEventOut(**e) for e in groups["COLLEGE"]],
+            routine=[ScheduleEventOut(**e) for e in groups["ROUTINE"]],
+            session=[ScheduleEventOut(**e) for e in groups["SESSION"]],
+            conflicts=[
+                ScheduleConflictOut(
+                    a_id=a["id"],
+                    b_id=b["id"],
+                    a_label=a["event_name"],
+                    b_label=b["event_name"],
+                    detail=f"{a['day_name'] or a['time_start']} {a['window']}",
+                )
+                for a, b in conflicts
+            ],
+        ),
         ideas=[IdeaOut(**idea) for idea in ideas],
         memories=[MemoryOut(**memory) for memory in memories],
     )

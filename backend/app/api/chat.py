@@ -35,23 +35,75 @@ SSE_HEADERS = {
     "X-Accel-Buffering": "no",
 }
 
+_HEARTBEAT_SECONDS = 8.0
+
 
 def _frame(event_type: str, data: dict) -> str:
     return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def _event_stream(message: str, request: Request) -> AsyncIterator[str]:
+async def _agent_events(message: str) -> AsyncIterator[dict]:
+    """Yield agent events plus visible keepalives during a slow provider call."""
+    iterator = run_turn(message).__aiter__()
+    pending: asyncio.Task | None = None
     try:
-        async for event in run_turn(message):
-            if await request.is_disconnected():
-                logger.info("Client disconnected mid-turn; abandoning stream.")
-                return
-            yield _frame(event["type"], event.get("data", {}))
+        while True:
+            pending = asyncio.create_task(anext(iterator))
+            while True:
+                try:
+                    event = await asyncio.wait_for(
+                        asyncio.shield(pending), timeout=_HEARTBEAT_SECONDS
+                    )
+                    break
+                except asyncio.TimeoutError:
+                    yield {
+                        "type": "progress",
+                        "data": {"message": "Still working on the full response…"},
+                    }
+            pending = None
+            yield event
+    except StopAsyncIteration:
+        return
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        await iterator.aclose()
+
+
+async def _event_stream(message: str, request: Request) -> AsyncIterator[str]:
+    terminal_sent = False
+    try:
+        async with asyncio.timeout(settings.jarvis_chat_turn_timeout):
+            async for event in _agent_events(message):
+                if await request.is_disconnected():
+                    logger.info("Client disconnected mid-turn; abandoning stream.")
+                    return
+                terminal_sent = terminal_sent or event["type"] == "done"
+                yield _frame(event["type"], event.get("data", {}))
+    except TimeoutError:
+        logger.warning(
+            "Chat turn exceeded %.0fs; closing stream", settings.jarvis_chat_turn_timeout
+        )
+        yield _frame(
+            "error",
+            {
+                "message": (
+                    "Sarvam did not finish this turn in time. Any tool changes already "
+                    "shown were saved; review them before retrying."
+                )
+            },
+        )
     except asyncio.CancelledError:  # client went away
         raise
     except Exception as exc:  # noqa: BLE001 — never leak a traceback into the stream
         logger.exception("Chat stream failed")
         yield _frame("error", {"message": f"Unexpected server error: {exc}"})
+
+    # `run_turn` historically returned immediately after provider/configuration
+    # errors. The HTTP body eventually closed, but clients had no explicit
+    # terminal frame and some WebViews kept the composer in its working state.
+    if not terminal_sent and not await request.is_disconnected():
         yield _frame("done", {"stop_reason": "error", "refresh": [], "usage": {}})
 
 

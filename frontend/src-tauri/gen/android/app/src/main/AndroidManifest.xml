@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- JARVIS is a user-facing calendar/reminder app. Exact alarms allow a
+         requested time to remain exact while the process is closed. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- Voice. Tauri's WebChromeClient already bridges the WebView's
+         AUDIO_CAPTURE request to the Android runtime prompt, but an undeclared
+         permission is refused before the user is ever asked, so getUserMedia
+         fails instantly and silently. MODIFY_AUDIO_SETTINGS goes with it: the
+         capture path adjusts routing when a headset or speaker changes. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Declared as optional so the app stays installable on a device without
+         one; voice simply reports itself unavailable there. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Location. Tauri's WebChromeClient already implements
+         onGeolocationPermissionsShowPrompt and asks Android for these two, so
+         no plugin and no Rust are needed — but an undeclared permission is
+         refused before the user is ever asked, and navigator.geolocation then
+         fails with no prompt and no error to explain it.
+
+         COARSE alone would be enough for weather; FINE is declared because the
+         generated client requests both together and treats a coarse-only grant
+         as success anyway. Neither is required to run: if the user declines,
+         the backend falls back to an IP lookup, which is city-accurate, which
+         is the entire requirement here. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+
+
+    <!-- AndroidTV support -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.app"
+        android:usesCleartextTraffic="${usesCleartextTraffic}">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:launchMode="singleTask"
+            android:label="@string/main_activity_title"
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <!-- AndroidTV support -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".JarvisAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".JarvisAlarmRestoreReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+          android:name="androidx.core.content.FileProvider"
+          android:authorities="${applicationId}.fileprovider"
+          android:exported="false"
+          android:grantUriPermissions="true">
+          <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

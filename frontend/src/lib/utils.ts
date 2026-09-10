@@ -116,6 +116,6 @@ export function groupByDay<T extends { time_start: string }>(
     .map(([key, items]) => ({
       key,
       heading: formatDayHeading(items[0].time_start),
-      items,
+      items: [...items].sort((a, b) => (parseLocal(a.time_start)?.getTime() ?? Infinity) - (parseLocal(b.time_start)?.getTime() ?? Infinity)),
     }));
 }

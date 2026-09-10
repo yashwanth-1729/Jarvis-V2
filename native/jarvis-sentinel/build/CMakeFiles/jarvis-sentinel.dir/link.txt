@@ -1,0 +1,3 @@
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\jarvis-sentinel.dir/objects.a
+C:\Users\ASUS\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\ar.exe qc CMakeFiles\jarvis-sentinel.dir/objects.a @CMakeFiles\jarvis-sentinel.dir\objects1.rsp
+C:\Users\ASUS\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\c++.exe -O3 -DNDEBUG -static -static-libgcc -static-libstdc++ -Wl,--whole-archive CMakeFiles\jarvis-sentinel.dir/objects.a -Wl,--no-whole-archive -o bin\jarvis-sentinel.exe -Wl,--out-implib,libjarvis-sentinel.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\jarvis-sentinel.dir\linkLibs.rsp

@@ -27,6 +27,16 @@ class ProviderRateLimited(ProviderError):
     """Vendor asked us to slow down."""
 
 
+class ProviderOutOfCredit(ProviderError):
+    """The account has no balance left.
+
+    Distinct from rate limiting, which waiting fixes, and from an auth error,
+    which a new key fixes. Nothing the app does will help — and the difference
+    matters at the call site: a 402 should stop the voice loop from re-sending
+    every utterance into a wall, where a 429 genuinely should be retried.
+    """
+
+
 class ProviderUnavailable(ProviderError):
     """Network failure or a vendor-side 5xx."""
 
@@ -83,12 +93,30 @@ class ChatProvider(Protocol):
         self,
         messages: Sequence[dict[str, Any]],
         tools: Sequence[dict[str, Any]] | None = None,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        incremental: bool = True,
     ) -> AsyncIterator[ChatChunk]:
         """Yield chunks as they arrive.
 
         The final :class:`ChatResult` is retrieved from :meth:`last_result`
         after the iterator is exhausted, mirroring the SDK `get_final_message`
         pattern and keeping the iterator's item type uniform.
+
+        ``incremental=False`` asks for the whole completion in one response and
+        yields it as a single chunk. The interface is identical either way, so
+        callers that do not care about partial output need no special case.
+
+        It is not merely a convenience. Measured against the live endpoint with
+        an identical prompt::
+
+            streaming      first token 0.57s, total 2.47s,    0 of 9,014 cached
+            non-streaming  first token   —  , total 1.61s, 8,960 of 9,014 cached
+
+        The provider does not apply its prefix cache to streaming requests, so a
+        streamed turn re-processes the entire prompt every time. Where partial
+        output is not being shown to anyone -- a round that only decides which
+        tool to call -- streaming costs time and money for nothing.
         """
         ...
 
@@ -128,6 +156,23 @@ class Speech:
     content_type: str = "audio/wav"
 
 
+@dataclass(slots=True)
+class AudioPacket:
+    """Mono signed little-endian 16-bit PCM; packet boundaries are sample aligned."""
+
+    audio: bytes
+    sample_rate: int
+
+
+@runtime_checkable
+class StreamingTTSProvider(Protocol):
+    def stream_speech(
+        self, text: str, language_code: str | None = None,
+        speaker: str | None = None, pace: float | None = None,
+    ) -> AsyncIterator[AudioPacket]:
+        ...
+
+
 @runtime_checkable
 class TTSProvider(Protocol):
     name: str
@@ -141,5 +186,6 @@ class TTSProvider(Protocol):
         text: str,
         language_code: str | None = None,
         speaker: str | None = None,
+        pace: float | None = None,
     ) -> Speech:
         ...

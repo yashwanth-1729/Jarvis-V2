@@ -20,15 +20,18 @@ async def toggle_task(payload: ToggleTaskRequest) -> ToggleTaskResponse:
     can update the banner without a second request.
     """
     if payload.status is not None:
-        task = await crud.update_task_status(payload.task_id, payload.status)
+        change = await crud.update_task_status(payload.task_id, payload.status)
     else:
-        task = await crud.toggle_task_status(payload.task_id)
+        change = await crud.toggle_task_status(payload.task_id)
 
-    if task is None:
+    if change.task is None:
         raise HTTPException(status_code=404, detail=f"Task {payload.task_id} not found")
 
     return ToggleTaskResponse(
-        task=TaskOut(**task),
+        task=TaskOut(**change.task),
+        # Completing a task removes it from the board, so the row returned here
+        # describes something the client must drop rather than re-render.
+        cleared=change.cleared,
         counts=await _counts(),
         brief=_brief_payload(await proactive.build_brief()),
     )

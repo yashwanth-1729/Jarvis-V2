@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/Jarvis-2.0/native/jarvis-sentinel/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

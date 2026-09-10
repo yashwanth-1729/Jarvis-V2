@@ -1,4 +1,4 @@
-"""JARVIS v1 — FastAPI entry point.
+"""JARVIS FastAPI entry point.
 
 Run from the `backend/` directory:
 
@@ -7,18 +7,32 @@ Run from the `backend/` directory:
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import chat, dashboard, tasks, voice
+from app.api import (
+    announcements,
+    chat,
+    dashboard,
+    localstore,
+    location,
+    realtime,
+    records,
+    sentinel,
+    tasks,
+    voice,
+)
 from app.api.schemas import HealthOut
 from app.core.config import settings
+from app.db import crud
 from app.db.database import db
 from app.providers import close_providers
+from app.services import scheduler, sync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +45,34 @@ logger = logging.getLogger("jarvis")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.connect()
+
+    # The board holds outstanding work only. Completing a task normally clears
+    # it on the spot; this catches anything left behind by an older build or a
+    # crash, so stale "done" rows never accumulate.
+    swept = await crud.sweep_completed_tasks()
+    if swept:
+        logger.info("Cleared %d completed task(s) off the board", swept)
+
+    # Cross-device sync. SQLite above stays the source of truth; this only
+    # mirrors it, so a failure here must never stop JARVIS from starting.
+    stop_sync = asyncio.Event()
+    sync_task: asyncio.Task[None] | None = None
+    if settings.jarvis_sync_enabled and settings.sync_configured:
+        sync_task = asyncio.create_task(sync.run_forever(stop_sync))
+    elif settings.jarvis_sync_enabled:
+        logger.info(
+            "Sync is idle - set SUPABASE_URL and SUPABASE_SERVICE_KEY in "
+            "backend/.env to mirror this device."
+        )
+
+    # Makes the timetable act rather than merely exist. Off on mobile, where the
+    # app is foreground-only by design and a background timer would be firing
+    # into a process the OS is about to freeze.
+    stop_scheduler = asyncio.Event()
+    scheduler_task: asyncio.Task[None] | None = None
+    if settings.scheduler_enabled:
+        scheduler_task = asyncio.create_task(scheduler.run_forever(stop_scheduler))
+
     if not settings.has_api_key:
         logger.warning(
             "SARVAM_API_KEY is not set in backend/.env. The dashboard will work, "
@@ -49,13 +91,25 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
+        if sync_task is not None:
+            # Ask the loop to stop between rounds, then cancel if it is asleep
+            # on its interval. Cancelling alone would abandon a round mid-push.
+            stop_sync.set()
+            sync_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await sync_task
+        if scheduler_task is not None:
+            stop_scheduler.set()
+            scheduler_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await scheduler_task
         await close_providers()
         await db.disconnect()
 
 
 app = FastAPI(
     title="JARVIS",
-    description="Persistent AI personal command center — v1 backend.",
+    description="JARVIS 3 persistent AI personal command center backend.",
     version=__version__,
     lifespan=lifespan,
 )
@@ -63,6 +117,12 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # Also accept any private-LAN address on the frontend port. Pinning a
+    # literal LAN IP here means the app breaks every time DHCP hands this
+    # machine a new address — which it has. This is a single-user tool bound to
+    # a home network, so trusting RFC1918 origins on one known port is
+    # proportionate and removes a recurring failure.
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,6 +132,18 @@ app.include_router(chat.router)
 app.include_router(dashboard.router)
 app.include_router(tasks.router)
 app.include_router(voice.router)
+app.include_router(realtime.router)
+# Only meaningful when the client owns the data (mobile); the endpoints
+# refuse otherwise, so registering unconditionally is harmless.
+app.include_router(localstore.router)
+# Entry point for the native always-on daemon; see native/jarvis-sentinel.
+app.include_router(sentinel.router)
+# What the scheduler wants said, and the reminders that feed it.
+app.include_router(announcements.router)
+# Direct editing of the boards, for a person rather than the agent.
+app.include_router(records.router)
+
+app.include_router(location.router)
 
 
 @app.get("/api/health", response_model=HealthOut, tags=["meta"])
@@ -94,6 +166,10 @@ async def health() -> HealthOut:
             "max_tokens": settings.jarvis_max_tokens,
             "tasks_stored": task_count,
             "cors_origins": settings.cors_origins,
+            # True when the *client* owns the user's data and this is only
+            # the AI runtime. The client reads this to decide whether its
+            # own store or this one is authoritative.
+            "client_owned_data": settings.jarvis_client_owned_data,
         },
     )
 

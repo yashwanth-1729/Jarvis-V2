@@ -41,7 +41,7 @@ function Metric({
 }: {
   label: string;
   value: number;
-  tone?: "neutral" | "ember" | "critical";
+  tone?: "neutral" | "accent" | "critical";
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -49,7 +49,7 @@ function Metric({
         className={cn(
           "tnum font-mono text-lg font-medium leading-none",
           tone === "critical" && "text-critical",
-          tone === "ember" && "text-ember",
+          tone === "accent" && "text-accent",
           tone === "neutral" && "text-ink",
         )}
       >
@@ -89,18 +89,18 @@ export function SignalBar({
       aria-label="Proactive brief"
       className="relative border-b border-line bg-surface-1/60"
     >
-      {/* Attention rule: a single hairline that goes ember when work is urgent. */}
+      {/* Attention rule: a single hairline that goes accent when work is urgent. */}
       <div
         aria-hidden
         className={cn(
           "absolute inset-x-0 top-0 h-px transition-colors duration-500",
           alert
             ? "bg-gradient-to-r from-transparent via-critical/70 to-transparent"
-            : "bg-gradient-to-r from-transparent via-ember/40 to-transparent",
+            : "bg-gradient-to-r from-transparent via-accent/40 to-transparent",
         )}
       />
 
-      <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:items-center xl:gap-8">
+      <div className="flex flex-col gap-4 px-4 py-4 xl:flex-row xl:items-center xl:gap-8">
         {/* Metrics block. Wraps at narrow widths — at 375px the title and four
             metrics cannot share a line, and clipping them would silently drop
             the counters rather than just tightening the layout. */}
@@ -109,7 +109,7 @@ export function SignalBar({
             <Signal
               className={cn(
                 "h-3.5 w-3.5",
-                alert ? "text-critical" : "text-ember",
+                alert ? "text-critical" : "text-accent",
                 refreshing && "animate-breathe",
               )}
               strokeWidth={2}
@@ -129,7 +129,7 @@ export function SignalBar({
             <Metric
               label="Active"
               value={counts?.IN_PROGRESS ?? 0}
-              tone={counts?.IN_PROGRESS ? "ember" : "neutral"}
+              tone={counts?.IN_PROGRESS ? "accent" : "neutral"}
             />
             <Metric
               label="Overdue"

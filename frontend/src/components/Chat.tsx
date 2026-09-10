@@ -2,6 +2,7 @@
 
 import {
   CircleAlert,
+  ArrowUpRight,
   CornerDownLeft,
   Eraser,
   Loader2,
@@ -11,14 +12,16 @@ import {
   VolumeX,
 } from "lucide-react";
 import * as React from "react";
+
+import { intentSurface, readSurface, type SurfaceDescriptor } from "@/lib/surfaces";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { ThinkingBlock, ToolCallLog } from "@/components/ToolCallLog";
+import { StreamedProse } from "@/components/StreamedProse";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ShaderBackground } from "@/components/ui/simplex-noise-first-contact";
 import { clearChatHistory, fetchChatHistory, streamChat } from "@/lib/api";
 import {
   fetchVoiceConfig,
@@ -33,21 +36,24 @@ import {
 import { cn, formatTime } from "@/lib/utils";
 import type { ChatMessage, MicState, RefreshDomain, ToolCall } from "@/types";
 
-const SUGGESTIONS = [
-  "What should I focus on today?",
-  "Remind me to renew the domain Friday 10am — high priority",
-  "Block Thursday 14:00–15:00 for the design review",
-  "Remember that I prefer morning meetings",
-];
+const SUGGESTIONS = ["What should I focus on today?", "What's on my schedule?", "Help me think through an idea"];
 
 let messageCounter = 0;
 const nextId = () => `m${Date.now()}-${messageCounter++}`;
 
 interface ChatProps {
   onRefresh: (domains: RefreshDomain[]) => void;
+  /**
+   * A tool result that names an interface to open.
+   *
+   * `display` was already captured here and never rendered. Rather than build a
+   * second channel, it now carries a `surface` and is lifted to the page, which
+   * owns what the screen becomes.
+   */
+  onSurface: (surface: SurfaceDescriptor) => void;
 }
 
-export function Chat({ onRefresh }: ChatProps) {
+export function Chat({ onRefresh, onSurface }: ChatProps) {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [streaming, setStreaming] = React.useState(false);
@@ -176,6 +182,11 @@ export function Chat({ onRefresh }: ChatProps) {
               }));
               break;
 
+            // Server heartbeat: receiving it keeps the stream alive while the
+            // existing three-dot indicator continues to represent work.
+            case "progress":
+              break;
+
             case "tool_use":
               patchAssistant(assistantId, (m) => ({
                 ...m,
@@ -186,7 +197,9 @@ export function Chat({ onRefresh }: ChatProps) {
               }));
               break;
 
-            case "tool_result":
+            case "tool_result": {
+              const surface = readSurface(event.data.name, event.data.display);
+              if (surface) onSurface(surface);
               patchAssistant(assistantId, (m) => ({
                 ...m,
                 toolCalls: (m.toolCalls ?? []).map((call) =>
@@ -201,6 +214,16 @@ export function Chat({ onRefresh }: ChatProps) {
                 ),
               }));
               break;
+            }
+
+            case "surface": {
+              const intent = intentSurface(
+                String(event.data.kind ?? ""),
+                event.data as unknown as Record<string, unknown>,
+              );
+              if (intent) onSurface(intent);
+              break;
+            }
 
             case "refresh":
               onRefresh(event.data.domains);
@@ -233,6 +256,24 @@ export function Chat({ onRefresh }: ChatProps) {
     },
     [onRefresh, patchAssistant, streaming],
   );
+
+  /**
+   * A panel asking a follow-up question on the user's behalf.
+   *
+   * "Read it for me" on a search result has to start a real turn, not fake one
+   * — that is what makes the panels instruments rather than displays. Routed as
+   * a window event because the panel is mounted beside this component rather
+   * than inside it, and threading a send function up through the page and back
+   * down would couple three components to a one-line interaction.
+   */
+  React.useEffect(() => {
+    const onAsk = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail;
+      if (typeof message === "string" && message.trim()) void send(message);
+    };
+    window.addEventListener("jarvis:ask", onAsk);
+    return () => window.removeEventListener("jarvis:ask", onAsk);
+  }, [send]);
 
   /* -------------------------------------------------------------------- mic */
 
@@ -319,15 +360,15 @@ export function Chat({ onRefresh }: ChatProps) {
   return (
     <section
       aria-label="JARVIS console"
-      className="relative flex h-full min-h-0 flex-col border-r border-line bg-surface-1/70"
+      className="mobile-ui chat-page relative flex h-full min-h-0 flex-col border-r border-line bg-surface-1/70"
     >
-      <header className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
-        <span className="eyebrow">Console</span>
+      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-4">
+        <div className="chat-heading"><BrandMark /><div><strong>JARVIS</strong><small>{streaming ? "Working on it…" : "A little clarity, whenever you need it."}</small></div></div>
         <span
           aria-hidden
           className={cn(
             "h-1 w-1 rounded-full",
-            streaming ? "animate-breathe bg-ember" : "bg-line-strong",
+            streaming ? "animate-breathe bg-accent" : "bg-line-strong",
           )}
         />
         <Button
@@ -346,12 +387,12 @@ export function Chat({ onRefresh }: ChatProps) {
       <ScrollArea
         ref={scrollRef}
         onScroll={handleScroll}
-        className="mask-fade-y min-h-0 flex-1 px-4 py-4"
+        className="chat-scroll min-h-0 flex-1 px-4 py-4"
       >
         {showIntro ? (
           <Intro onPick={(value) => void send(value)} />
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {messages.map((message) => (
               <MessageBlock
                 key={message.id}
@@ -377,11 +418,11 @@ export function Chat({ onRefresh }: ChatProps) {
         <div
           className={cn(
             "rounded-lg border bg-surface-2 transition-colors duration-150",
-            "focus-within:border-ember/40",
+            "focus-within:border-accent/40",
             micState === "recording"
               ? "border-critical/50"
               : streaming
-                ? "border-ember/25"
+                ? "border-accent/25"
                 : "border-line",
           )}
         >
@@ -395,7 +436,7 @@ export function Chat({ onRefresh }: ChatProps) {
             placeholder={
               micState === "recording"
                 ? "Listening… tap the mic again to stop"
-                : "Ask JARVIS, or dump a to-do list…"
+                : "Message JARVIS…"
             }
             // 16px on small screens: iOS auto-zooms any focused input below
             // that, which yanks the whole layout on every message.
@@ -416,7 +457,7 @@ export function Chat({ onRefresh }: ChatProps) {
                 title={micState === "recording" ? "Stop recording" : "Dictate"}
                 className={cn(
                   micState === "recording" && "bg-critical/15 text-critical",
-                  micState === "transcribing" && "text-ember",
+                  micState === "transcribing" && "text-accent",
                 )}
               >
                 {micState === "transcribing" ? (
@@ -432,7 +473,7 @@ export function Chat({ onRefresh }: ChatProps) {
               </Button>
             )}
 
-            <span className="font-mono text-2xs text-ink-faint">
+            <span className="hidden font-mono text-2xs text-ink-faint lg:inline">
               {micState === "recording" ? (
                 <span className="text-critical">recording…</span>
               ) : micState === "transcribing" ? (
@@ -476,44 +517,19 @@ export function Chat({ onRefresh }: ChatProps) {
 
 function Intro({ onPick }: { onPick: (value: string) => void }) {
   return (
-    <div className="flex h-full flex-col justify-center">
-      {/* The shader is allowed to be visible here — an empty console is the one
-          place in the product with room for atmosphere. */}
-      <div className="relative mb-6 overflow-hidden rounded-lg border border-line">
-        <div className="absolute inset-0 opacity-[0.5]">
-          <ShaderBackground className="h-full w-full" speed={0.55} />
-        </div>
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-gradient-to-t from-surface-1 via-surface-1/70 to-transparent"
-        />
-        <div className="relative px-4 py-7">
-          <p className="font-display text-lg font-semibold tracking-tight text-ink">
-            At your service.
-          </p>
-          <p className="mt-1 max-w-[32ch] text-sm leading-relaxed text-ink-dim">
-            Tell me what you need and I&apos;ll put it on the board — tasks,
-            calendar blocks, ideas, or things worth remembering. Type it or speak
-            it.
-          </p>
-        </div>
-      </div>
-
-      <p className="eyebrow mb-2">Try</p>
-      <ul className="space-y-px overflow-hidden rounded border border-line">
+    <div className="chat-intro flex flex-col">
+      <BrandMark />
+      <h2>What&apos;s on your mind?</h2>
+      <p>Plan your day, explore an idea, or get something done. I&apos;m here.</p>
+      <ul className="chat-suggestions">
         {SUGGESTIONS.map((suggestion) => (
           <li key={suggestion}>
             <button
               type="button"
               onClick={() => onPick(suggestion)}
-              className={cn(
-                "flex w-full cursor-pointer items-center gap-2 border-b border-line bg-surface-1 px-3 py-2.5 text-left",
-                "text-sm text-ink-dim transition-colors duration-150 last:border-0",
-                "hover:bg-surface-2 hover:text-ink",
-              )}
             >
-              <CornerDownLeft className="h-3 w-3 shrink-0 text-ink-faint" />
               <span className="min-w-0">{suggestion}</span>
+              <ArrowUpRight className="h-4 w-4 shrink-0" />
             </button>
           </li>
         ))}
@@ -563,7 +579,7 @@ function SpeakButton({ text }: { text: string }) {
       onClick={() => void toggle()}
       aria-label={state === "playing" ? "Stop playback" : "Read this reply aloud"}
       title={state === "playing" ? "Stop" : "Read aloud"}
-      className={cn("ml-auto", state !== "idle" && "text-ember")}
+      className={cn("ml-auto", state !== "idle" && "text-accent")}
     >
       {state === "loading" ? (
         <Loader2 className="h-3 w-3 animate-spin" />
@@ -576,6 +592,34 @@ function SpeakButton({ text }: { text: string }) {
   );
 }
 
+/**
+ * Three dots, breathing, while JARVIS works.
+ *
+ * A spinner says "loading"; dots say "thinking", which is the truer statement
+ * — a tool call and a model deciding what to do are both the same thing from
+ * out here. Staggered by 160ms so they read as a wave rather than a blink,
+ * and built from opacity alone so it costs nothing to leave running for the
+ * ten seconds a search can take.
+ */
+function Working() {
+  return (
+    <div
+      className="flex items-center gap-2 py-1"
+      role="status"
+      aria-label="JARVIS is working"
+    >
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          aria-hidden
+          className="h-1.5 w-1.5 rounded-full bg-accent/70 motion-safe:animate-breathe"
+          style={{ animationDelay: `${index * 160}ms` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MessageBlock({
   message,
   canSpeak,
@@ -584,12 +628,57 @@ function MessageBlock({
   canSpeak: boolean;
 }) {
   const isUser = message.role === "user";
-  const isEmptyAssistant =
-    !isUser && !message.text && !message.error && !(message.toolCalls ?? []).length;
+
+  /**
+   * Whether this reply is still arriving on screen.
+   *
+   * Not the same as `message.streaming`, and that distinction is the whole
+   * reason the cascade did not show. A typed turn is unstreamed on purpose —
+   * it finishes sooner and hits the prefix cache — so the entire answer lands
+   * in one delta and `streaming` has already flipped to false by the time
+   * there is any text to render. Keying the animation off it meant the text
+   * went straight to the markdown branch and simply appeared.
+   *
+   * So freshness is measured here instead: when text first arrives, hold the
+   * animated view for as long as the cascade runs, then hand over to markdown
+   * for the settled message.
+   */
+  const [settling, setSettling] = React.useState(false);
+  const shown = React.useRef("");
+
+  React.useEffect(() => {
+    if (isUser || !message.text || message.text === shown.current) return;
+    const words = message.text.split(/\s+/).length;
+    shown.current = message.text;
+    setSettling(true);
+    // Must outlast the cascade in StreamedProse, or the markdown swap happens
+    // mid-animation and the tail of the reply snaps into place.
+    const step = words <= 1 ? 0 : Math.min(90, Math.max(28, 900 / words));
+    const timer = window.setTimeout(
+      () => setSettling(false),
+      Math.min(words * step, 1600) + 380,
+    );
+    return () => window.clearTimeout(timer);
+  }, [message.text, isUser]);
+
+  /**
+   * Nothing to show yet — so say so.
+   *
+   * This used to include `!toolCalls.length`, which was correct while the tool
+   * log rendered: once a tool started, the log itself was the sign of life and
+   * a spinner beside it would have been redundant. Removing the log left the
+   * condition behind, so the moment a tool began the indicator switched off
+   * and the reply became a blank space until the answer arrived — the longest
+   * part of the turn showed nothing at all.
+   *
+   * Working-ness is about whether there is anything on screen, not about
+   * whether a tool happens to be running.
+   */
+  const isEmptyAssistant = !isUser && !message.text && !message.error;
 
   if (isUser) {
     return (
-      <div className="animate-fade-in">
+      <div className="chat-message chat-user">
         <div className="mb-1 flex items-baseline gap-2">
           <span className="eyebrow text-ink-dim">You</span>
           <span className="tnum font-mono text-2xs text-ink-faint">
@@ -604,11 +693,11 @@ function MessageBlock({
   }
 
   return (
-    <div className="animate-fade-in">
+    <div className="chat-message chat-assistant">
       <div className="mb-1 flex items-center gap-2">
-        <span className="eyebrow text-ember">Jarvis</span>
+        <span className="eyebrow text-accent">Jarvis</span>
         {message.streaming && (
-          <span aria-hidden className="h-1 w-1 animate-breathe rounded-full bg-ember" />
+          <span aria-hidden className="h-1 w-1 animate-breathe rounded-full bg-accent" />
         )}
         {canSpeak && !message.streaming && message.text.trim() && (
           <SpeakButton text={message.text} />
@@ -618,26 +707,32 @@ function MessageBlock({
       {/* Flush-left prose with a hairline spine — reads as a transcript, not a
           chat bubble, which suits a tool the user works inside all day. */}
       <div className="border-l border-line pl-3">
-        {message.thinking && (
-          <ThinkingBlock text={message.thinking} live={Boolean(message.streaming)} />
-        )}
+        {/* The reasoning trace is gone from the transcript too, for the same
+            reason as the tool log: it is JARVIS working, not JARVIS
+            answering. It is still streamed and still stored — nothing is lost,
+            it simply no longer sits above every reply. */}
 
-        {(message.toolCalls ?? []).length > 0 && (
-          <ToolCallLog calls={message.toolCalls ?? []} />
-        )}
+        {/* No tool log. Which tool ran, with what arguments, is JARVIS's
+            business — the user asked a question and wants the answer, and a
+            list of internal machinery above it reads as debug output left on
+            by mistake. The tool results still drive the interface; they just
+            no longer narrate themselves. */}
 
-        {message.text && (
-          <div className="prose-jarvis break-words">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
-          </div>
-        )}
+        {message.text &&
+          (message.streaming || settling ? (
+            // Still arriving: word-by-word, and no markdown. A half-written
+            // `**bold` is not valid markdown, and re-parsing the document on
+            // every delta to discover that is slow and visibly unstable.
+            <div className="prose-jarvis break-words">
+              <StreamedProse text={message.text} />
+            </div>
+          ) : (
+            <div className="prose-jarvis break-words">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+            </div>
+          ))}
 
-        {isEmptyAssistant && message.streaming && (
-          <div className="flex items-center gap-2 py-0.5 text-xs text-ink-faint">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Working…
-          </div>
-        )}
+        {isEmptyAssistant && message.streaming && <Working />}
 
         {message.error && (
           <div

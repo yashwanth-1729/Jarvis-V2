@@ -1,6 +1,12 @@
 "use client";
 
-import { CalendarRange, LibraryBig, ListChecks, type LucideIcon } from "lucide-react";
+import {
+  CalendarRange,
+  LibraryBig,
+  ListChecks,
+  Settings2,
+  type LucideIcon,
+} from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -37,6 +43,7 @@ interface RailProps {
   counts: Partial<Record<ViewKey, number>>;
   /** Drives the status lamp: live, syncing, or unreachable. */
   status: "online" | "syncing" | "offline";
+  onOpenSettings: () => void;
 }
 
 const STATUS_COPY: Record<RailProps["status"], string> = {
@@ -47,18 +54,18 @@ const STATUS_COPY: Record<RailProps["status"], string> = {
 
 const STATUS_DOT: Record<RailProps["status"], string> = {
   online: "bg-positive",
-  syncing: "bg-ember animate-breathe",
+  syncing: "bg-accent animate-breathe",
   offline: "bg-critical",
 };
 
-export function Rail({ view, onViewChange, counts, status }: RailProps) {
+export function Rail({ view, onViewChange, counts, status, onOpenSettings }: RailProps) {
   return (
     <nav
       aria-label="Primary"
       className="flex h-full w-rail shrink-0 flex-col items-center border-r border-line bg-surface-0/80 py-3 backdrop-blur-sm"
     >
       <div
-        className="flex h-8 w-8 items-center justify-center text-ember"
+        className="flex h-8 w-8 items-center justify-center text-accent"
         title="JARVIS"
       >
         <Mark className="h-[18px] w-[18px]" />
@@ -79,7 +86,7 @@ export function Rail({ view, onViewChange, counts, status }: RailProps) {
                 "group relative flex h-9 w-9 cursor-pointer items-center justify-center rounded",
                 "transition-colors duration-150",
                 active
-                  ? "bg-surface-3 text-ember"
+                  ? "bg-surface-3 text-accent"
                   : "text-ink-faint hover:bg-surface-2 hover:text-ink-muted",
               )}
             >
@@ -88,7 +95,7 @@ export function Rail({ view, onViewChange, counts, status }: RailProps) {
                 aria-hidden
                 className={cn(
                   "absolute -left-3 h-4 w-[2px] rounded-r transition-all duration-200",
-                  active ? "bg-ember opacity-100" : "opacity-0",
+                  active ? "bg-accent opacity-100" : "opacity-0",
                 )}
               />
               <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
@@ -101,7 +108,7 @@ export function Rail({ view, onViewChange, counts, status }: RailProps) {
                     "tnum absolute -right-0.5 -top-0.5 min-w-[15px] rounded-full px-1",
                     "font-mono text-[9px] leading-[15px]",
                     active
-                      ? "bg-ember text-ember-ink"
+                      ? "bg-accent text-accent-ink"
                       : "bg-surface-4 text-ink-dim group-hover:text-ink-muted",
                   )}
                 >
@@ -112,6 +119,26 @@ export function Rail({ view, onViewChange, counts, status }: RailProps) {
           );
         })}
       </div>
+
+      {/* No voice control here. The console carries the single primary CTA;
+          a second entry point in the rail competed with it and made the
+          hierarchy ambiguous. */}
+      {/* Connection settings. Sits with the status dot rather than the view
+          switcher: both answer "what is this thing talking to", which is a
+          different question from "what am I looking at". */}
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        aria-label="Connection settings"
+        title="Connection settings"
+        className={cn(
+          "inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded",
+          "text-ink-faint transition-colors duration-150 hover:text-ink-muted",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+        )}
+      >
+        <Settings2 aria-hidden className="h-4 w-4" strokeWidth={2} />
+      </button>
 
       <div
         className="flex h-8 w-8 items-center justify-center"

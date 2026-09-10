@@ -288,7 +288,7 @@ void main() {
 }
 `
 
-// "Graphite & Ember": ink → warm graphite → ember brown → vermilion → amber.
+// "Graphite & Ember": ink → warm graphite → accent brown → vermilion → amber.
 // Weighted dark so the field sits behind UI as depth, not decoration.
 const UNIFORMS = {
   colors: [

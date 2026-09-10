@@ -65,7 +65,7 @@ export function ToolCallLog({ calls }: { calls: ToolCall[] }) {
               {/* State glyph */}
               <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                 {call.state === "running" ? (
-                  <Loader2 className="h-3 w-3 animate-spin text-ember" />
+                  <Loader2 className="h-3 w-3 animate-spin text-accent" />
                 ) : call.state === "ok" ? (
                   <Check className="h-3 w-3 text-positive" strokeWidth={3} />
                 ) : (
@@ -119,7 +119,7 @@ export function ThinkingBlock({ text, live }: { text: string; live: boolean }) {
         className="flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left transition-colors duration-150 hover:bg-surface-2"
       >
         <Brain
-          className={cn("h-3 w-3 shrink-0", live ? "animate-breathe text-ember" : "text-ink-faint")}
+          className={cn("h-3 w-3 shrink-0", live ? "animate-breathe text-accent" : "text-ink-faint")}
           strokeWidth={1.75}
         />
         <span className="text-xs text-ink-dim">{live ? "Thinking…" : "Reasoning"}</span>

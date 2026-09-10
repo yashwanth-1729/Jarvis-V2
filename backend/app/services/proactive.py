@@ -67,6 +67,16 @@ def _score_task(task: dict[str, Any]) -> BriefItem:
     return BriefItem(score=score, text=text, kind="task", source_id=task["id"])
 
 
+def urgency_of_task(task: dict[str, Any]) -> int:
+    """How much this task deserves the user's attention, 0-200ish.
+
+    The brief and the scheduler have to agree about what "urgent" means, or the
+    banner and the spoken interruption end up disagreeing about the same board.
+    Public so the scheduler can ask without reaching through the underscore.
+    """
+    return _score_task(task).score
+
+
 def _score_event(event: dict[str, Any]) -> BriefItem:
     reference = now()
     score = 20
@@ -89,7 +99,14 @@ def _score_event(event: dict[str, Any]) -> BriefItem:
 async def build_brief(bullet_count: int = 3) -> dict[str, Any]:
     """Compute, persist and return the current proactive brief."""
     open_tasks = await crud.list_tasks(statuses=("PENDING", "IN_PROGRESS"))
-    events = await crud.list_schedule(now_iso(), days_from_now(3))
+    # Expanded occurrences, so a weekly class two hours out ranks alongside a
+    # one-off booking rather than being invisible to the brief.
+    horizon = days_from_now(3)
+    events = [
+        event
+        for event in await crud.upcoming_schedule(days=3)
+        if now_iso() <= (event["time_start"] or "") <= horizon
+    ]
 
     items = [_score_task(task) for task in open_tasks]
     items.extend(_score_event(event) for event in events)

@@ -15,6 +15,12 @@ venv/
 backend/storage/*.db
 backend/storage/*.db-wal
 backend/storage/*.db-shm
+# Snapshot copies of the live database. The *.db rule above does not
+# cover them, so a `git add -A` would otherwise commit personal data.
+backend/storage/*.db.bak
+backend/storage/*.db.pre-sync-*
+backend/storage/*.db.*.bak
+backend/storage/memory-vault/
 
 # --- Node / Next -----------------------------------------------------------
 node_modules/
@@ -28,3 +34,6 @@ next-env.d.ts
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local UI previews (isolated fixtures and device screenshots)
+/tmp/mobile-review/

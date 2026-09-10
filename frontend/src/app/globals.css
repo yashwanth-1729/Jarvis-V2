@@ -3,37 +3,40 @@
 @tailwind utilities;
 
 /* ===========================================================================
-   JARVIS design tokens — "Graphite & Ember"
+   JARVIS design tokens — "Deep Field"
    ---------------------------------------------------------------------------
-   A warm-ink command center, not a blue-slate dashboard. The canvas is a warm
-   near-black; everything structural is a neutral from the same warm ramp; and
-   exactly one accent (ember amber) carries brand, focus and "active work".
-   Semantic hues are rationed: vermilion = needs attention, mint = resolved.
+   The console and the voice HUD are one machine, so they share one palette: a
+   cold near-black canvas, structural neutrals from the same cold ramp, and a
+   single neon-blue accent carrying brand, focus and "active work".
+
+   Red is reserved. It means JARVIS is speaking, and nothing else may use it
+   decoratively — that is why `critical` is the only other warm hue and it is
+   rationed to destructive/overdue states.
 
    Every foreground token below is contrast-checked against --surface-0.
    =========================================================================== */
 
 @layer base {
   :root {
-    /* --- Warm neutral ramp ------------------------------------------------ */
-    --surface-0: 30 11% 4%; /* app canvas            #0A0908 */
-    --surface-1: 24 9% 6%; /* panels                #100E0D */
-    --surface-2: 24 8% 8%; /* cards, rows           #161413 */
-    --surface-3: 24 7% 11%; /* hover, raised         #1E1B19 */
-    --surface-4: 24 6% 16%; /* pressed, selected     #2B2724 */
+    /* --- Cold neutral ramp ------------------------------------------------ */
+    --surface-0: 220 60% 3%; /* app canvas            #030610 */
+    --surface-1: 218 44% 6%; /* panels                #080D16 */
+    --surface-2: 216 38% 9%; /* cards, rows           #0E1520 */
+    --surface-3: 214 32% 13%; /* hover, raised         #161F2C */
+    --surface-4: 212 28% 18%; /* pressed, selected     #212D3B */
 
-    --line: 24 6% 13%; /* hairline divider      #232120 */
-    --line-strong: 24 6% 20%; /* emphasised border     #36312D */
+    --line: 214 30% 14%; /* hairline divider      #182231 */
+    --line-strong: 210 28% 24%; /* emphasised border     #2C3D4F */
 
-    --ink: 38 24% 93%; /* primary text  ~18:1  #F1ECE3 */
-    --ink-muted: 34 9% 76%; /* secondary text ~11:1 #C8C0B6 */
-    --ink-dim: 30 6% 62%; /* tertiary text  ~7:1  #A69C90 */
-    --ink-faint: 26 6% 50%; /* smallest usable ~4.9:1 #877D70 */
+    --ink: 205 30% 96%; /* primary text  ~18:1  #F1F6FA */
+    --ink-muted: 205 18% 78%; /* secondary text ~11:1 #BFCBD5 */
+    --ink-dim: 205 14% 63%; /* tertiary text  ~7:1  #96A5B1 */
+    --ink-faint: 205 12% 51%; /* smallest usable ~4.9:1 #74838F */
 
     /* --- Signal hues (rationed) ------------------------------------------ */
-    --ember: 36 79% 57%; /* brand / focus / active  #E8A33D  8.9:1 */
-    --ember-ink: 30 11% 4%; /* text on ember surfaces */
-    --ember-dim: 36 42% 22%; /* ember at panel weight */
+    --accent: 199 100% 57%; /* brand / focus / active  #22B8FF  9.4:1 */
+    --accent-ink: 220 60% 3%; /* text on accent surfaces */
+    --accent-dim: 199 60% 20%; /* accent at panel weight */
 
     --critical: 358 75% 59%; /* overdue / high / destructive #E5484D  5.1:1 */
     --critical-dim: 358 40% 20%;
@@ -74,12 +77,12 @@
   }
 
   ::selection {
-    @apply bg-[hsl(var(--ember)/0.28)] text-[hsl(var(--ink))];
+    @apply bg-[hsl(var(--accent)/0.28)] text-[hsl(var(--ink))];
   }
 
   /* One focus treatment for the whole product. */
   :focus-visible {
-    outline: 2px solid hsl(var(--ember));
+    outline: 2px solid hsl(var(--accent));
     outline-offset: 2px;
     border-radius: var(--radius-sm);
   }
@@ -123,19 +126,19 @@
     @apply font-semibold text-[hsl(var(--ink))];
   }
   .prose-jarvis a {
-    @apply text-[hsl(var(--ember))] underline decoration-[hsl(var(--ember)/0.4)] underline-offset-2 hover:decoration-[hsl(var(--ember))];
+    @apply text-[hsl(var(--accent))] underline decoration-[hsl(var(--accent)/0.4)] underline-offset-2 hover:decoration-[hsl(var(--accent))];
   }
   .prose-jarvis ul {
     @apply list-none space-y-1.5 pl-0;
   }
   .prose-jarvis ul > li {
-    @apply relative pl-4 before:absolute before:left-0 before:top-[0.6em] before:h-[3px] before:w-[3px] before:rounded-full before:bg-[hsl(var(--ember)/0.8)] before:content-[''];
+    @apply relative pl-4 before:absolute before:left-0 before:top-[0.6em] before:h-[3px] before:w-[3px] before:rounded-full before:bg-[hsl(var(--accent)/0.8)] before:content-[''];
   }
   .prose-jarvis ol {
     @apply list-decimal space-y-1.5 pl-5 marker:font-mono marker:text-[11px] marker:text-[hsl(var(--ink-faint))];
   }
   .prose-jarvis code {
-    @apply rounded-[3px] bg-[hsl(var(--surface-3))] px-1.5 py-0.5 font-mono text-[0.85em] text-[hsl(var(--ember))];
+    @apply rounded-[3px] bg-[hsl(var(--surface-3))] px-1.5 py-0.5 font-mono text-[0.85em] text-[hsl(var(--accent))];
   }
   .prose-jarvis pre {
     @apply overflow-x-auto rounded-[var(--radius-sm)] border border-[hsl(var(--line))] bg-[hsl(var(--surface-0))] p-3;
@@ -144,7 +147,7 @@
     @apply bg-transparent p-0 text-[hsl(var(--ink-muted))];
   }
   .prose-jarvis blockquote {
-    @apply border-l-2 border-[hsl(var(--ember)/0.5)] pl-3 text-[hsl(var(--ink-dim))];
+    @apply border-l-2 border-[hsl(var(--accent)/0.5)] pl-3 text-[hsl(var(--ink-dim))];
   }
   .prose-jarvis table {
     @apply w-full border-collapse text-[12px];
@@ -193,6 +196,82 @@
       transparent 100%
     );
   }
+}
+
+/* Comfortable phone layout. Scope typography to ordinary app pages; the voice
+   HUD keeps its own dimensions, palette, and staged presentation. */
+@media (max-width: 1023px) {
+  .mobile-ui { font-size: 15px; line-height: 1.55; }
+  .mobile-ui .text-base { font-size: 15px; line-height: 1.55; }
+  .mobile-ui .text-sm { font-size: 14px; line-height: 1.5; }
+  .mobile-ui .text-xs { font-size: 12px; line-height: 1.5; }
+  .mobile-ui .text-2xs { font-size: 11px; line-height: 1.5; }
+  .mobile-ui .text-md { font-size: 17px; line-height: 1.4; }
+  .mobile-ui .eyebrow { font-size: 11px; letter-spacing: .08em; }
+  .mobile-ui .prose-jarvis { font-size: 15px; line-height: 1.8; overflow-wrap: anywhere; }
+  .mobile-ui .prose-jarvis h1,
+  .mobile-ui .prose-jarvis h2,
+  .mobile-ui .prose-jarvis h3 { font-size: 17px; line-height: 1.5; }
+  .mobile-ui input, .mobile-ui textarea, .mobile-ui select {
+    font-size: 16px; border-radius: 12px; min-width: 0;
+  }
+  .mobile-ui input, .mobile-ui select { min-height: 48px; }
+  .mobile-ui textarea { line-height: 1.65; }
+  .mobile-ui .ui-button { min-height: 44px; min-width: 44px; border-radius: 12px; font-size: 13px; }
+  .mobile-ui .ui-button::before { content: none; }
+  .mobile-ui .ui-segmented { min-width: 0; max-width: 100%; padding: 3px; border-radius: 14px; }
+  .mobile-ui .ui-segmented > button {
+    min-height: 42px; padding: 8px; border-radius: 11px;
+    font-size: 12px; white-space: nowrap;
+  }
+  .mobile-ui .ui-segmented > button::before { content: none; }
+  .mobile-ui .ui-segmented [aria-checked="true"] { background: hsl(var(--accent) / .12); color: hsl(var(--accent)); }
+  .workspace-page { scrollbar-gutter: auto; scroll-padding-top: 80px; }
+  .workspace-content { flex: 0 0 auto; min-height: auto; padding-bottom: 24px; }
+  .page-heading { flex-shrink: 0; padding: 22px 20px 18px; border: 0; align-items: flex-start; }
+  .page-heading h1 { font-size: 30px; line-height: 1.2; letter-spacing: -.035em; }
+  .page-description { margin-top: 8px; max-width: 32ch; }
+  .daily-brief { flex-shrink: 0; margin-bottom: 8px; }
+  .daily-brief > summary::marker { color: hsl(var(--accent)); }
+  .daily-brief > section { border: 0; border-radius: 12px; }
+  .board-toolbar { gap: 8px; padding-top: 12px; padding-bottom: 12px; }
+  .task-list { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .task-card {
+    grid-template-columns: 28px minmax(0, 1fr) 40px;
+    border: 1px solid hsl(var(--line)) !important;
+    border-radius: 16px; padding: 12px; gap: 10px;
+    background: hsl(var(--surface-1));
+  }
+  .task-card > span[aria-hidden] { top: 20px; bottom: 20px; width: 3px; border-radius: 2px; }
+  .task-title { font-size: 16px !important; font-weight: 500; line-height: 1.45 !important; min-height: 44px; }
+  .task-status { width: 24px; height: 24px; }
+  .task-status::before { inset: -10px; }
+  .task-edit { width: 40px; height: 44px; color: hsl(var(--ink-dim)); border-radius: 12px; background: hsl(var(--surface-2)); }
+  .task-edit::before { inset: 0; }
+  .schedule-day-heading h3 { font-size: 21px; letter-spacing: -.02em; }
+  .schedule-list { display: flex; flex-direction: column; gap: 12px; }
+  .schedule-card {
+    border: 1px solid hsl(var(--line)); border-radius: 16px;
+    background: hsl(var(--surface-1)); grid-template-columns: 58px minmax(0, 1fr);
+    padding: 14px 12px; gap: 12px;
+  }
+  .schedule-card > div:first-of-type { padding-top: 11px; }
+  .schedule-start { font-size: 12px !important; line-height: 1.5 !important; }
+  .schedule-end { font-size: 11px; margin-top: 4px; line-height: 1.5; }
+  .schedule-title { min-height: 44px; font-size: 16px; line-height: 1.45; }
+  .schedule-card p { overflow-wrap: anywhere; }
+  .idea-list, .memory-list { display: grid; gap: 14px; border: 0; background: transparent; overflow: visible; }
+  .idea-card, .memory-card { border: 1px solid hsl(var(--line)) !important; border-radius: 16px; padding: 18px; }
+  .memory-card { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .vault-page h3 { font-size: 19px; }
+  .vault-page button[title="Edit"] { font-size: 16px; min-height: 44px; }
+  .chat-page { border-right: 0; background: hsl(var(--surface-0)); }
+  .chat-page > header { min-height: 64px; padding: 0 20px; }
+  .chat-scroll { padding: 20px; scroll-padding-bottom: 20px; }
+  .chat-page > footer { padding: 12px 16px 16px; background: hsl(var(--surface-0)); }
+  .chat-page > footer > div:last-child { border-radius: 18px; }
+  .record-dialog { border-radius: 22px; }
+  .mobile-ui input[type="time"], .mobile-ui input[type="datetime-local"] { color-scheme: dark; }
 }
 
 /* Honour the OS setting globally — individual components additionally opt out

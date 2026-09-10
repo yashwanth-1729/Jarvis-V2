@@ -1,16 +1,23 @@
 {
   "name": "jarvis-frontend",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "JARVIS v1 — Command Center UI",
+  "description": "JARVIS 3 — Personal Command Center UI",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:native": "cross-env JARVIS_NATIVE=1 next build",
+    "desktop": "tauri dev",
+    "desktop:build": "tauri build",
+    "android": "node scripts/build-android.mjs",
+    "android:install": "node scripts/build-android.mjs --install",
+    "android:run": "node scripts/build-android.mjs --run"
   },
   "dependencies": {
+    "@types/three": "^0.185.4",
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
     "next": "14.2.15",
@@ -18,17 +25,22 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
-    "tailwind-merge": "^2.5.4"
+    "tailwind-merge": "^2.5.4",
+    "three": "^0.185.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.15",
+    "fake-indexeddb": "^6.2.5",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.12",
     "typescript": "^5.6.3"
   }
 }

@@ -13,7 +13,7 @@ export const Input = React.forwardRef<
     className={cn(
       "flex h-8 w-full rounded border border-line bg-surface-2 px-2.5 text-base text-ink",
       "placeholder:text-ink-faint",
-      "transition-colors duration-150 focus:border-ember/40 focus:outline-none",
+      "transition-colors duration-150 focus:border-accent/40 focus:outline-none",
       "disabled:cursor-not-allowed disabled:opacity-50",
       className,
     )}
