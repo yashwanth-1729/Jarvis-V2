@@ -425,6 +425,15 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-11 — Overlap rule and agent handoff:** A one-off session inside a
+  routine is no longer reported as an overlap; a session over a college class
+  still warns (smoke_test covers both). Added `explanations.md` as the shared
+  notes file between Codex and Claude Code, `CLAUDE.md` importing `AGENTS.md`,
+  and a `.gitignore` rule for database backups. Checks: the smoke_test overlap
+  checks pass; smoke_test memory search and integration_test
+  `add_schedule_event` still fail (see `explanations.md`). Source change only;
+  no build or install.
+
 - **2026-09-10 — JARVIS 3.0.0:** Released the systematic-memory work as a full
   generation upgrade and aligned the web package, backend API, Tauri desktop
   package and Android package metadata on version 3.0.0. Replaced recency-dump

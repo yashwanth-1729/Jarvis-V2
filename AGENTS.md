@@ -30,3 +30,15 @@ Use focused checks for the changed behavior. Native builds share frontend output
 so build them sequentially. Read live-test headers before running tests that use
 provider credits or a database. Update documentation after final checks so it
 records the outcome accurately.
+
+## Working alongside Claude Code
+
+Two agents share this repo: Codex and Claude Code. Neither sees the other's
+conversation, so explanations.md is the shared notes file. Both agents read it
+and both write to it.
+- Before starting: `git pull origin main`, then read explanations.md.
+- When finished: add a Log entry to explanations.md (what changed, what was
+  verified, what is left), commit on `main` and `git push origin main`.
+  No branches.
+- Record decisions and disagreements there instead of silently rewriting
+  the other agent's work.
