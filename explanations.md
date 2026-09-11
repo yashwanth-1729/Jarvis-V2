@@ -113,6 +113,38 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-11 · Claude Code · Local English TTS (Piper)
+- English replies are now spoken locally by Piper (`en_US-ryan-high`, the
+  high-quality tier — the user asked for the heaviest model). Other languages
+  stay on Sarvam. New engine `app/providers/piper.py`; routing in
+  `app/services/speech.py::_provider_for`; getter
+  `providers.get_english_tts_provider()`. Config: `JARVIS_ENGLISH_TTS`
+  (piper|sarvam, default piper), `JARVIS_PIPER_MODEL`, `JARVIS_PIPER_PACE`.
+- Warms at startup (main.py). Falls back to Sarvam per-utterance if the model
+  or piper-tts is missing, so English never breaks.
+- Model files are gitignored (120 MB). **Fetch them** (already on the user's
+  desktop; any fresh machine runs this):
+  ```bash
+  cd backend && mkdir -p models/piper
+  BASE=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high
+  curl -L -o models/piper/en_US-ryan-high.onnx      "$BASE/en_US-ryan-high.onnx?download=true"
+  curl -L -o models/piper/en_US-ryan-high.onnx.json "$BASE/en_US-ryan-high.onnx.json?download=true"
+  ```
+- Measured on the dev CPU: RTF ~0.5 (5 s of audio in ~2.5 s), so it stays ahead
+  of playback when streamed per sentence.
+- Verified: `tests/piper_tts_test.py` (13 checks) + full backend suite pass in
+  the desktop venv (smoke_test's memory-search check still fails — pre-existing,
+  see Open issues). Not built into a desktop release yet; not run on-device.
+- **MOBILE IS NOT DONE.** Android runs the backend under Chaquopy on arm64.
+  Neither onnxruntime nor Piper's espeak phonemizer has an arm64/Android wheel
+  on PyPI (this is why pydantic_core had to be hand-cross-compiled). So
+  `pip install piper-tts` fails there and mobile currently falls back to Sarvam
+  for English. Getting real Piper on mobile means one of: (a) cross-compile
+  onnxruntime + espeak-ng for android arm64 and bundle a prebuilt wheel like
+  pydantic_core, (b) use Android's native TextToSpeech via Kotlin (on-device,
+  good, but not Piper), or (c) keep Sarvam for English on phone. Waiting on the
+  user's choice before doing the heavy native work.
+
 ### 2026-09-11 · Claude Code
 - Committed everything since v2.1.5 (both agents' work) as `3b4f9e3`.
 - Session inside a routine no longer warns. smoke_test now also checks that a

@@ -61,9 +61,25 @@ def get_tts_provider() -> TTSProvider:
     )
 
 
+@lru_cache(maxsize=1)
+def get_english_tts_provider() -> TTSProvider:
+    """The engine that speaks English.
+
+    Separate from `get_tts_provider` (which serves every other language) so a
+    local neural voice can handle English while Sarvam handles the Indic set.
+    Returns the Sarvam TTS unchanged when English is configured to stay on the
+    cloud, so callers need no special case.
+    """
+    if settings.jarvis_english_tts.lower() == "piper":
+        from app.providers.piper import PiperTTS
+
+        return PiperTTS()
+    return get_tts_provider()
+
+
 async def close_providers() -> None:
     """Close pooled HTTP clients at shutdown."""
-    for getter in (get_chat_provider, get_stt_provider, get_tts_provider):
+    for getter in (get_chat_provider, get_stt_provider, get_tts_provider, get_english_tts_provider):
         try:
             provider = getter()
         except ProviderNotConfigured:
@@ -77,6 +93,7 @@ async def close_providers() -> None:
     get_chat_provider.cache_clear()
     get_stt_provider.cache_clear()
     get_tts_provider.cache_clear()
+    get_english_tts_provider.cache_clear()
 
 
 __all__ = [
@@ -87,5 +104,6 @@ __all__ = [
     "get_chat_provider",
     "get_stt_provider",
     "get_tts_provider",
+    "get_english_tts_provider",
     "close_providers",
 ]

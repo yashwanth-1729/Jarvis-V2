@@ -107,6 +107,25 @@ class Settings(BaseSettings):
     # Streaming speech is negotiated per client; old clients still receive WAV.
     jarvis_streaming_tts: bool = Field(default=True, alias="JARVIS_STREAMING_TTS")
 
+    # --- English TTS (Piper, local) ---------------------------------------
+    #: Which engine speaks *English*. "piper" runs a local neural voice on the
+    #: CPU (free, private, no per-call latency); "sarvam" sends English to the
+    #: cloud like every other language. Non-English is always Sarvam regardless.
+    #: Desktop defaults to Piper; the Android build overrides this to "sarvam"
+    #: because Piper's ONNX stack has no arm64 Chaquopy wheel.
+    jarvis_english_tts: Literal["piper", "sarvam"] = Field(
+        default="piper", alias="JARVIS_ENGLISH_TTS"
+    )
+    #: Path to the Piper .onnx voice, relative to backend/ or absolute. The
+    #: high-quality "ryan" voice is the default; a .onnx.json of the same name
+    #: must sit beside it. Not committed — see explanations.md to fetch it.
+    jarvis_piper_model: str = Field(
+        default="models/piper/en_US-ryan-high.onnx", alias="JARVIS_PIPER_MODEL"
+    )
+    #: Global speaking-rate nudge for Piper, multiplied onto the per-language
+    #: pace (English 1.04). 1.0 leaves the voice at its natural speed.
+    jarvis_piper_pace: float = Field(default=1.0, alias="JARVIS_PIPER_PACE")
+
     # --- Task board --------------------------------------------------------
     #: The board lists outstanding work, so finishing a task removes it. Set
     #: false to keep completed rows around instead.

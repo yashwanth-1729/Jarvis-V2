@@ -21,8 +21,17 @@ from app.core.speechtext import spell_numbers_in_english
 from app.core.voices import Voice
 from app.core.voices import resolve as resolve_voice
 from app.db import crud
-from app.providers import get_tts_provider
-from app.providers.base import AudioPacket, Speech, StreamingTTSProvider, ProviderError, ProviderOutOfCredit, ProviderAuthError
+from app.providers import get_english_tts_provider, get_tts_provider
+from app.providers.base import (
+    AudioPacket,
+    ProviderAuthError,
+    ProviderError,
+    ProviderNotConfigured,
+    ProviderOutOfCredit,
+    Speech,
+    StreamingTTSProvider,
+    TTSProvider,
+)
 
 
 logger = logging.getLogger("jarvis.speech")
@@ -117,6 +126,19 @@ async def current_voice() -> Voice:
     return resolve_voice(await crud.get_preference(crud.PREF_VOICE_SPEAKER, ""))
 
 
+def _provider_for(language_code: str | None) -> TTSProvider:
+    """Which engine speaks this language.
+
+    English is spoken by the local engine (Piper) when one is configured;
+    everything else goes to Sarvam, which covers the Indic set Piper's English
+    voices do not. `get_english_tts_provider` returns the Sarvam TTS itself when
+    English is set to stay on the cloud, so this stays a single line either way.
+    """
+    if resolve_language(language_code).code == DEFAULT_LANGUAGE:
+        return get_english_tts_provider()
+    return get_tts_provider()
+
+
 def prepare(text: str, language_code: str | None) -> str:
     """Rewrite text so it is spoken the way the user expects.
 
@@ -134,12 +156,27 @@ async def speak(
 ) -> Speech:
     language = resolve_language(language_code)
     voice = resolve_voice(speaker) if speaker else await current_voice()
-    return await get_tts_provider().synthesize(
-        prepare(text, language.code),
-        language_code=language.code,
-        speaker=voice.id,
-        pace=language.pace,
-    )
+    provider = _provider_for(language.code)
+    try:
+        return await provider.synthesize(
+            prepare(text, language.code),
+            language_code=language.code,
+            speaker=voice.id,
+            pace=language.pace,
+        )
+    except ProviderNotConfigured as exc:
+        # The local English engine is not installed or its model is missing.
+        # English must still be spoken, so fall back to Sarvam once rather than
+        # failing the reply. (Non-English never reaches this branch.)
+        if provider is get_tts_provider():
+            raise
+        logger.warning("Local English TTS unavailable (%s); using Sarvam", exc)
+        return await get_tts_provider().synthesize(
+            prepare(text, language.code),
+            language_code=language.code,
+            speaker=voice.id,
+            pace=language.pace,
+        )
 
 
 async def stream(
@@ -147,8 +184,8 @@ async def stream(
     *, incremental: bool = True,
 ) -> AsyncIterator[AudioPacket | Speech]:
     """Share pronunciation/pace/voice rules with REST; fallback before audio only."""
-    provider = get_tts_provider()
     language = resolve_language(language_code)
+    provider = _provider_for(language.code)
     voice = resolve_voice(speaker) if speaker else await current_voice()
     emitted = False
     if incremental and settings.jarvis_streaming_tts and isinstance(provider, StreamingTTSProvider):
@@ -161,9 +198,11 @@ async def stream(
             return
         except (ProviderOutOfCredit, ProviderAuthError):
             raise
-        except ProviderError:
+        except (ProviderError, ProviderNotConfigured):
             if emitted:
                 raise
             logger.warning("Streaming speech unavailable; using WAV for this phrase")
+    # `speak` applies the same English/Sarvam routing and its own fallback, so
+    # a missing local engine still yields audio here rather than an error.
     rendered = await speak(text, language.code, voice.id)
     yield Speech(trim_silence(rendered.audio), rendered.content_type)

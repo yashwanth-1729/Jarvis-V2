@@ -37,3 +37,8 @@ Thumbs.db
 
 # Local UI previews (isolated fixtures and device screenshots)
 /tmp/mobile-review/
+
+# Piper voice models — large ONNX binaries, fetched per machine (see explanations.md)
+backend/models/piper/*.onnx
+backend/models/piper/*.onnx.json
+backend/.piptmp/

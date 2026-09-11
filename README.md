@@ -135,7 +135,7 @@ flowchart TD
     Tools --> DB[SQLite working data]
     Tools --> External[Weather / search / filesystem where enabled]
     Agent --> Speech[Phrase chunker + bounded speech pipeline]
-    Speech --> TTS[Sarvam streaming TTS or WAV fallback]
+    Speech --> TTS[Piper local English TTS / Sarvam for other languages]
     TTS --> Playback[Ordered Web Audio playback]
     Tools --> Panels[Voice-only tool surfaces]
     Playback --> Panels
@@ -334,6 +334,8 @@ do not put them in this README or commit them.
 | `SARVAM_STT_MODEL`, `SARVAM_TTS_MODEL` | Existing recognition/synthesis models |
 | `JARVIS_STREAMING_TTS` | Enable negotiated incremental speech; default true |
 | `SARVAM_TTS_PACE`, `SARVAM_TTS_TEMPERATURE` | Existing voice controls |
+| `JARVIS_ENGLISH_TTS` | Engine for English speech: `piper` (local, default) or `sarvam` (cloud). Non-English is always Sarvam. |
+| `JARVIS_PIPER_MODEL`, `JARVIS_PIPER_PACE` | Piper voice path (default `models/piper/en_US-ryan-high.onnx`) and global speed nudge |
 | `JARVIS_CLIENT_OWNED_DATA` | Android IndexedDB/SQLite bridge mode |
 | `JARVIS_DB_PATH` | SQLite location |
 | `JARVIS_SYSTEM_TOOLS`, `JARVIS_SCHEDULER_ENABLED` | Desktop capabilities |
@@ -425,6 +427,16 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-11 — Local English TTS (Piper):** English replies are now spoken by
+  a local Piper neural voice (`en_US-ryan-high`, the high-quality tier) on the
+  desktop backend instead of Sarvam: free, private, no per-call latency. Every
+  other language still goes to Sarvam. Routed in `app.services.speech`; the
+  engine is `app.providers.piper.PiperTTS`. Set `JARVIS_ENGLISH_TTS=sarvam` to
+  keep English on the cloud. The model warms at startup and falls back to
+  Sarvam if it is absent. Desktop-only so far — Android needs an arm64 build of
+  the ONNX stack, tracked in explanations.md. Checks: 13-check piper_tts_test
+  and the full backend suite pass in the desktop venv; not yet built or
+  installed, not exercised on-device.
 - **2026-09-11 — Overlap rule and agent handoff:** A one-off session inside a
   routine is no longer reported as an overlap; a session over a college class
   still warns (smoke_test covers both). Added `explanations.md` as the shared

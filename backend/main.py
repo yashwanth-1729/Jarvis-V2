@@ -73,6 +73,16 @@ async def lifespan(_: FastAPI):
     if settings.scheduler_enabled:
         scheduler_task = asyncio.create_task(scheduler.run_forever(stop_scheduler))
 
+    # Load the local English voice before anyone waits on it: the first Piper
+    # inference pays a one-off graph-init cost. Desktop-only and non-fatal — if
+    # it fails, English speech falls back to Sarvam at call time.
+    if settings.jarvis_english_tts.lower() == "piper":
+        from app.providers import get_english_tts_provider
+
+        warm = getattr(get_english_tts_provider(), "warm", None)
+        if warm is not None:
+            asyncio.create_task(warm())
+
     if not settings.has_api_key:
         logger.warning(
             "SARVAM_API_KEY is not set in backend/.env. The dashboard will work, "

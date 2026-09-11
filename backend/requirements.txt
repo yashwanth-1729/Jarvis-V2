@@ -12,3 +12,6 @@ httpx>=0.28.0
 python-multipart>=0.0.12
 
 # v3 will add: anthropic>=0.69.0 / openai>=1.0.0
+
+# Local English TTS (desktop only; no arm64/Chaquopy wheel)
+piper-tts>=1.8.0

@@ -290,6 +290,17 @@ The new optional `StreamingTTSProvider` protocol yields `AudioPacket` values.
 The legacy `TTSProvider.synthesize()` contract remains intact for the REST speak
 endpoint, old clients, and providers without streaming support.
 
+English speech is routed away from Sarvam to a local Piper voice by
+`app.services.speech._provider_for`: English resolves to
+`get_english_tts_provider()` (an `app.providers.piper.PiperTTS`), every other
+language to `get_tts_provider()` (Sarvam). Piper is an ONNX model loaded once
+on a worker thread and warmed at startup; it implements both the streaming
+`AudioPacket` protocol and the legacy WAV `synthesize`. If Piper is not
+installed or its model is missing, `_provider_for`'s callers fall back to
+Sarvam for that utterance. This is desktop-only: under Chaquopy on Android
+arm64 neither onnxruntime nor Piper's phonemizer has a wheel, so
+`JARVIS_ENGLISH_TTS` must be `sarvam` there.
+
 `SarvamTTS.stream_speech` uses the existing pooled httpx client with
 `POST /text-to-speech/stream`, `output_audio_codec=linear16`, and a sample rate no
 higher than 24 kHz. It retains the selected voice, language, pace multiplier and

@@ -278,14 +278,17 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 raise ProviderError("no stream")
                 yield
         async def fallback(*args): return Speech(b"wav")
-        with patch.object(speech, "get_tts_provider", return_value=Provider()), patch.object(speech, "speak", fallback):
+        # Patch the routed provider, not the Sarvam getter specifically: English
+        # now resolves through `_provider_for` (Piper on desktop), so the
+        # fallback contract is exercised by replacing whatever it returns.
+        with patch.object(speech, "_provider_for", return_value=Provider()), patch.object(speech, "speak", fallback):
             packets = [p async for p in speech.stream("hello", "en-IN", "priya")]
             self.assertEqual(packets[0].audio, b"wav")
         class Partial:
             async def stream_speech(self, *args):
                 yield AudioPacket(bytes(2), 24000)
                 raise ProviderError("broken mid-phrase")
-        with patch.object(speech, "get_tts_provider", return_value=Partial()), patch.object(speech, "speak", side_effect=AssertionError("must not replay")):
+        with patch.object(speech, "_provider_for", return_value=Partial()), patch.object(speech, "speak", side_effect=AssertionError("must not replay")):
             with self.assertRaises(ProviderError):
                 async for _ in speech.stream("hello", "en-IN", "priya"): pass
 
