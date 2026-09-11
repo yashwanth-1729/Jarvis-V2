@@ -128,6 +128,43 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-11 · Claude Code · Audited against an external 'low-latency voice
+  pipeline' architecture PDF the user sent
+- Cross-checked every recommendation against the real code before changing
+  anything. Most of the pipeline already matches it: persistent per-session
+  WS, streaming LLM, a deterministic sentence chunker with first-chunk bias
+  (MAX_CHUNK_CHARS=320 vs the PDF's suggested 120-200 -- kept ours, it was
+  deliberately raised earlier this session after smaller chunks cut mid-
+  sentence and sounded broken), Piper loaded once at startup via the Python/
+  Kotlin API (never per-utterance CLI) on both platforms, turn/generation-
+  based barge-in cancellation, bounded queues (SpeechPipeline semaphore=2),
+  streaming PCM (no WAV round-trip on the incremental path), markdown/ID/
+  ISO-date stripping before TTS, and P50/P90/P99 + TTFA metrics already
+  recorded (voice_metrics.py) and exposed (`GET /api/voice/metrics`).
+- Fixed (safe, aligned, tested): `sarvam_reasoning_effort` default was
+  `"low"` (inherited from the v2.1.5 baseline, not a deliberate fix) ->
+  `""` (disabled), matching Sarvam's documented fastest mode for ordinary
+  turns and cutting cost. Added one line to the voice prompt for currency/
+  number speakable-form (times were already covered in detail). Full
+  backend suite still 22/22.
+- **Deliberately NOT implemented** -- flagged to the user, not silently
+  skipped:
+  - Switching STT to Sarvam's realtime WebSocket (the PDF's #1 lever).
+    JARVIS currently does its own client-side VAD/segmentation ("two-tier
+    listening protocol") then one REST `/speech-to-text` call per finished
+    utterance -- a different, already-tuned architecture, not a bug. Real
+    measured STT latency is already ~0.75-0.95s. Replacing it with Sarvam's
+    server-side VAD would be a major rewrite of the input pipeline, not a
+    clean addition.
+  - AEC + never-muted mic for barge-in. The PDF explicitly recommends
+    against muting the mic during playback -- this DIRECTLY CONTRADICTS the
+    user's own explicit half-duplex decision from earlier this session
+    ("we need to mute the mic until jarvis completes its [turn]", see
+    Decisions above). Did not touch it.
+  - Per-turn reasoning-effort routing (escalate only hard turns). Real
+    feature, needs a classifier/heuristic; proposed as a follow-up, not
+    built blind.
+
 ### 2026-09-11 · Claude Code · INCIDENT: tests leaked into live Supabase
 - While running the full backend suite, `segment_test.py` (and, it turned out,
   4 other files) triggered the REAL app lifespan via `TestClient`, which starts

@@ -59,8 +59,14 @@ class Settings(BaseSettings):
     sarvam_tts_pace: float = Field(default=1.0, alias="SARVAM_TTS_PACE")
     sarvam_tts_sample_rate: int = Field(default=24000, alias="SARVAM_TTS_SAMPLE_RATE")
     sarvam_language: str = Field(default="en-IN", alias="SARVAM_LANGUAGE")
+    # Empty disables reasoning outright. Sarvam documents this as its fastest
+    # mode, meant for ordinary conversational turns -- reasoning tokens cost
+    # both latency and money, and most voice turns ("what's my Monday
+    # schedule", "add a task") do not need them. Escalate per-turn (a
+    # different value passed at call time) rather than raising this default,
+    # if a class of turn turns out to need it.
     sarvam_reasoning_effort: Literal["", "low", "medium", "high"] = Field(
-        default="low", alias="SARVAM_REASONING_EFFORT"
+        default="", alias="SARVAM_REASONING_EFFORT"
     )
     sarvam_temperature: float = Field(default=0.2, alias="SARVAM_TEMPERATURE")
     sarvam_chat_timeout: float = Field(default=45.0, alias="SARVAM_CHAT_TIMEOUT")
