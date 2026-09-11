@@ -128,6 +128,45 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-11 · Claude Code · STT realtime WebSocket: measured, not built
+- User asked to implement Sarvam's realtime STT WebSocket (the PDF's #1 lever)
+  after the reasoning-effort work. Before writing any integration code,
+  probed the LIVE endpoint (project's own standing lesson: Sarvam docs have
+  been wrong before) -- and they were wrong again: the fetched docs said
+  `saaras:v4-realtime` is a valid model; the live endpoint rejects it with
+  `invalid_model`, accepting only `saaras:v3-realtime` and plain `saaras:v4`.
+  Full protocol otherwise confirmed working end-to-end with a real
+  Piper-synthesized clip: session.begin -> vad.speech_start -> transcript.
+  partial (repeated) -> vad.speech_end -> more partials -> transcript.final
+  (exact correct text) -> session.end.
+- Then MEASURED rather than assumed whether switching would actually help
+  JARVIS's real architecture (`compare_stt_latency.py`, 3 clips, live API):
+  REST /speech-to-text (current path) settles to ~0.38-0.39s once warm;
+  realtime WS manual-endpointed micro-utterances over a persistent
+  connection measured ~0.42-0.48s -- SLOWER, not faster, for this pattern.
+  Confirmed `get_stt_provider()` is `@lru_cache`d (process-lifetime
+  singleton), so the one slow first call (1.05s, cold TLS/connection) is a
+  one-time cost per backend process start, not something a real conversation
+  repeatedly pays.
+- **Why realtime WS doesn't help here**: its real advantage (transcription
+  overlapping with speech, so text is nearly ready the instant the user
+  stops) requires the CLIENT to stream raw PCM continuously while the mic is
+  open. JARVIS's client instead captures a complete pause-delimited WAV
+  segment locally (its own tuned VAD/two-tier listening/stop-word system)
+  and sends it once finished -- `on_segment()`'s docstring already explains
+  this was deliberately designed to take transcription 'off the critical
+  path... by the time they stop, everything but the last segment is already
+  text.' Realtime WS on an already-fully-captured clip gets none of the
+  streaming benefit and pays its own overhead instead.
+- **Not implemented.** A real win would need rebuilding the CLIENT to stream
+  continuous raw PCM instead of discrete WAV segments, replacing JARVIS's
+  own VAD/stop-word detection with Sarvam's server-side VAD (or running both
+  and reconciling) -- a major rewrite of the input pipeline risking the
+  half-duplex/stop-word/language-follow behaviors this project has already
+  spent real effort tuning, for a benefit the measurements above don't
+  support for the current architecture. Told the user directly rather than
+  building it anyway or silently skipping it.
+
 ### 2026-09-11 · Claude Code · Audited against an external 'low-latency voice
   pipeline' architecture PDF the user sent
 - Cross-checked every recommendation against the real code before changing
