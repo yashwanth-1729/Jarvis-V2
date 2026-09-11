@@ -1,3 +1,18 @@
+/** A phrase whose audio arrives in pieces (on-device streamed synthesis). */
+export interface SpeechStream {
+  /** Queue the next piece; it plays straight after the previous one. */
+  append(audio: ArrayBuffer, sampleRate: number): void;
+  /** No more pieces are coming. */
+  end(): void;
+  /** Synthesis failed; whatever arrived still plays, the rest is dropped. */
+  fail(error: Error): void;
+}
+
+interface OpenStream {
+  wake: () => void;
+  abandon?: () => void;
+}
+
 /** Ordered audio-clock playback. Stop invalidates decoding as well as sources. */
 export class SpeechQueue {
   private context: AudioContext | null = null;
@@ -9,6 +24,8 @@ export class SpeechQueue {
   private complete = true;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private reveals = new Set<ReturnType<typeof setTimeout>>();
+  /** Streams still open: woken by every piece, and released by `stop()`. */
+  private streams = new Set<OpenStream>();
 
   constructor(
     private readonly onIdle: () => void,
@@ -37,6 +54,12 @@ export class SpeechQueue {
   begin(): void { this.stop(); this.complete = false; }
   finish(): void { this.complete = true; this.scheduleIdle(); }
 
+  private async audioContext(): Promise<AudioContext> {
+    if (!this.context) this.context = new window.AudioContext();
+    if (this.context.state === "suspended") await this.context.resume();
+    return this.context;
+  }
+
   /** Decode either raw PCM16 (given a sample rate) or an encoded WAV/etc. blob. */
   private async decode(context: AudioContext, audio: ArrayBuffer, sampleRate?: number): Promise<AudioBuffer> {
     if (sampleRate !== undefined) {
@@ -52,8 +75,14 @@ export class SpeechQueue {
     return context.decodeAudioData(audio);
   }
 
-  /** Schedule a decoded buffer onto the audio clock, right after whatever precedes it. */
-  private schedule(context: AudioContext, buffer: AudioBuffer, generation: number, text: string, seq: number): void {
+  /**
+   * Schedule a decoded buffer onto the audio clock, right after whatever
+   * precedes it. `report` sends the playback credit for `seq` when it ends;
+   * streamed pieces have no server-side credit to return.
+   */
+  private schedule(
+    context: AudioContext, buffer: AudioBuffer, generation: number, text: string, seq: number, report = true,
+  ): void {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
@@ -71,7 +100,7 @@ export class SpeechQueue {
       source.disconnect();
       if (generation !== this.generation) return;
       this.active.delete(source);
-      this.onPlayed(seq);
+      if (report) this.onPlayed(seq);
       this.scheduleIdle();
     };
     source.start(startAt);
@@ -84,9 +113,7 @@ export class SpeechQueue {
     // Serial decoding preserves arrival order even when later WAVs decode faster.
     const work = this.chain.then(async () => {
       if (generation !== this.generation) return;
-      if (!this.context) this.context = new window.AudioContext();
-      const context = this.context;
-      if (context.state === "suspended") await context.resume();
+      const context = await this.audioContext();
       if (generation !== this.generation) return;
       const buffer = await this.decode(context, audio, sampleRate);
       if (generation !== this.generation) return;
@@ -108,50 +135,81 @@ export class SpeechQueue {
   }
 
   /**
-   * Reserve this chunk's place in playback order now, but produce its audio
-   * lazily inside the chain.
+   * Reserve a playback slot now for audio that will arrive in pieces.
    *
-   * For on-device synthesis (native English TTS on Android): synthesis takes
-   * real time, and calling `push()` only after it finishes would let a slow
-   * chunk's audio land on the chain *after* a faster later chunk's -- silently
-   * reordering playback. Calling `pushDeferred` instead reserves the slot the
-   * instant the caller sees this chunk (synchronously, before `producer` ever
-   * runs), exactly as `push()` reserves its slot before WAV decoding finishes;
-   * `producer` then runs serially at its turn in the existing chain.
+   * For on-device synthesis (Piper on Android), which produces a phrase one
+   * sentence at a time. The slot is taken synchronously, in arrival order, so
+   * a phrase can never be overtaken by a later one; when its turn comes each
+   * piece is scheduled straight after the previous on the audio clock -- the
+   * first sentence plays while the rest are still being generated, instead
+   * of the whole phrase being synthesized before any of it is heard. The next
+   * item in the queue starts only once `end()` or `fail()` closes this one.
+   *
+   * Never rejects: a phrase that produced no audio still reveals its text, and
+   * one that failed part-way keeps what was already heard. `onAbandon` runs if
+   * `stop()` discards the stream while it is still open, so its producer can
+   * stop generating audio no one will hear.
    */
-  pushDeferred(
-    producer: () => Promise<{ audio: ArrayBuffer; sampleRate?: number }>,
-    text: string,
-    seq = 0,
-  ): Promise<void> {
+  pushStream(text: string, onAbandon?: () => void): SpeechStream {
     const generation = this.generation;
     this.cancelIdle();
     this.pending++;
+    const pieces: Array<{ audio: ArrayBuffer; sampleRate: number }> = [];
+    let ended = false;
+    let spoken = false;
+    let resume: (() => void) | null = null;
+    const open: OpenStream = {
+      wake: () => {
+        const next = resume;
+        resume = null;
+        next?.();
+      },
+      abandon: onAbandon,
+    };
+    this.streams.add(open);
+
     const work = this.chain.then(async () => {
       if (generation !== this.generation) return;
-      if (!this.context) this.context = new window.AudioContext();
-      const context = this.context;
-      if (context.state === "suspended") await context.resume();
-      if (generation !== this.generation) return;
-      const { audio, sampleRate } = await producer();
-      if (generation !== this.generation) return;
-      const buffer = await this.decode(context, audio, sampleRate);
-      if (generation !== this.generation) return;
-      this.schedule(context, buffer, generation, text, seq);
-    }).catch((error: unknown) => {
-      if (generation === this.generation) {
-        if (text) this.onReveal(text);
-        this.onPlayed(seq);
-        throw error;
+      const context = await this.audioContext();
+      while (generation === this.generation) {
+        const piece = pieces.shift();
+        if (piece) {
+          const buffer = await this.decode(context, piece.audio, piece.sampleRate);
+          if (generation !== this.generation) return;
+          this.schedule(context, buffer, generation, spoken ? "" : text, 0, false);
+          spoken = true;
+          continue;
+        }
+        if (ended) break;
+        await new Promise<void>((wake) => { resume = wake; });
       }
+    }).catch(() => {
+      // A bad piece ends the phrase early; what already played stands.
     }).finally(() => {
+      this.streams.delete(open);
       if (generation === this.generation) {
+        if (!spoken && text) this.onReveal(text);
         this.pending--;
         this.scheduleIdle();
       }
     });
-    this.chain = work.catch(() => {});
-    return work;
+    this.chain = work;
+
+    return {
+      append: (audio, sampleRate) => {
+        if (ended || generation !== this.generation) return;
+        pieces.push({ audio, sampleRate });
+        open.wake();
+      },
+      end: () => {
+        ended = true;
+        open.wake();
+      },
+      fail: () => {
+        ended = true;
+        open.wake();
+      },
+    };
   }
 
   stop(): void {
@@ -166,6 +224,15 @@ export class SpeechQueue {
       source.disconnect();
     }
     this.active.clear();
+    // Release open streams: each producer is told once, and each waiting loop
+    // is woken so it can see the new generation and exit.
+    const abandon = new Set<() => void>();
+    for (const open of this.streams) {
+      if (open.abandon) abandon.add(open.abandon);
+      open.wake();
+    }
+    this.streams.clear();
+    for (const callback of abandon) callback();
     this.pending = 0;
     this.nextStart = 0;
     this.chain = Promise.resolve();

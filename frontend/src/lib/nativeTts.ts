@@ -10,18 +10,20 @@
  * It is inert everywhere the bridge is absent — desktop, web, and any Android
  * build that has not provisioned the model — so callers can ask
  * `isNativeTtsAvailable()` first and fall back to the normal backend audio path
- * (Sarvam) with no special-casing. The produced audio is PCM16 mono, ready to
- * hand straight to `SpeechQueue.push(buffer, text, seq, sampleRate)`.
+ * (Sarvam) with no special-casing.
  *
- * The bridge call is asynchronous: `addJavascriptInterface` methods must return
- * promptly, and synthesis takes ~1s, so the Kotlin side renders on a worker
- * thread and calls back into the page. We hand it a request id and resolve the
- * matching promise when the delivery hook fires.
+ * Audio is *streamed*: the Kotlin side calls back once per sentence as it is
+ * generated (PCM16 mono), then once more when the phrase is done. A phrase is
+ * therefore heard from its first sentence rather than after the whole phrase
+ * has been synthesized — the same shape as Sarvam's streamed audio, which is
+ * why Telugu never had gaps.
  */
 
 interface NativeTtsBridge {
-  /** Fire-and-forget: synthesize `text`, then deliver by request id. */
-  synthesize(requestId: string, text: string, pace: number): void;
+  /** Fire-and-forget: stream `text` sentence by sentence, by request id. */
+  synthesizeStream(requestId: string, text: string, pace: number): void;
+  /** Abandon every queued and in-progress synthesis. */
+  cancelAll(): void;
   /** True once the model and espeak-ng-data are loaded and ready. */
   isReady(): boolean;
 }
@@ -30,29 +32,38 @@ declare global {
   interface Window {
     JarvisTts?: NativeTtsBridge;
     /** Delivery hooks the Kotlin bridge calls via evaluateJavascript. */
-    __jarvisTtsDeliver?: (requestId: string, base64Pcm: string, sampleRate: number) => void;
+    __jarvisTtsChunk?: (requestId: string, base64Pcm: string, sampleRate: number) => void;
+    __jarvisTtsDone?: (requestId: string) => void;
     __jarvisTtsError?: (requestId: string, message: string) => void;
   }
 }
 
-export interface NativeSpeech {
-  /** Mono PCM16 little-endian, ready for SpeechQueue.push. */
-  pcm: ArrayBuffer;
-  sampleRate: number;
-}
-
 interface Pending {
-  resolve: (value: NativeSpeech) => void;
+  onChunk: (pcm: ArrayBuffer, sampleRate: number) => void;
+  resolve: () => void;
   reject: (reason: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
 }
 
 const pending = new Map<string, Pending>();
 let counter = 0;
 let hooksInstalled = false;
 
-/** Longest we wait for one utterance before giving up and falling back. */
-const SYNTH_TIMEOUT_MS = 12_000;
+/**
+ * How long the bridge may deliver *nothing at all* before every open request
+ * is failed.
+ *
+ * Deliberately a stall detector, not a per-request deadline. Synthesis runs on
+ * one native worker, in order, so a phrase late in a long reply spends most of
+ * its life waiting behind the phrases ahead of it. The old 12s per-request
+ * timeout counted that waiting: the third phrase of a medium reply timed out
+ * while its turn had not even come, was dropped silently, and the rejection
+ * interrupted the rest of the reply. Progress on *any* request proves the
+ * worker is alive; only a worker that has gone quiet is failed.
+ */
+const STALL_MS = 20_000;
+
+let lastProgress = 0;
+let watchdog: ReturnType<typeof setInterval> | null = null;
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
@@ -61,27 +72,54 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function failAll(error: Error): void {
+  for (const [id, entry] of pending) {
+    pending.delete(id);
+    entry.reject(error);
+  }
+}
+
+function startWatchdog(): void {
+  if (watchdog !== null) return;
+  watchdog = setInterval(() => {
+    if (!pending.size) {
+      if (watchdog !== null) clearInterval(watchdog);
+      watchdog = null;
+      return;
+    }
+    if (performance.now() - lastProgress > STALL_MS) failAll(new Error("native TTS stalled"));
+  }, 1000);
+}
+
 function installHooks(): void {
   if (hooksInstalled || typeof window === "undefined") return;
   hooksInstalled = true;
 
-  window.__jarvisTtsDeliver = (requestId, base64Pcm, sampleRate) => {
+  window.__jarvisTtsChunk = (requestId, base64Pcm, sampleRate) => {
+    lastProgress = performance.now();
     const entry = pending.get(requestId);
     if (!entry) return;
-    pending.delete(requestId);
-    clearTimeout(entry.timer);
     try {
-      entry.resolve({ pcm: base64ToArrayBuffer(base64Pcm), sampleRate });
+      entry.onChunk(base64ToArrayBuffer(base64Pcm), sampleRate);
     } catch (error) {
+      pending.delete(requestId);
       entry.reject(error instanceof Error ? error : new Error("bad native audio"));
     }
   };
 
-  window.__jarvisTtsError = (requestId, message) => {
+  window.__jarvisTtsDone = (requestId) => {
+    lastProgress = performance.now();
     const entry = pending.get(requestId);
     if (!entry) return;
     pending.delete(requestId);
-    clearTimeout(entry.timer);
+    entry.resolve();
+  };
+
+  window.__jarvisTtsError = (requestId, message) => {
+    lastProgress = performance.now();
+    const entry = pending.get(requestId);
+    if (!entry) return;
+    pending.delete(requestId);
     entry.reject(new Error(message || "native TTS failed"));
   };
 }
@@ -90,7 +128,7 @@ function installHooks(): void {
 export function isNativeTtsAvailable(): boolean {
   if (typeof window === "undefined") return false;
   const bridge = window.JarvisTts;
-  if (!bridge) return false;
+  if (!bridge || typeof bridge.synthesizeStream !== "function") return false;
   try {
     return bridge.isReady();
   } catch {
@@ -99,31 +137,51 @@ export function isNativeTtsAvailable(): boolean {
 }
 
 /**
- * Synthesize English speech on-device. Rejects (never hangs) if the bridge is
- * absent, errors, or does not answer within the timeout, so the caller can fall
- * back to the backend audio path.
+ * Synthesize English speech on-device, one sentence at a time.
+ *
+ * `onChunk` receives each sentence's PCM16 as soon as it exists. Resolves when
+ * the phrase is finished; rejects (never hangs) if the bridge is absent,
+ * errors, stalls, or `cancelNative()` is called.
  */
-export function synthesizeNative(text: string, pace = 1.0): Promise<NativeSpeech> {
+export function streamNative(
+  text: string,
+  pace: number,
+  onChunk: (pcm: ArrayBuffer, sampleRate: number) => void,
+): Promise<void> {
   const bridge = typeof window !== "undefined" ? window.JarvisTts : undefined;
   if (!bridge) return Promise.reject(new Error("native TTS bridge unavailable"));
   installHooks();
 
   const clean = text.trim();
-  if (!clean) return Promise.reject(new Error("nothing to speak"));
+  if (!clean) return Promise.resolve();
 
   counter += 1;
   const requestId = `${Date.now()}-${counter}`;
-  return new Promise<NativeSpeech>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      if (pending.delete(requestId)) reject(new Error("native TTS timed out"));
-    }, SYNTH_TIMEOUT_MS);
-    pending.set(requestId, { resolve, reject, timer });
+  return new Promise<void>((resolve, reject) => {
+    // A fresh burst of work starts the stall clock; joining work already in
+    // flight must not reset it, or a wedged worker would never be noticed.
+    if (!pending.size) lastProgress = performance.now();
+    pending.set(requestId, { onChunk, resolve, reject });
+    startWatchdog();
     try {
-      bridge.synthesize(requestId, clean, pace);
+      bridge.synthesizeStream(requestId, clean, pace);
     } catch (error) {
       pending.delete(requestId);
-      clearTimeout(timer);
       reject(error instanceof Error ? error : new Error("native TTS call failed"));
     }
   });
+}
+
+/**
+ * Drop every on-device synthesis in flight: the reply they belong to has been
+ * abandoned (interrupt, new turn, session closed). Frees the native worker for
+ * the next reply instead of leaving it to finish audio no one will hear.
+ */
+export function cancelNative(): void {
+  failAll(new Error("native TTS cancelled"));
+  try {
+    window.JarvisTts?.cancelAll();
+  } catch {
+    // Bridge gone; nothing left to cancel.
+  }
 }

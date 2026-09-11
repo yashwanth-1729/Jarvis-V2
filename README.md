@@ -427,6 +427,41 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — On-device Piper now streams sentence by sentence, synthesizing
+  up to 3 phrases concurrently:** English voice replies on Android used to
+  build each phrase's entire audio before any of it could play. A short
+  opener bought only ~1.9s of playback, but the next phrase (once the reply
+  ran past one line) took ~3-5s to build with nothing to fill the gap —
+  measured on-device at 4.1-4.3s of dead air per boundary on a typical medium
+  reply, which is the "yes boss......... [rushed]" / "parts parts" pattern the
+  user reported. Sarvam-voiced languages never had this because the server
+  streams audio while later text is still generating; Piper on the phone
+  never got the same head start.
+  Fixed in three steps, each measured on the real device before moving to the
+  next: (1) `SherpaTts.stream`/`generateWithCallback` yields one sentence's
+  PCM at a time instead of the whole phrase at once (`maxNumSentences = 1`),
+  and `SpeechQueue.pushStream` plays each piece the instant it exists instead
+  of waiting for the whole phrase — cut the gap to ~1.1s; (2) synthesis now
+  runs up to 3 phrases concurrently on a fixed thread pool (2 inference
+  threads each, so up to 6 of the phone's 8 cores at once — verified safe:
+  ONNX Runtime documents `Session::Run` as safe for concurrent calls on one
+  session, and the VITS `Generate()` path only reads model state) instead of
+  one phrase waiting for the previous to fully finish — cut it further, to
+  0-0.6s in most runs. The stall-detection timeout on the client no longer
+  double-counts a phrase's queueing time behind others (it now fires only if
+  the native worker stops making *any* progress for 20s, not per phrase), and
+  one phrase's synthesis failure no longer aborts the rest of the reply.
+  User-confirmed on-device: "almost 90% of times now jarvis is continuously
+  speaking." The remaining ~10% is not yet root-caused — left as an open
+  item, see explanations.md.
+  Checks: TypeScript typecheck clean, full frontend test suite passing
+  (`speechQueue.test.ts` extended with streamed-phrase coverage: gapless
+  scheduling, half-duplex hold on an open stream, text still revealed when a
+  stream produces no audio, `stop()` abandoning an open stream exactly once).
+  Verified with real on-device measurements at every step (CDP against the
+  live app, not simulated) — before/after timing numbers are in
+  explanations.md. Built and installed on the physical device each step;
+  the user confirmed the final build by ear.
 - **2026-09-11 — Voice model failover:** On 2026-09-11 `sarvam-105b-conversations`
   (the voice model) began timing out on every request while `sarvam-105b`
   answered normally, so voice turns sat in "Working on it" forever: the old

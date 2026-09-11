@@ -1,6 +1,6 @@
 import { SpeechQueue } from "@/lib/speechQueue";
 import { API_BASE } from "@/lib/api";
-import { isNativeTtsAvailable, synthesizeNative } from "@/lib/nativeTts";
+import { cancelNative, isNativeTtsAvailable, streamNative } from "@/lib/nativeTts";
 import type { VoiceSessionState } from "@/types";
 
 /**
@@ -488,32 +488,6 @@ export class VoiceSession {
   private muted = false;
   /** Server-assigned id of the current turn; audio from older turns is dropped. */
   private turnGen = 0;
-  /**
-   * The most recent native-synthesized (Piper) chunk, not yet handed to the
-   * playback queue -- held back by exactly one chunk on purpose.
-   *
-   * On-device synthesis (see `case "phrase"` below) has real, measured
-   * latency: a short opener synthesizes fast but produces only ~1s of audio,
-   * while the *next* chunk can take several seconds to synthesize on a phone
-   * CPU. Pushing each chunk to the queue the instant it arrives means the
-   * short opener starts playing immediately and then the queue runs dry --
-   * "yes, boss......... " followed by everything else arriving in a rush.
-   * Piper's own synthesis is comfortably faster than real-time once it has
-   * any head start at all (measured ~0.7-0.85x realtime on-device); the
-   * queue just never gave it one. Holding the newest chunk back until the
-   * *next* one is known to exist (or the turn ends) gives every chunk after
-   * the first a full synthesis head start before it is ever heard.
-   *
-   * Sarvam's `"audio"` path does not need this: the server already
-   * pipelines two chunks of Sarvam synthesis concurrently (`SpeechPipeline`),
-   * so chunks already arrive with healthy spacing. Adding this buffer there
-   * too would only add latency for no benefit, so it is scoped to `"phrase"`.
-   */
-  private heldPhrase: {
-    promise: Promise<{ audio: ArrayBuffer; sampleRate?: number }>;
-    text: string;
-    gen: number;
-  } | null = null;
   private responsePending = false;
   private lastSpeechEnd = 0;
   private lastSpeechStart = 0;
@@ -613,7 +587,6 @@ export class VoiceSession {
     socket.onclose = () => {
       this.clearRecognitionWait();
       if (!this.closed) {
-        this.heldPhrase = null;
         this.queue.stop();
         this.mic?.stop();
         this.handlers.onError("Voice session ended.");
@@ -672,10 +645,6 @@ export class VoiceSession {
           this.cancelTurnEnd();
           this.handlers.onProgress?.("");
           this.responsePending = false;
-          // Normally already flushed by "turn_end", which the server always
-          // sends first; this is a defensive backstop so a held chunk is
-          // never silently stranded (never played) if that ever changes.
-          await this.flushHeldPhrase();
           this.queue.finish();
           if (this.queue.busy || this.state === "speaking") return;
         }
@@ -716,7 +685,6 @@ export class VoiceSession {
         // still arriving belongs to the previous one.
         this.turnGen = Number(payload.gen ?? 0);
         this.playbackReported = false;
-        this.heldPhrase = null; // never carry held audio across a turn boundary
         this.cancelTurnEnd();
         this.queue.begin();
         this.responsePending = true;
@@ -727,10 +695,6 @@ export class VoiceSession {
         // A chunk already on the wire when the turn changed would otherwise
         // play the tail of the previous answer ahead of this one.
         if (Number(payload.gen ?? 0) < this.turnGen) break;
-        // A held Piper chunk from earlier in this same reply must play
-        // before this one -- a mixed-language turn can switch from a
-        // "phrase" (Piper) chunk to an "audio" (Sarvam) chunk mid-reply.
-        await this.flushHeldPhrase();
         // Deliberately NOT setState("speaking") here — the chunk has only
         // *arrived*. It still has to decode and wait its turn in the queue, so
         // flipping now turns the core red before a sound comes out. The queue
@@ -745,22 +709,23 @@ export class VoiceSession {
         break;
       }
       case "phrase": {
-        // English chunk the server skipped synthesizing, because this session
-        // advertised a native voice at connect time (see `start()`). On-device
-        // synthesis is comfortably faster than real-time once it has a head
-        // start, but the very first chunk never gets one by default -- so the
-        // *previous* held chunk (if any) is flushed to the queue now, and
-        // *this* chunk's synthesis starts immediately but is itself held back
-        // until the next event, giving it that head start. See `heldPhrase`.
+        // English chunk the server left for this device to voice, because the
+        // session advertised a native voice at connect time (see `start()`).
+        //
+        // Its playback slot is reserved right now, in arrival order, and each
+        // sentence is scheduled the moment Piper finishes it -- so a long
+        // phrase is heard from its first sentence, and the next phrase is
+        // already generating on the native worker while this one plays. That
+        // is the same shape as Sarvam's streamed audio. A synthesis failure
+        // only costs this phrase its audio (its text is still revealed); it
+        // never interrupts the reply.
         if (Number(payload.gen ?? 0) < this.turnGen) break;
-        await this.flushHeldPhrase();
         const text = String(payload.text ?? "");
-        this.heldPhrase = {
-          promise: synthesizeNative(text, ENGLISH_PACE)
-            .then((speech) => ({ audio: speech.pcm, sampleRate: speech.sampleRate })),
-          text,
-          gen: this.turnGen,
-        };
+        const stream = this.queue.pushStream(text, cancelNative);
+        streamNative(text, ENGLISH_PACE, (pcm, rate) => stream.append(pcm, rate)).then(
+          () => stream.end(),
+          (error: unknown) => stream.fail(error instanceof Error ? error : new Error(String(error))),
+        );
         break;
       }
       case "surface":
@@ -785,10 +750,6 @@ export class VoiceSession {
         this.handlers.onRefresh((payload.domains as string[]) ?? []);
         break;
       case "turn_end":
-        // The final chunk of a reply is often still held back (see
-        // `heldPhrase`) -- flush it before marking the queue complete, or
-        // it is silently never played.
-        await this.flushHeldPhrase();
         this.responsePending = false;
         this.queue.finish();
         this.handlers.onTurnEnd(String(payload.text ?? ""));
@@ -908,25 +869,6 @@ export class VoiceSession {
     }, Math.max(0, this.lastSpeechEnd + delay - performance.now()));
   }
 
-  /**
-   * Hand the held Piper chunk to the playback queue, if there is one.
-   *
-   * Called right before anything else that must play *after* it -- the next
-   * "phrase", an "audio" chunk (a mixed-language reply can switch from Piper
-   * to Sarvam mid-turn), and `turn_end` -- so ordering is preserved exactly
-   * as if nothing had been held back. Uses `pushDeferred` rather than
-   * awaiting the promise and calling `push` directly so a failed synthesis
-   * still degrades the same way every other TTS failure does (caption
-   * revealed, no audio, via `pushDeferred`'s own error handling).
-   */
-  private async flushHeldPhrase(): Promise<void> {
-    const held = this.heldPhrase;
-    if (!held) return;
-    this.heldPhrase = null;
-    if (held.gen < this.turnGen) return; // belongs to an abandoned turn
-    await this.queue.pushDeferred(() => held.promise, held.text);
-  }
-
   private cancelTurnEnd(): void {
     if (this.turnEndTimer !== null) {
       clearTimeout(this.turnEndTimer);
@@ -940,7 +882,6 @@ export class VoiceSession {
     this.handlers.onProgress?.("");
     this.cancelTurnEnd();
     this.turnGen++;
-    this.heldPhrase = null; // drop, don't play, whatever was mid-synthesis
     this.responsePending = false;
     this.queue.stop();
     if (this.socket?.readyState === WebSocket.OPEN) {

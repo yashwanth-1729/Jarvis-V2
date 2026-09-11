@@ -128,6 +128,74 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · On-device Piper 'parts parts' -- investigated and fixed
+- User report: English voice on Android played a short opener then a long
+  silent gap, then rushed through the rest -- worse on medium/long replies,
+  fine on short ones. Suspected wrong: not an LLM-chunking issue -- proven by
+  measuring the phone's native Piper pipeline directly via CDP, independent
+  of the LLM/server entirely.
+- Root cause #1 (fixed): `SherpaTts.synthesize` built a whole phrase's audio
+  in one call before any of it could be delivered. Measured on-device: a
+  short opener (1.9s audio) followed by a 190-char phrase left 4.1-4.3s of
+  dead air waiting for the second phrase to finish building.
+- Root cause #2 (fixed): even after switching to per-sentence streaming
+  (`maxNumSentences=1` + `generateWithCallback`), phrases were still
+  processed by ONE worker, so phrase N+1 could not start building until
+  phrase N's entire text was done -- left ~1.1s of dead air at the same
+  boundary. Moved to a 3-slot thread pool (2 inference threads per job, up
+  to 6 of 8 cores) so phrases build concurrently. Verified this is safe
+  before shipping it: fetched the sherpa-onnx v1.13.8 VITS source --
+  `Generate()` only reads model state, never writes it -- and ONNX Runtime
+  documents `Session::Run` as safe for concurrent calls on one session.
+  Cut the gap to 0-0.6s across repeated on-device runs (down from 4.1-4.3s).
+- Also fixed while in this code: the old per-request synth timeout (12s)
+  counted time spent QUEUED behind other phrases, not just synthesis time,
+  so a phrase late in a long reply could time out before its turn even
+  started, silently dropping it and truncating the reply. Replaced with a
+  stall detector (`nativeTts.ts` `STALL_MS=20000`) that only fires if the
+  native worker produces nothing at all for 20s, and a synthesis failure now
+  costs only that one phrase (caption still shown) instead of aborting the
+  rest of the spoken reply.
+- **Incident during this work, self-caused, worth flagging for whoever reads
+  this next:** while measuring gaps live via CDP against the user's actual
+  running phone, one of my probe scripts overwrote
+  `window.__jarvisTtsChunk`/`__jarvisTtsDone`/`__jarvisTtsError` -- the SAME
+  global hooks `nativeTts.ts`'s `installHooks()` wires up for the real app --
+  and didn't restore them. `installHooks()` guards on a module-level
+  `hooksInstalled` flag and never re-runs, so once those globals are
+  clobbered from outside, the running page has no way to get them back: every
+  English phrase after that point built audio successfully on-device but had
+  nowhere to deliver it, so the user heard nothing. User reported "voice is
+  not coming from it" mid-session; root-caused via Runtime.exceptionThrown
+  in the CDP log (`Cannot read properties of undefined (reading 'pieces')`
+  inside my OWN leftover test hook, firing on the real app's request id),
+  fixed by restarting the app (resets the JS context). **Lesson: never leave
+  global delivery hooks overwritten on a device the user may be actively
+  using -- always save/restore them (see `measure_piper_stream.py`'s
+  pattern), or better, don't probe a live user session at all when a
+  standalone check would do.**
+- Separately noticed and NOT caused by this work: the device hit 99.6C on 4
+  of 8 cores (thermal throttled to ~55-66% of max clock) after many back-to-
+  back on-device synthesis measurement runs. This likely explains some of the
+  run-to-run variance in the later gap measurements (0s in one run, 1-2s in
+  another with an identical config) and may have contributed to the audio
+  going quiet, on top of the hook-clobbering bug above. Let the device cool
+  before doing further heavy on-device TTS benchmarking.
+- **User-confirmed on the real device**, after the concurrency fix and the
+  app restart that cleared the clobbered hooks: "almost 90% of times now
+  jarvis is continuously speaking." Pushed to main at the user's request
+  without chasing the remaining ~10% further this session.
+- **Left open, not investigated:** the remaining ~10% of turns that still
+  have some gap. Candidates worth checking first, in rough priority order:
+  (a) whether it correlates with reply length (a reply with 4+ phrases still
+  queues once all 3 pool slots are busy -- not measured), (b) thermal state
+  after sustained real use (see above -- not isolated from the fix itself
+  yet), (c) whether the 3-pool-slot config is actually optimal or was chosen
+  under confounded (thermal-affected) measurements -- the last on-device A/B
+  before the incident showed HIGHER variance for 3 slots/2 threads than for
+  2 slots/3 threads on the same medium-reply test, which may or may not
+  survive re-measurement on a cool device.
+
 ### 2026-09-11 · Claude Code · Voice stuck in 'Working on it': upstream outage + failover
 - User report: after the transcript, voice mode never produced a reply.
   Cause is upstream, not the reasoning-effort changes: `sarvam-105b-conversations`

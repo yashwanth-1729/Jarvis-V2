@@ -66,7 +66,50 @@ async function main() {
   assert.ok(sources[2].stopped);
   assert.deepEqual(captions, ["first"], "cancelled reveal timer must not fire");
   assert.equal(queue.busy, false);
+
+  // Streamed phrase (on-device Piper): pieces play as they arrive, gapless,
+  // and an item pushed after the stream opened waits for it to close.
+  queue.begin();
+  const base = sources.length;
+  const stream = queue.pushStream("streamed");
+  const after = queue.push(new ArrayBuffer(4800), "after", 4, 24000);
+  stream.append(new ArrayBuffer(4800), 24000);
+  await wait(10);
+  stream.append(new ArrayBuffer(4800), 24000);
+  await wait(10);
+  assert.equal(sources.length, base + 2, "stream pieces schedule as they arrive, before the stream ends");
+  assert.equal(sources[base + 1].startAt, sources[base].startAt + 0.1, "stream pieces are gapless on the audio clock");
+  assert.equal(queue.busy, true, "an open stream keeps the queue busy (half-duplex holds)");
+  stream.end();
+  await after;
+  assert.equal(sources[base + 2].startAt, sources[base + 1].startAt + 0.1, "the next item follows the stream in slot order");
+  await wait(500);
+  assert.deepEqual(captions.slice(-2), ["streamed", "after"], "stream reveals its text once, before what follows");
+  assert.deepEqual(played, [1, 2], "streamed pieces return no playback credits");
+
+  // A stream that produced no audio still shows its text and never blocks.
+  queue.begin();
+  const dead = queue.pushStream("never voiced");
+  const next = queue.push(new ArrayBuffer(4800), "next", 5, 24000);
+  dead.fail(new Error("synthesis failed"));
+  await next;
+  await wait(500);
+  assert.deepEqual(captions.slice(-2), ["never voiced", "next"], "failed stream reveals its text, then the queue moves on");
+
+  // stop() tells an open stream's producer to give up, and late pieces are dropped.
+  queue.begin();
+  let abandoned = 0;
+  const open = queue.pushStream("open", () => abandoned++);
+  const beforeStop = sources.length;
+  queue.stop();
+  assert.equal(abandoned, 1, "stop() abandons an open stream exactly once");
+  open.append(new ArrayBuffer(4800), 24000);
+  open.end();
+  await wait(20);
+  assert.equal(sources.length, beforeStop, "pieces after stop() never play");
+  assert.equal(queue.busy, false);
+
   queue.dispose();
-  console.log("PASS: decode cancellation, PCM ordering, caption timing, half-duplex hold, playback credits, stop cleanup");
+  console.log("PASS: decode cancellation, PCM ordering, caption timing, half-duplex hold, playback credits, stop cleanup, streamed phrases");
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
