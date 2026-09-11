@@ -19,6 +19,10 @@ what we decided and what is still broken. **Either agent writes here; both read 
 
 ## Decisions (don't undo without the user)
 
+- **Piper wins for English TTS** (user, 2026-09-11), on desktop AND mobile.
+  Desktop is shipped. Mobile: run the same voice on-device via **sherpa-onnx**
+  (prebuilt arm64 AAR, Kotlin API) — NOT Chaquopy Python (no arm64 onnx wheel).
+  Android's built-in TextToSpeech was rejected on quality.
 - **No overlap warning for a SESSION inside a ROUTINE** (user, 2026-09-11). The
   session fills the block. Other clashes still warn. See
   `crud.find_schedule_conflicts` / `all_schedule_conflicts`.
@@ -112,6 +116,26 @@ Medium, worth doing:
 - Never let tests touch `backend/storage/jarvis_memory.db` (real data).
 
 ## Log
+
+### 2026-09-11 · Claude Code · Android Piper TTS (started)
+- Decision confirmed: max Piper model (`en_US-ryan-high`) on desktop AND mobile.
+- Chose the on-device path: **sherpa-onnx** (prebuilt arm64 AAR + Kotlin) runs
+  the same ryan-high VITS weights on the phone; Chaquopy can't (no arm64 onnx
+  wheel). Android's built-in TTS was rejected on quality after an A/B test.
+- Shipped now (typechecks): `frontend/src/lib/nativeTts.ts` — the WebView client
+  for a `window.JarvisTts` bridge. Inert unless the bridge exists, so desktop/web
+  and un-provisioned Android fall back to Sarvam untouched. Produces PCM16 that
+  drops straight into `SpeechQueue.push`.
+- **Native half is written but NOT built here** (this session has no Android
+  NDK/SDK/device): full drop-in spec in `docs/android-piper-tts.md` — the exact
+  Gradle AAR line, `JarvisTts.kt` (sherpa-onnx OfflineTts, real API), the
+  MainActivity registration, model/espeak-ng-data provisioning, and the
+  realtime.ts/backend wiring (English-on-Android → client synth, text-only from
+  server). I did NOT add the Kotlin/Gradle to the tree because the imports won't
+  resolve until the AAR is placed — adding them now would break `npm run android`.
+- **Next (needs a build machine + phone):** place the AAR + model, apply the doc's
+  Kotlin/Gradle/wiring, then run the doc's verification checklist. Codex or a
+  build-capable session can execute it directly.
 
 ### 2026-09-11 · Claude Code · Local English TTS (Piper)
 - English replies are now spoken locally by Piper (`en_US-ryan-high`, the
