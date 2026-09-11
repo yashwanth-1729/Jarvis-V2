@@ -434,7 +434,10 @@ there is no background process automatically rewriting documentation.
   per-request model override 12s and a single attempt, then fails over to the
   configured chat model and skips the override for 180s. Measured against the
   live outage: first voice turn ~14s (was an indefinite hang), later turns
-  0.6–0.8s. STT was measured unaffected (0.34–0.39s warm). Offline regression
+  0.6–0.8s. STT was measured unaffected (0.34–0.39s warm). After a credit
+  top-up the same evening the conversations model answered in 0.4–0.6s, so the
+  timeouts were most likely the balance running low — that model hung instead
+  of returning 402. The failover covers either cause. Offline regression
   coverage in `tests/model_failover_test.py` (16 checks). Desktop backend
   suite: 23 of 24 passed; `segment_test` hung, and its last run was blocked by
   a Sarvam `402 No credits available` — the account ran out of credit during

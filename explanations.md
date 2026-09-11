@@ -150,6 +150,11 @@ Medium, worth doing:
 - **Sarvam credits are exhausted** (402 on chat and STT, 2026-09-11 ~21:33).
   Repeated full-suite runs this session (several test files hit live Sarvam)
   were a large part of that. No chat/STT/Sarvam TTS works until it is topped up.
+- Update after the user topped up: the conversations model answers again
+  (0.62s non-stream, first stream line 0.42s). The earlier timeouts were most
+  likely the balance running low -- that model hung while sarvam-105b still
+  returned 200, then both returned 402. Treat a conversations-model timeout as
+  a possible credit problem first.
 - Left: confirm by voice on-device; consider switching back only if the
   conversations model recovers (the cooldown re-probes it every 180s).
 
