@@ -27,7 +27,30 @@ interface ReminderRow {
   id: number;
   text: string;
   due_at: string;
+  /** Set only on the early-notice row of a default reminder — see backend/app/llm/tools.py. */
+  target_at?: string | null;
   fired_at?: string | null;
+}
+
+/**
+ * The alarm body a reminder row should show.
+ *
+ * Mirrors `_reminder_announcement_text` in `backend/app/services/scheduler.py`:
+ * a row with `target_at` set is the early half of a default (non-instant)
+ * reminder, and the gap between `due_at` (when this alarm fires) and
+ * `target_at` (what it's actually about) is the real lead time — computed
+ * rather than assumed 15, since the backend clamps it when the target was too
+ * close to give the full lead.
+ */
+function reminderAlarmBody(row: ReminderRow): string {
+  if (!row.target_at) return row.text;
+  const due = new Date(row.due_at).getTime();
+  const target = new Date(row.target_at).getTime();
+  if (!Number.isFinite(due) || !Number.isFinite(target)) return row.text;
+  const lead = Math.round((target - due) / 60_000);
+  if (lead <= 0) return row.text;
+  const spoken = new Date(row.target_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `In ${lead} minute${lead === 1 ? "" : "s"}, at ${spoken}: ${row.text}`;
 }
 
 interface NotificationPolicy {
@@ -215,7 +238,7 @@ export async function syncNativeNotifications(): Promise<boolean> {
       .map((row) => ({
         id: `reminder:${row.id}`,
         title: "JARVIS reminder",
-        body: row.text,
+        body: reminderAlarmBody(row),
         triggerAt: new Date(row.due_at).getTime(),
         weekly: false,
       }));

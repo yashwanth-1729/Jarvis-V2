@@ -81,6 +81,27 @@ def _occurrence_today(day: datetime, clock: str | None) -> datetime | None:
     return day.replace(hour=minutes // 60, minute=minutes % 60, second=0, microsecond=0)
 
 
+def _reminder_announcement_text(reminder: dict) -> str:
+    """The plain reminder text, or an early-notice framing if this row is one.
+
+    A row with `target_at` set is the early half of a default (non-instant)
+    reminder -- `due_at` on it is already the lead moment, so the delta to
+    `target_at` is exactly how much notice this is. Computed from the two
+    stored timestamps rather than a fixed "15 minutes", since
+    `_handle_set_reminder` clamps the lead when the target was too close to
+    give the full REMINDER_LEAD_MINUTES.
+    """
+    target = parse_datetime(reminder.get("target_at"))
+    if target is None:
+        return reminder["text"]
+    due = parse_datetime(reminder["due_at"])
+    lead = round((target - due).total_seconds() / 60) if due else 0
+    if lead <= 0:
+        return reminder["text"]
+    unit = "minute" if lead == 1 else "minutes"
+    return f"In {lead} {unit}, at {_spoken_time(target.strftime('%H:%M'))}: {reminder['text']}"
+
+
 async def _collect_reminders(current: datetime, policy: dict) -> int:
     queued = 0
     for reminder in await crud.due_reminders(to_iso(current)):
@@ -94,7 +115,7 @@ async def _collect_reminders(current: datetime, policy: dict) -> int:
             kind="reminder",
             ref_id=reminder["id"],
             occurrence_at=reminder["due_at"],
-            text=reminder["text"],
+            text=_reminder_announcement_text(reminder),
             # A reminder was asked for explicitly. That is the strongest signal
             # of intent available, so it always crosses the threshold.
             urgency=100,

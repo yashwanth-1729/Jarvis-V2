@@ -279,6 +279,13 @@ CREATE TABLE IF NOT EXISTS reminders (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     text        TEXT NOT NULL,
     due_at      DATETIME NOT NULL,
+    -- Set only on the early-notice row of a default (non-instant) reminder:
+    -- the moment the user actually asked about, e.g. a 5pm class, while
+    -- `due_at` on that row is 5pm minus the lead time. Lets the fire-time
+    -- message say "in 15 minutes, at 5:00 PM" instead of repeating `due_at`.
+    -- NULL for an instant reminder and for the exact-time row of a default
+    -- one, both of which just speak `text` plain.
+    target_at   DATETIME,
     created_at  DATETIME NOT NULL,
     fired_at    DATETIME
 );

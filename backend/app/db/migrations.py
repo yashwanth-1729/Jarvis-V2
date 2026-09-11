@@ -17,7 +17,7 @@ import aiosqlite
 logger = logging.getLogger("jarvis.db.migrations")
 
 #: Bump when adding a migration below.
-TARGET_VERSION = 6
+TARGET_VERSION = 7
 
 
 async def _columns(conn: aiosqlite.Connection, table: str) -> set[str]:
@@ -385,6 +385,20 @@ async def _v6_systematic_memory(conn: aiosqlite.Connection) -> None:
         )
 
 
+async def _v7_reminder_lead(conn: aiosqlite.Connection) -> None:
+    """Add the column that lets a reminder carry a separate 'real' moment.
+
+    A default (non-instant) reminder now creates two rows: one that fires
+    ``REMINDER_LEAD_MINUTES`` early and one at the exact time. ``target_at`` on
+    the early row is the exact time it is standing in for, so the fire-time
+    message can say "in 15 minutes, at 5:00 PM" instead of repeating the (now
+    early) ``due_at``. NULL means "speak `text` plain" -- true for every
+    instant reminder and for the exact-time row of a default one.
+    """
+    if await _table_exists(conn, "reminders") and "target_at" not in await _columns(conn, "reminders"):
+        await conn.execute("ALTER TABLE reminders ADD COLUMN target_at DATETIME")
+
+
 MIGRATIONS: dict[int, Callable[[aiosqlite.Connection], Awaitable[None]]] = {
     1: _v1_schedule_kinds,
     2: _v2_sync_identity,
@@ -392,6 +406,7 @@ MIGRATIONS: dict[int, Callable[[aiosqlite.Connection], Awaitable[None]]] = {
     4: _v4_reminders,
     5: _v5_notes_pages,
     6: _v6_systematic_memory,
+    7: _v7_reminder_lead,
 }
 
 

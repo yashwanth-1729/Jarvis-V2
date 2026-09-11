@@ -1228,11 +1228,11 @@ async def clear_chat_history() -> None:
 # Reminders and announcements
 # ---------------------------------------------------------------------------
 
-async def create_reminder(text: str, due_at: str) -> dict[str, Any]:
+async def create_reminder(text: str, due_at: str, target_at: str | None = None) -> dict[str, Any]:
     stamp = now_iso()
     reminder_id = await db.execute(
-        "INSERT INTO reminders (text, due_at, created_at) VALUES (?, ?, ?)",
-        (text.strip(), due_at, stamp),
+        "INSERT INTO reminders (text, due_at, target_at, created_at) VALUES (?, ?, ?, ?)",
+        (text.strip(), due_at, target_at, stamp),
     )
     return await get_reminder(reminder_id)  # type: ignore[return-value]
 

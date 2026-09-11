@@ -363,6 +363,10 @@ class ReminderOut(BaseModel):
     id: int
     text: str
     due_at: str
+    #: The exact moment this early-notice row stands in for, e.g. a 5pm class
+    #: when `due_at` is 4:45pm. None for an instant reminder and for the
+    #: exact-time row of a default one -- both just speak `text` plain.
+    target_at: str | None = None
     created_at: str
     fired_at: str | None = None
 

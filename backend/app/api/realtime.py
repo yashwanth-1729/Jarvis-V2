@@ -15,6 +15,7 @@ import logging
 import re
 import time
 import wave
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -325,6 +326,22 @@ def _strip_markup(text: str) -> str:
     return _MARKUP.sub("", text)
 
 
+@dataclass
+class _ClientPhrase:
+    """A chunk the client will speak itself, so the server sends no audio.
+
+    Mobile has its own on-device English voice (Piper via sherpa-onnx, run
+    natively in Kotlin -- Chaquopy has no onnxruntime for arm64). When the
+    client advertises `?english_tts=client`, English chunks are yielded as
+    this marker instead of real audio: it costs no Sarvam credit, and the
+    client synthesizes and plays it in the same order these events arrive
+    (see `frontend/src/lib/realtime.ts`). Non-English is unaffected -- it
+    always comes from Sarvam, on every client.
+    """
+
+    text: str
+
+
 def _speakable(text: str) -> str:
     """Strip anything the model may still emit that should not be pronounced."""
     cleaned = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
@@ -349,6 +366,9 @@ class VoiceSession:
         self.halted = False
         self.voice = DEFAULT_VOICE
         self.incremental_audio = getattr(socket, "query_params", {}).get("audio") == "pcm16"
+        #: Mobile only: the client has a native English voice and will
+        #: synthesize its own English audio -- see `_ClientPhrase`.
+        self.client_english_tts = getattr(socket, "query_params", {}).get("english_tts") == "client"
         self._audio_slots = asyncio.Semaphore(20)
         self._outstanding_audio: set[int] = set()
         #: Transcribed segments of the utterance currently being spoken.
@@ -472,6 +492,9 @@ class VoiceSession:
             await self.send(payload, generation)
 
         async def synthesize(chunk: str, language: str, voice: str):
+            if self.client_english_tts and language == DEFAULT_LANGUAGE:
+                yield _ClientPhrase(chunk)
+                return
             started = time.perf_counter()
             first = True
             async for packet in speech.stream(chunk, language, voice, incremental=self.incremental_audio):
@@ -484,6 +507,14 @@ class VoiceSession:
         async def deliver(index: int, spoken_text: str, packet: Any) -> None:
             nonlocal first_audio_at, packet_seq
             if generation != self._generation:
+                return
+            if isinstance(packet, _ClientPhrase):
+                # No audio crossed the wire, so none of the audio-slot/seq
+                # backpressure bookkeeping below applies -- the client owns
+                # this chunk's playback and reports nothing back for it.
+                if index not in revealed:
+                    revealed.add(index)
+                    await emit({"type": "phrase", "text": packet.text})
                 return
             if isinstance(packet, Exception):
                 logger.warning("TTS phrase failed: %s", packet)

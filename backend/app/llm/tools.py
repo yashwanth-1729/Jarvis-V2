@@ -295,6 +295,7 @@ class SetReminderInput(BaseModel):
     text: str = Field(min_length=1)
     remind_at: str
     time_expression: str | None = Field(default=None, max_length=120)
+    instant: bool = False
 
     @field_validator("text")
     @classmethod
@@ -1639,6 +1640,16 @@ async def _handle_run_command(payload: RunCommandInput) -> ToolOutcome:
     )
 
 
+#: How long before the moment a default reminder speaks up.
+#:
+#: A reminder about a 5pm class fired *at* 5pm is too late to act on — by the
+#: time it's heard, the class has started. So a default reminder now creates
+#: two rows: one here, early, and one at the exact time (see
+#: `_handle_set_reminder`). Only "instant reminder" — the user asking for the
+#: exact moment, not a lead notice — skips the early one.
+REMINDER_LEAD_MINUTES = 15
+
+
 async def _handle_set_reminder(payload: SetReminderInput) -> ToolOutcome:
     moment = _resolve_reminder_moment(payload.remind_at, payload.time_expression, now())
     if moment is None:
@@ -1663,17 +1674,38 @@ async def _handle_set_reminder(payload: SetReminderInput) -> ToolOutcome:
             is_error=True,
         )
 
+    # Two rows for a default reminder — one early, one exact — because the
+    # table (and everything downstream: the scheduler, the native Android
+    # alarm sync) fires each row once. Reusing that rather than teaching a
+    # single row to fire twice keeps every existing consumer unchanged.
+    lead_minutes = 0
+    lead_reminder = None
+    if not payload.instant:
+        lead_moment = max(moment - timedelta(minutes=REMINDER_LEAD_MINUTES), current)
+        lead_minutes = round((moment - lead_moment).total_seconds() / 60)
+        if lead_minutes > 0:
+            lead_reminder = await crud.create_reminder(
+                payload.text, lead_moment.strftime("%Y-%m-%dT%H:%M:%S"), target_at=when,
+            )
+
     reminder = await crud.create_reminder(payload.text, when)
     # A reminder is an explicit request to notify. Keep category defaults quiet,
-    # but allow this exact alarm and re-enable the master switch if the user had
-    # previously turned everything off; their newest request wins.
+    # but allow this exact alarm — and the early one, if there is one — and
+    # re-enable the master switch if the user had previously turned everything
+    # off; their newest request wins.
     await notification_policy.allow_specific(f"reminder:{reminder['id']}")
+    if lead_reminder is not None:
+        await notification_policy.allow_specific(f"reminder:{lead_reminder['id']}")
     spoken = moment.strftime("%I:%M %p").lstrip("0")
     day = ""
     if moment.date() != current.date():
         day = f" on {moment.strftime('%A %d %B')}"
+    lead_note = (
+        f" — I'll notify you {lead_minutes} minute{'s' if lead_minutes != 1 else ''} early too"
+        if lead_minutes > 0 else ""
+    )
     return ToolOutcome(
-        content=f"Reminder set for {spoken}{day}: {reminder['text']}",
+        content=f"Reminder set for {spoken}{day}{lead_note}: {reminder['text']}",
         refresh={"brief", "schedule"},
         display={"id": reminder["id"], "at": when, "text": reminder["text"]},
     )
@@ -2624,6 +2656,12 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
             "A one-off reminder JARVIS will speak up about at the time, unlike "
             "a task which waits to be looked at. Use whenever the user says "
             "'remind me' with a time. "
+            "By default this ALSO notifies 15 minutes early ('in 15 minutes, "
+            "at 5:00 PM: ...') as well as at the exact moment — so the person "
+            "has warning, not just a notice after the fact. Set instant=true "
+            "ONLY when they explicitly ask for the exact time and nothing "
+            "before it — e.g. say 'instant reminder', 'remind me exactly "
+            "then', 'right at 5pm, not before'. "
             "For anything weekly use add_schedule_event instead."
         ),
         input_schema={
@@ -2643,6 +2681,14 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
                         "The user's original time words, copied exactly, such as "
                         "'5:15', '5:15 PM', or 'tomorrow morning'. This lets the "
                         "tool resolve 12-hour ambiguity safely."
+                    ),
+                },
+                "instant": {
+                    "type": "boolean",
+                    "description": (
+                        "true ONLY if the user explicitly wants no early notice "
+                        "— just the exact moment. Default false, which also "
+                        "notifies 15 minutes ahead of remind_at."
                     ),
                 },
             },
