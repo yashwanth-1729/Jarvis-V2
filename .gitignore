@@ -42,3 +42,7 @@ Thumbs.db
 backend/models/piper/*.onnx
 backend/models/piper/*.onnx.json
 backend/.piptmp/
+
+# Android Piper assets fetched by backend/tools/android/setup_piper.ps1 (large, not committed)
+frontend/src-tauri/gen/android/app/libs/*.aar
+frontend/src-tauri/gen/android/app/src/main/assets/piper/

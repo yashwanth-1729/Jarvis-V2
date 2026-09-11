@@ -20,26 +20,27 @@ caption timing, ordering) is unchanged.
 Decision recorded in explanations.md: **max Piper model on both platforms**, so
 Android uses the same high tier as desktop — `en_US-ryan-high`.
 
-## Files the engine needs (place under `filesDir/tts/`)
+## One-command setup (run this first)
 
-sherpa-onnx needs three things:
+```powershell
+./backend/tools/android/setup_piper.ps1
+```
 
-1. `en_US-ryan-high.onnx` — the high-tier voice (same weights as desktop).
-2. `tokens.txt` — phoneme→id map for that model.
-3. `espeak-ng-data/` — shared phonemizer data (same for every Piper voice).
+This fetches both large binaries — neither is in git — and places them:
 
-Get a sherpa-ready bundle from the sherpa-onnx `tts-models` release:
-`https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models` →
-`vits-piper-en_US-ryan-high.tar.bz2` (it contains the `.onnx` + `tokens.txt`).
-If only a `-medium` ryan bundle is published there, generate `tokens.txt` for the
-high `.onnx` with sherpa-onnx's Piper export script (it reads the rhasspy
-`.onnx.json` we already have at `backend/models/piper/en_US-ryan-high.onnx.json`).
-`espeak-ng-data.tar.bz2` is a separate download in the same release.
+- `sherpa-onnx-1.13.8.aar` → `frontend/src-tauri/gen/android/app/libs/`
+- the `vits-piper-en_US-ryan-high` bundle → `.../app/src/main/assets/piper/`,
+  which is `en_US-ryan-high.onnx` + `tokens.txt` + `espeak-ng-data/` (all three
+  in one download — the high tier, same weights as desktop).
 
-**Provisioning:** these total ~130 MB. Download-on-first-run into `filesDir/tts/`
-(keeps the APK small; needs one online launch) rather than bundling in assets.
-The Kotlin engine below no-ops until the files exist, so English falls back to
-Sarvam until the first successful fetch.
+Bundling into `assets/` means the voice ships inside the APK and works offline
+from first launch (no runtime download). The AAR and the `assets/piper/` folder
+are gitignored. Re-running the script is safe; it skips what is already there.
+
+On first launch the Kotlin engine copies `assets/piper/` to
+`filesDir/tts/` once (espeak-ng-data must live on a real filesystem path, not be
+read through the asset manager). It no-ops until that copy exists, so English
+falls back to Sarvam only on the very first run before the copy completes.
 
 ## Gradle (`frontend/src-tauri/gen/android/app/build.gradle.kts`)
 
@@ -84,14 +85,32 @@ object SherpaTts {
 
   private fun dir(context: Context) = File(context.filesDir, "tts")
 
-  /** Ready only when all three inputs are present and the model has loaded. */
-  fun ready(context: Context): Boolean {
+  /** Copy the bundled voice out of read-only assets to a real path, once. */
+  private fun provision(context: Context) {
     val d = dir(context)
-    val ok = File(d, "en_US-ryan-high.onnx").exists() &&
-      File(d, "tokens.txt").exists() &&
-      File(d, "espeak-ng-data").isDirectory
-    if (!ok) return false
-    return try { engine(context); true } catch (e: Throwable) {
+    if (File(d, "en_US-ryan-high.onnx").exists()) return
+    d.mkdirs()
+    copyAsset(context, "piper", d)
+  }
+
+  private fun copyAsset(context: Context, path: String, dest: File) {
+    val children = context.assets.list(path) ?: emptyArray()
+    if (children.isEmpty()) { // a file
+      context.assets.open(path).use { input ->
+        dest.outputStream().use { input.copyTo(it) }
+      }
+      return
+    }
+    dest.mkdirs()
+    for (child in children) copyAsset(context, "$path/$child", File(dest, child))
+  }
+
+  /** Ready only when the voice is provisioned and the model has loaded. */
+  fun ready(context: Context): Boolean {
+    return try {
+      provision(context)
+      engine(context); true
+    } catch (e: Throwable) {
       Log.e(TAG, "load failed: ${e.message}"); false
     }
   }

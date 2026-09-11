@@ -124,6 +124,20 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-11 · Claude Code · Android Piper setup script
+- `backend/tools/android/setup_piper.ps1`: one command to fetch the two large
+  binaries (gitignored) and place them for the Android build —
+  `sherpa-onnx-1.13.8.aar` → app/libs/, and the `vits-piper-en_US-ryan-high`
+  bundle (onnx+tokens+espeak-ng-data, the MAX tier) → app/src/main/assets/piper/.
+  Idempotent; needs internet + curl + tar (Win10+ built-ins). URLs verified
+  against the live GitHub releases (sherpa v1.13.8; tts-models).
+- Voice is bundled in APK assets (works offline); the Kotlin engine copies
+  assets/piper → filesDir/tts once on first launch. Updated
+  docs/android-piper-tts.md to match (setup section + SherpaTts.provision).
+- Still pending (needs build machine + phone): apply the doc's Gradle line +
+  JarvisTts.kt + MainActivity registration + realtime.ts wiring, then
+  `npm run android:install`. The script makes that the only remaining work.
+
 ### 2026-09-11 · Claude Code · Sync rebuilt (orchestration + UX)
 - User: sync 'keeps loading', wants auto pull-on-open + secret background push,
   no manual button, on both platforms. Rebuilt the orchestration; kept the
