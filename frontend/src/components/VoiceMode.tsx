@@ -26,6 +26,18 @@ const JarvisCore = dynamic(
   { ssr: false },
 );
 
+/**
+ * The reply language whose speech comes from a local Piper voice, not Sarvam.
+ *
+ * Must match `DEFAULT_LANGUAGE` in `backend/app/core/languages.py`. Piper
+ * always speaks with the one voice it was built with (`en_US-ryan-high`) --
+ * on desktop via the Python provider, and on Android via the on-device
+ * sherpa-onnx bridge once it's provisioned -- so the "Speaking voice" picker
+ * (Sarvam's Priya/Ritu/Kavya/…) has nothing to change while English is
+ * selected, and showing it as if it did was actively misleading.
+ */
+const ENGLISH_LANGUAGE = "en-IN";
+
 const STATUS_COPY: Record<VoiceSessionState, string> = {
   idle: "Offline",
   connecting: "Connecting…",
@@ -432,27 +444,42 @@ export function VoiceMode({
             />
           )}
 
-          {voices.length > 0 && (
-            <HudSelect
-              icon={<AudioLines className="h-3 w-3" />}
-              label="Speaking voice"
-              value={voice}
-              onChange={changeVoice}
+          {language === ENGLISH_LANGUAGE ? (
+            // Piper ignores the speaker choice entirely, so a picker here
+            // would offer voices that do nothing -- exactly what was
+            // confusing before this. A plain indicator instead.
+            <HudChip
               accent={accent}
-              groups={(["female", "male"] as const)
-                .map((gender) => ({
-                  label: gender === "female" ? "Female" : "Male",
-                  options: voices
-                    .filter((option) => option.gender === gender)
-                    .map((option) => ({
-                      value: option.id,
-                      label: option.label,
-                      hint: option.note,
-                    })),
-                }))
-                // A group with no voices would render a heading over nothing.
-                .filter((group) => group.options.length > 0)}
-            />
+              disabled
+              title="English is spoken by a fixed local voice (Piper), not Sarvam — the speaking-voice picker does not apply here."
+              className="cursor-default hover:text-white/55"
+            >
+              <AudioLines className="h-3 w-3" />
+              On-device voice
+            </HudChip>
+          ) : (
+            voices.length > 0 && (
+              <HudSelect
+                icon={<AudioLines className="h-3 w-3" />}
+                label="Speaking voice"
+                value={voice}
+                onChange={changeVoice}
+                accent={accent}
+                groups={(["female", "male"] as const)
+                  .map((gender) => ({
+                    label: gender === "female" ? "Female" : "Male",
+                    options: voices
+                      .filter((option) => option.gender === gender)
+                      .map((option) => ({
+                        value: option.id,
+                        label: option.label,
+                        hint: option.note,
+                      })),
+                  }))
+                  // A group with no voices would render a heading over nothing.
+                  .filter((group) => group.options.length > 0)}
+              />
+            )
           )}
 
           <HudChip
