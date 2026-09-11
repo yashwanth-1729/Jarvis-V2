@@ -82,6 +82,24 @@ export interface Tombstone {
   deleted_at: string;
 }
 
+/**
+ * Strip a tombstone down to exactly `{table_name, uid, deleted_at}`.
+ *
+ * A tombstone pulled from Supabase carries its server-assigned `synced_at`
+ * too, and TypeScript's structural typing lets that extra field ride along
+ * silently through anything typed `Tombstone` — the interface above is not
+ * enforced on values, only on object literals. Left unprojected, a locally
+ * deleted row's tombstone (3 keys) and a pulled one (4 keys) end up in the
+ * same IndexedDB store, and PostgREST rejects a bulk insert where objects in
+ * one array don't all have the same keys (`PGRST102: "All object keys must
+ * match"`) the moment a push batch contains both shapes. `pushRows` already
+ * guards against exactly this for ordinary rows via `project()`; this is the
+ * same guard for tombstones.
+ */
+export function projectTombstone(tomb: Tombstone): Tombstone {
+  return { table_name: tomb.table_name, uid: tomb.uid, deleted_at: tomb.deleted_at };
+}
+
 const DB_NAME = "jarvis";
 const DB_VERSION = 4;
 
@@ -408,7 +426,7 @@ export async function applyRemoteTombstone(tomb: Tombstone): Promise<boolean> {
     const tombs = t.objectStore(TOMBSTONE_STORE);
     const previous = await wrap(tombs.get([table, tomb.uid])) as Tombstone | undefined;
     if (previous && previous.deleted_at > tomb.deleted_at) tomb = previous;
-    tombs.put(tomb);
+    tombs.put(projectTombstone(tomb));
     const existing = (await wrap(store.get(tomb.uid) as IDBRequest<SyncRow | undefined>)) ?? null;
     if (!existing) return false;
     if (tomb.deleted_at && String(existing.updated_at) > String(tomb.deleted_at)) return false;

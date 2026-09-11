@@ -22,6 +22,7 @@ import {
   getRow,
   listRows,
   mergeAgentRows,
+  projectTombstone,
   putRows,
 } from "@/lib/localdb";
 import {
@@ -124,6 +125,17 @@ class FakeRemote implements Remote {
   }
 
   async pushTombstones(rows: Tombstone[]) {
+    // Mirrors PostgREST's PGRST102 ("All object keys must match"): a real
+    // bulk insert rejects the whole batch if the objects in it don't all
+    // have the same keys. A push must project every row to the exact same
+    // shape before it gets here, or this throws exactly as the real
+    // endpoint would.
+    if (rows.length > 1) {
+      const shapes = new Set(rows.map((row) => Object.keys(row).sort().join(",")));
+      if (shapes.size > 1) {
+        throw new Error(`PGRST102: All object keys must match (shapes: ${[...shapes].join(" | ")})`);
+      }
+    }
     for (const row of rows) {
       this.tombstones[`${row.table_name}:${row.uid}`] = { ...row, synced_at: this.stamp() };
     }
@@ -163,6 +175,26 @@ async function becomeOtherDevice(): Promise<void> {
 }
 
 async function main(): Promise<number> {
+  console.log("\n== projectTombstone strips everything but the three synced fields ==");
+  // Pins the exact contract pushTombstones relies on: whatever extra fields a
+  // tombstone accumulates (Supabase's `synced_at`, or anything added later),
+  // this must always return precisely {table_name, uid, deleted_at}.
+  const contaminated = {
+    table_name: "tasks",
+    uid: "00000000-0000-4000-8000-fff000000000",
+    deleted_at: "2026-01-01T00:00:00",
+    synced_at: "2026-01-01T00:00:00.000000+00:00",
+  } as Tombstone & { synced_at: string };
+  const projected = projectTombstone(contaminated);
+  check(
+    "extra fields are gone",
+    Object.keys(projected).sort().join(",") === "deleted_at,table_name,uid",
+    JSON.stringify(projected),
+  );
+  check("the three real fields survive unchanged", JSON.stringify(projected) === JSON.stringify({
+    table_name: contaminated.table_name, uid: contaminated.uid, deleted_at: contaminated.deleted_at,
+  }));
+
   console.log("\n== local writes land and read back ==");
   const task = makeRow({ title: "Finish the sync client", priority: "HIGH", status: "PENDING" });
   const idea = makeRow({ title: "Publish SLDT", description: "after testing" });
@@ -252,6 +284,39 @@ async function main(): Promise<number> {
     `still present in ${[...surviving]}`,
   );
   check("the other tasks did survive", surviving.has(task.uid));
+
+  console.log("\n== tombstones of mixed origin don't crash a batch push (PGRST102) ==");
+  // Reproduces a real failure found on a device: a tombstone pulled from the
+  // remote carries its server-assigned `synced_at`; one created locally does
+  // not. `listTombstones` returns both from the same store with no regard for
+  // origin, so an unprojected push mixing the two shapes gets the whole batch
+  // rejected -- and, because the watermark only advances on success, every
+  // later round fails the same way forever. See projectTombstone in
+  // localdb.ts and its use in pushTombstones.
+  const deletedElsewhere = makeRow({ title: "Deleted on another device" });
+  remote.seed("tasks", deletedElsewhere);
+  // Far in the future so this tombstone's `deleted_at` can never be mistaken
+  // for already-pushed by the watermark check below -- the point being
+  // tested is shape, not recency.
+  remote.seedTombstone("tasks", deletedElsewhere.uid, "2028-06-01T00:00:00");
+  await syncOnce(remote); // pulls that tombstone locally (gets synced_at attached before projection)
+
+  const deletedHere = makeRow({ title: "Delete me too" });
+  await putRows("tasks", [deletedHere]);
+  await deleteRow("tasks", deletedHere.uid, nowIso()); // local-only: a fresh, 3-key-only tombstone
+
+  // Neither tombstone has been pushed yet, so this one round pushes both
+  // together -- exactly the mixed-origin batch that reproduced the bug.
+  const mixedPush = await syncOnce(remote);
+  check(
+    "a batch mixing pulled and local tombstone shapes still pushes",
+    mixedPush.error === null,
+    String(mixedPush.error),
+  );
+  check(
+    "the local deletion reached the remote despite the mix",
+    `tasks:${deletedHere.uid}` in remote.tombstones,
+  );
 
   console.log("\n== a row edited after its delete is kept ==");
   const revived = makeRow({ title: "Brought back" });

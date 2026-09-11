@@ -34,6 +34,7 @@ import {
   onLocalChange,
   pendingCount,
   project,
+  projectTombstone,
   setMeta,
 } from "@/lib/localdb";
 
@@ -263,7 +264,16 @@ export class SupabaseRemote implements Remote {
     // it is what tells a peer that already holds the row to drop it, and what
     // stops a peer's stale copy from re-creating it -- but it is now a
     // notification of a deletion rather than the whole of one.
-    await this.upsert("sync_tombstones", rows);
+    //
+    // Projected first, same as `pushRows` above and for the same reason
+    // (PGRST102, "All object keys must match"): a tombstone pulled from
+    // Supabase carries its server-assigned `synced_at` and is stored locally
+    // as-is, so an unprojected batch here can silently mix 3-key and 4-key
+    // objects and get the whole push rejected. Measured on a real device: a
+    // batch of 31 pending tombstones -- some locally-deleted, some pulled --
+    // failed with exactly this error, and every retry failed the same way
+    // because the push watermark never advances past a rejected batch.
+    await this.upsert("sync_tombstones", rows.map(projectTombstone));
 
     const byTable = new Map<string, string[]>();
     for (const row of rows) {
