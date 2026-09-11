@@ -62,16 +62,18 @@ export function Rail({ view, onViewChange, counts, status, onOpenSettings }: Rai
   return (
     <nav
       aria-label="Primary"
-      className="flex h-full w-rail shrink-0 flex-col items-center border-r border-line bg-surface-0/80 py-3 backdrop-blur-sm"
+      className="flex h-full w-rail shrink-0 flex-col border-r border-line bg-surface-0/80 backdrop-blur-sm"
     >
-      <div
-        className="flex h-8 w-8 items-center justify-center text-accent"
-        title="JARVIS"
-      >
-        <Mark className="h-[18px] w-[18px]" />
+      {/* Wordmark, not just the mark: at this width there is room to say what
+          this is, not merely to hint at it with a glyph. */}
+      <div className="flex items-center gap-2.5 px-4 pb-1 pt-5 text-accent">
+        <Mark className="h-[19px] w-[19px] shrink-0" />
+        <span className="truncate font-display text-[13px] font-semibold tracking-[0.02em] text-ink">
+          JARVIS
+        </span>
       </div>
 
-      <div className="mt-5 flex flex-1 flex-col items-center gap-1">
+      <div className="mt-4 flex flex-1 flex-col gap-0.5 px-2.5">
         {VIEWS.map(({ key, label, icon: Icon }) => {
           const active = key === view;
           const count = counts[key] ?? 0;
@@ -81,35 +83,20 @@ export function Rail({ view, onViewChange, counts, status, onOpenSettings }: Rai
               type="button"
               onClick={() => onViewChange(key)}
               aria-current={active ? "page" : undefined}
-              title={label}
-              className={cn(
-                "group relative flex h-9 w-9 cursor-pointer items-center justify-center rounded",
-                "transition-colors duration-150",
-                active
-                  ? "bg-surface-3 text-accent"
-                  : "text-ink-faint hover:bg-surface-2 hover:text-ink-muted",
-              )}
+              className={cn("rail-item group cursor-pointer")}
             >
-              {/* Active marker: a 2px edge tick, not a colour-only change. */}
-              <span
+              <Icon
                 aria-hidden
-                className={cn(
-                  "absolute -left-3 h-4 w-[2px] rounded-r transition-all duration-200",
-                  active ? "bg-accent opacity-100" : "opacity-0",
-                )}
+                className={cn("h-[18px] w-[18px] shrink-0", active ? "text-accent" : "text-ink-faint group-hover:text-ink-muted")}
+                strokeWidth={active ? 2 : 1.75}
               />
-              <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
-              <span className="sr-only">{label}</span>
-
+              <span className="rail-label">{label}</span>
               {count > 0 && (
                 <span
                   aria-hidden
                   className={cn(
-                    "tnum absolute -right-0.5 -top-0.5 min-w-[15px] rounded-full px-1",
-                    "font-mono text-[9px] leading-[15px]",
-                    active
-                      ? "bg-accent text-accent-ink"
-                      : "bg-surface-4 text-ink-dim group-hover:text-ink-muted",
+                    "rail-count",
+                    active ? "text-accent" : "text-ink-faint",
                   )}
                 >
                   {count > 99 ? "99+" : count}
@@ -123,29 +110,23 @@ export function Rail({ view, onViewChange, counts, status, onOpenSettings }: Rai
       {/* No voice control here. The console carries the single primary CTA;
           a second entry point in the rail competed with it and made the
           hierarchy ambiguous. */}
-      {/* Connection settings. Sits with the status dot rather than the view
-          switcher: both answer "what is this thing talking to", which is a
-          different question from "what am I looking at". */}
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        aria-label="Connection settings"
-        title="Connection settings"
-        className={cn(
-          "inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded",
-          "text-ink-faint transition-colors duration-150 hover:text-ink-muted",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-        )}
-      >
-        <Settings2 aria-hidden className="h-4 w-4" strokeWidth={2} />
-      </button>
+      <div className="flex flex-col gap-0.5 px-2.5 pb-4">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="rail-item cursor-pointer"
+        >
+          <Settings2 aria-hidden className="h-[17px] w-[17px] shrink-0 text-ink-faint group-hover:text-ink-muted" strokeWidth={1.85} />
+          <span className="rail-label">Settings</span>
+        </button>
 
-      <div
-        className="flex h-8 w-8 items-center justify-center"
-        title={STATUS_COPY[status]}
-      >
-        <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
-        <span className="sr-only">{STATUS_COPY[status]}</span>
+        {/* Connection settings and the status lamp answer the same question
+            ("what is this thing talking to"), so they sit together rather
+            than the lamp floating alone. */}
+        <div className="flex items-center gap-2.5 px-4 py-2 text-[11px] text-ink-faint" title={STATUS_COPY[status]}>
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[status])} />
+          <span className="truncate">{STATUS_COPY[status]}</span>
+        </div>
       </div>
     </nav>
   );

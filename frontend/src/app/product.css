@@ -1,19 +1,19 @@
 /* Workspace design system. Voice transport and floating instrument surfaces
    intentionally keep their own presentation contracts. */
-.product-shell { --rail-w: 76px; --console-w: clamp(300px, 29vw, 420px); --motion-ease: cubic-bezier(.22,1,.36,1); }
+.product-shell { --rail-w: clamp(196px, 15vw, 236px); --console-w: clamp(300px, 29vw, 420px); --motion-ease: cubic-bezier(.22,1,.36,1); }
 .brand-mark { display: inline-flex; width: 36px; height: 36px; flex: 0 0 auto; color: #9bddff; }
 .brand-mark svg { width: 100%; height: 100%; }
 .brand-wordmark { color: #e8f4fc; font-family: var(--font-grotesk, sans-serif); font-size: 17px; font-weight: 600; letter-spacing: .12em; }
-.brand-wordmark > span { display: block; margin-top: 3px; color: #7e93a6; font: 8px/1.2 var(--font-inter, sans-serif); letter-spacing: .14em; }
+.brand-wordmark > span { display: block; margin-top: 3px; color: #7e93a6; font: 10px/1.2 var(--font-inter, sans-serif); letter-spacing: .14em; }
 .mobile-topbar { min-height: 66px; padding: 8px 20px; background: #080e18; }
-.connection-indicator { margin-left: auto; display: flex; align-items: center; gap: 6px; color: #8d9eae; font-size: 10px; }
+.connection-indicator { margin-left: auto; display: flex; align-items: center; gap: 6px; color: #8d9eae; font-size: 11px; }
 .connection-indicator i { width: 5px; height: 5px; border-radius: 50%; }
 .mobile-topbar > .flex-1 { display: none; }
 .mobile-topbar .settings-trigger { color: #b7c9d8; border: 1px solid #25313e; border-radius: 14px; margin-left: 2px; }
 .workspace-page { background: #080e18; scrollbar-width: thin; scroll-padding-top: 24px; }
 .workspace-page > * { flex-shrink: 0; }
 .workspace-page .page-heading { padding: 24px 28px 18px; border: 0; align-items: center; }
-.page-kicker { font: 10px/1.5 var(--font-inter, sans-serif); font-weight: 600; letter-spacing: .18em; color: #8198ab; }
+.page-kicker { font: 11px/1.5 var(--font-inter, sans-serif); font-weight: 600; letter-spacing: .18em; color: #8198ab; }
 .workspace-page .page-heading h1 { margin-top: 9px; font-size: clamp(32px, 3vw, 44px); line-height: 1.1; font-weight: 500; letter-spacing: -.05em; }
 .workspace-page .page-description { font-size: 13px; line-height: 1.6; color: #8296a8; margin-top: 10px; }
 .workspace-page .page-heading .ui-button { border: 1px solid #273545; border-radius: 50%; color: #a8bfd0; height: 42px; width: 42px; }
@@ -35,7 +35,7 @@
 .focus-card { position: relative; isolation: isolate; padding: 23px; margin-bottom: 28px; overflow: hidden; border: 1px solid #355267; border-radius: 24px; background: radial-gradient(ellipse at 100% 0%, #214663 0%, transparent 65%), linear-gradient(125deg,#142637,#101d2c); box-shadow: inset 0 1px 0 #92cfff14, 0 16px 40px #00000016; }
 .focus-card::after { content: ''; position: absolute; z-index: -1; width: 230px; height: 230px; border: 1px solid #a3dfff0e; border-radius: 50%; top: -140px; right: -60px; box-shadow: 0 0 0 32px #a3dfff04, 0 0 0 64px #a3dfff04; pointer-events: none; }
 .focus-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.focus-card-top > span:first-child { display: flex; align-items: center; gap: 8px; color: #a4d4ec; font-size: 9px; letter-spacing: .16em; font-weight: 600; }
+.focus-card-top > span:first-child { display: flex; align-items: center; gap: 8px; color: #a4d4ec; font-size: 11px; letter-spacing: .16em; font-weight: 600; }
 .focus-card-top i { width: 5px; height: 5px; border-radius: 50%; background: #89d6ff; box-shadow: 0 0 10px #89d6ff60; }
 .focus-orbit { width: 26px; height: 26px; border: 1px solid #83c9ff4d; border-radius: 50%; display: grid; place-items: center; }
 .focus-orbit span { width: 12px; height: 12px; border: 1px solid #a4d9ff90; border-radius: 50%; }
@@ -74,7 +74,7 @@
 .task-copy { min-width: 0; }
 .task-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 3px; color: #8198ab; font-size: 11px; line-height: 1.6; }
 .task-meta > span { display: inline-flex; align-items: center; gap: 4px; }
-.priority-pill { font-size: 9px; line-height: 1.4; padding: 3px 6px; border-radius: 5px; color: #a4cbe2; background: #99d7ff0b; }
+.priority-pill { font-size: 10px; line-height: 1.4; padding: 3px 6px; border-radius: 5px; color: #a4cbe2; background: #99d7ff0b; }
 .task-board .task-edit { display: grid; place-items: center; width: 36px; height: 44px; color: #8da4b6; border-radius: 10px; background: none; }
 .board-error { display: flex; align-items: center; gap: 8px; padding: 12px; margin-bottom: 12px; color: #ff949a; background: #331d29; border-radius: 12px; font-size: 12px; }
 .board-empty { padding: 20px 0; }
@@ -109,7 +109,7 @@
 .vault-page .idea-list { gap: 14px; background: none; border: 0; overflow: visible; }
 .vault-page .idea-card { padding: 20px; border: 1px solid #344253 !important; border-radius: 20px; background: radial-gradient(ellipse at 100% 0%,#29354a66,transparent 65%),#141e2c; }
 .vault-page .idea-card:nth-child(2n) { background: radial-gradient(ellipse at 100% 0%,#263d4866,transparent 65%),#121f29; }
-.note-type { display: flex; align-items: center; gap: 8px; color: #94adbf; font-size: 9px; letter-spacing: .14em; margin-bottom: 14px; }
+.note-type { display: flex; align-items: center; gap: 8px; color: #94adbf; font-size: 11px; letter-spacing: .14em; margin-bottom: 14px; }
 .vault-page button[title="Edit"] { font-size: 17px; line-height: 1.45; min-height: 36px; }
 .vault-page .idea-card > p { font-size: 13px; line-height: 1.75; margin-top: 10px; }
 .vault-page .memory-list { display: grid; gap: 12px; border: 0; }
@@ -178,8 +178,17 @@
 .voice-stage > header button { min-height: 42px; border-radius: 12px; font-family: var(--font-inter,sans-serif); font-size: 11px; letter-spacing: .02em; text-transform: none; transition: background-color 180ms, border-color 180ms, transform 160ms; }
 .voice-stage > header button:active { transform: scale(.96); }
 .voice-stage > header { padding-left: 20px; padding-right: 20px; }
-.product-shell nav[aria-label="Primary"] { background: #0b141f; padding-top: 24px; }
-.product-shell nav[aria-label="Primary"] button { width: 46px; height: 46px; margin-bottom: 10px; border-radius: 15px; }
+.product-shell nav[aria-label="Primary"] { background: #0b141f; padding-top: 20px; }
+/* Labelled rows, not a strip of unlabelled squares -- see Rail.tsx: mobile's
+   bottom nav already does this and says why ("icon-only navigation is
+   consistently the worst-performing pattern for discoverability"). Desktop
+   has the width to spare; it should not be the one surface that stays
+   cryptic. */
+.rail-item { display: flex; align-items: center; gap: 12px; width: 100%; height: 46px; padding: 0 16px; margin-bottom: 4px; border-radius: 12px; color: #7d93a6; font: 500 13px/1 var(--font-inter,sans-serif); transition: background-color 160ms, color 160ms; }
+.rail-item[aria-current="page"] { background: #16283a; color: #bfe6ff; }
+.rail-item:not([aria-current="page"]):hover { background: #101c28; color: #a9bece; }
+.rail-label { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-count { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 11px; }
 @media (hover:hover) {
   .task-board .task-card:hover { border-color: #46627a !important; background: #132435; }
   .product-shell .quiet-action:hover, .task-board .task-edit:hover { color: #c7ebff; background: #a4ddff09; }
@@ -233,9 +242,18 @@
 @keyframes backdrop-leave { to { opacity: 0; } }
 @keyframes dialog-arrive { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
 @keyframes dialog-leave { to { opacity: 0; transform: scale(.97); } }
+/* Sequential handoff, not a crossfade: Board, Schedule and Vault are
+   structurally unrelated layouts (a stats row and task list vs. a weekday
+   picker vs. a card grid), captured as full-bleed snapshots at the same
+   screen position. Fading them in and out at the same time made two
+   unrelated pages visible on top of each other for the ~180ms both were
+   partway through their own fade -- headings and banners double-exposed,
+   which read as broken, not as motion. The old page now finishes leaving
+   (120ms) before the new one starts arriving (a matching delay), so there is
+   only ever one page's content on screen. Total duration barely changes. */
 ::view-transition-group(workspace) { animation-duration: 280ms; animation-timing-function: cubic-bezier(.22,1,.36,1); }
-::view-transition-old(workspace) { animation: backdrop-leave 180ms ease-out both; }
-::view-transition-new(workspace) { animation: page-arrive 280ms cubic-bezier(.22,1,.36,1) both; }
+::view-transition-old(workspace) { animation: backdrop-leave 120ms ease-out both; }
+::view-transition-new(workspace) { animation: page-arrive 220ms cubic-bezier(.22,1,.36,1) 120ms both; }
 @media (prefers-reduced-motion: reduce) {
   .product-shell *, .product-shell *::before, .product-shell *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   .product-shell button:active { transform: none !important; }
@@ -271,7 +289,7 @@
 .note-card-title svg { flex-shrink: 0; margin-top: 4px; color: #87a3c5; }
 .note-card p { color: #aabbcf; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .note-card[data-memory-status=CANDIDATE] { border-color: rgba(242,187,91,.28); background: linear-gradient(145deg,rgba(63,47,23,.54),rgba(17,25,39,.88)); }
-.note-card-meta { display: flex; flex-wrap: wrap; gap: 7px 12px; color: #7f96b1; font: 10px/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: .09em; }
+.note-card-meta { display: flex; flex-wrap: wrap; gap: 7px 12px; color: #7f96b1; font: 11px/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: .09em; }
 .note-card-meta > span { display: inline-flex; align-items: center; gap: 4px; }
 .note-expiry { display: flex; gap: 7px; align-items: center; color: #abc6e9; font-size: 11px; margin-top: auto; padding-top: 8px; }
 @media (max-width: 600px) {

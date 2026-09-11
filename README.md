@@ -427,6 +427,42 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Desktop UI, pass 1 (nav + transition + smallest text):**
+  User feedback: desktop looked bad, "some buttons are not even responsive,"
+  layout busy, typography too small. Installed two design-audit skills
+  (`taste-skill`, `redesign-skill`, from github.com/Leonxlnx/taste-skill) into
+  `~/.claude/skills/` and used `redesign-skill`'s audit-first workflow.
+  Live-tested the running app (not just read the code) and found the real
+  cause of "not responsive": clicking a Rail nav item is instant and correct
+  (verified via direct DOM checks after every click), but the page-transition
+  crossfade faded the old and new view in and out *simultaneously* for
+  ~180ms — and since Board/Schedule/Vault are structurally unrelated layouts
+  captured as full-bleed snapshots at the same screen position, that window
+  showed two different pages' headings and banners visibly overlapping,
+  reading as broken rather than as motion. Changed the CSS transition from a
+  crossfade to a sequential handoff (old exits over 120ms, new enters right
+  after) — same total duration, no more double-exposure window.
+  Also redesigned the desktop Rail: it was icon-only with no text (36px
+  squares, hover-tooltip only), while the *mobile* bottom nav already labels
+  every destination and says why in its own code comment ("icon-only
+  navigation is consistently the worst-performing pattern for
+  discoverability"). Brought that same reasoning to desktop — widened the
+  rail (`76px` → `clamp(196px, 15vw, 236px)`) and rebuilt it as labelled rows
+  (icon + "Task Board" / "Schedule" / "Notes & Ideas" / "Settings") with a
+  visible "JARVIS" wordmark, matching the width desktop already had to
+  spare. Raised the smallest, hardest-to-read text across the shared design
+  system (9-10px eyebrows/meta labels → 11px) — applies to both platforms,
+  verified mobile is unaffected.
+  Checks: TypeScript typecheck clean; live-verified in the Browser pane at
+  1440x900 (Rail navigation, all three views, settled state confirmed via
+  direct DOM queries after each click) and at 375x812 (mobile unaffected);
+  no console/build errors.
+  **Scoped deliberately** — this is pass 1 of the user's own "one by one":
+  Chat, TaskTable, ScheduleBoard and Notes still use the original visual
+  language (small-caps eyebrows, dense metric rows, icon-only micro-controls)
+  and were not touched this pass, so the app is visually inconsistent
+  between the Rail/shell (upgraded) and the workspace panes (not yet) until
+  a follow-up pass reaches them.
 - **2026-09-12 — Deterministic identity intent, ahead of the LLM:** "Who are
   you / what are you / who made you / introduce yourself" style questions
   (typed or spoken, in any language JARVIS transcribes to English text) are

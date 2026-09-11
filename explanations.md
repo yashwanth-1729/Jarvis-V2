@@ -128,6 +128,90 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Desktop UI redesign, pass 1 (Rail nav + transition glitch)
+- User: desktop UI 'sucks', 'some buttons are not even responsive', busy,
+  typography too small. Asked to install a design-taste skill from
+  github.com/Leonxlnx/taste-skill and use it, taking mobile as inspiration.
+- Installed `taste-skill` and `redesign-skill` SKILL.md files into the
+  personal skills directory (same place `ui-ux-pro-max` already lives).
+  Invoked `redesign-skill` for this task -- it's the audit-first, 'improve
+  what's there, don't rewrite' one, correct fit for an existing app rather
+  than a greenfield landing page.
+- Scanned before touching anything (per the skill's own sequence): the
+  design tokens in globals.css ('Deep Field' palette) and the component
+  system in product.css are actually carefully built, not generic AI slop
+  -- documented contrast ratios, real hover/press/focus states, reduced-
+  motion handling throughout. The complaint's real causes turned out to be
+  two specific, findable things, not a wholesale redo.
+- **Root-caused 'buttons not responsive' by actually running the app**, not
+  just reading code (`preview_start` + Browser pane, 1440x900). First
+  click-test attempt (click+screenshot with no wait) looked like a real
+  bug -- clicks appearing to land one step late with garbled overlapping
+  content. Redid it with explicit waits and direct DOM queries
+  (`document.querySelector('h1').textContent`) after each click: the
+  click handler and React state update are correct and immediate every
+  time. What's real: `transitionUi()` (uiMotion.ts) uses the View
+  Transitions API, and the old/new page pseudo-elements faded
+  SIMULTANEOUSLY for ~180ms by default. Board/Schedule/Vault are
+  structurally unrelated layouts (stats row + task list vs. weekday picker
+  vs. card grid) captured as full-bleed snapshots at the same screen
+  position, so that 180ms window showed two different pages' headings and
+  banners visibly double-exposed -- which reads as broken to a user even
+  though the underlying state was already correct.
+- Fix: sequential handoff instead of a crossfade --
+  `::view-transition-old(workspace)` now finishes (120ms) before
+  `::view-transition-new(workspace)` starts (120ms animation-delay, 220ms
+  duration). Same total duration (~340ms vs previous ~280-460ms depending
+  how you count the overlap), no more simultaneous double-exposure.
+  Verified the CSS rule actually loaded via a direct stylesheet query, not
+  just by editing the file (Next dev/Fast Refresh can lag).
+- **Rail redesign**: was icon-only, 76px wide, hover-tooltip is the only
+  label. `MobileNav.tsx` already labels every destination and says why in
+  its own comment: 'icon-only navigation is consistently the worst-
+  performing pattern for discoverability.' Brought that same reasoning to
+  desktop, which has width to spare: `--rail-w` 76px ->
+  `clamp(196px, 15vw, 236px)`, rebuilt as labelled rows (icon + 'Task
+  Board' / 'Schedule' / 'Notes & Ideas' / 'Settings', a visible 'JARVIS'
+  wordmark at top, status label at bottom instead of an unlabeled dot).
+  New CSS: `.rail-item`/`.rail-label`/`.rail-count` in product.css.
+- Raised the smallest, least-legible text in the SHARED design system (used
+  by both platforms): 9-10px eyebrows/meta labels
+  (`.page-kicker`, `.focus-card-top` label, `.priority-pill`, `.note-type`,
+  `.note-card-meta`, `.connection-indicator`, `.brand-wordmark > span`) ->
+  11px (10px for the wordmark subtitle). Verified live at 375x812 that
+  mobile is unaffected/still correct -- these rules are shared, not
+  desktop-only.
+- Investigated but did NOT find a real bug in: `Button`'s `expandHitArea`
+  (`::before` expanded invisible hit-box, on by default, never opted out
+  anywhere in the codebase per a full grep) -- flagged as a real geometric
+  risk in dense button clusters (the code's own comment warns about it),
+  but no component currently packs `Button`s close enough to actually
+  overlap; Rail's nav buttons turned out to be plain `<button>`s, not the
+  shared `Button` component, so they were never at risk. Left as a
+  documented non-finding rather than 'fixed' -- worth a second look if a
+  future pass adds a dense button toolbar.
+- Checks: TypeScript typecheck clean. Live-verified in the Browser pane:
+  1440x900 (Rail navigation, all three views settle correctly, verified via
+  DOM queries not just screenshots) and 375x812 (mobile, confirmed
+  unaffected). No console or build errors. Not yet built for the Tauri
+  desktop bundle -- this was verified against the Next.js dev server,
+  which is what the shipped desktop app also renders, but the actual
+  Tauri window has not been launched this pass.
+- **Deliberately scoped -- this is pass 1 of the user's own 'one by one'.**
+  Chat.tsx, TaskTable.tsx, ScheduleBoard.tsx, NotesWorkspace.tsx and their
+  product.css rules were audited (read in full) but not changed this pass:
+  they still use the original visual language (small-caps eyebrows, dense
+  metric rows, icon-only micro-controls in places). The app is now
+  visually inconsistent between the upgraded Rail/shell and the
+  not-yet-touched workspace panes, until a follow-up pass reaches them.
+  Reasonable next targets, in rough priority order: (1) TaskTable/
+  ScheduleBoard/Notes typography and density pass using the same taste-
+  skill criteria, (2) entrance/stagger motion on list items per taste-
+  skill's guidance (currently only `card-arrive`/`page-arrive`, no
+  staggering), (3) the `expandHitArea` overlap risk noted above if any new
+  dense button cluster gets added, (4) an actual Tauri desktop build to
+  confirm parity with the dev-server verification done here.
+
 ### 2026-09-12 · Claude Code · Deterministic JARVIS_IDENTITY_INTENT, ahead of the LLM
 - New `app/services/identity.py`: a regex classifier (`detect_special_intent`)
   for 'who/what are you', 'introduce yourself', 'who made/built/created
