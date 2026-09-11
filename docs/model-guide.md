@@ -6,29 +6,48 @@ tier that clears the task**, and raise **effort** only when the problem is
 genuinely hard. You're on limited credits, so default low and step up only when
 a model visibly struggles.
 
-## The models — least to most capable
+## The lineup, least → most capable
 
-| Model | Feel | Cost (in / out per 1M) | Reach for it when… |
+Prices are per 1M tokens (input / output), approximate — check the picker for
+current rates. The ratio is the point: Haiku ≈ 1×, Sonnet ≈ 3×, Opus ≈ 5× input.
+
+| Model | ID | Cost (in / out) | Feel / when to reach for it |
 | --- | --- | --- | --- |
-| **Haiku 4.5** | Fast, cheap, literal. Does what you say, not much beyond. | ~₹ (≈ $1 / $5) | Mechanical work: run tests, read logs, rename, move files, small doc tweaks, apply an obvious edit. |
-| **Sonnet 5** | Strong all-rounder. Best capability-per-rupee. | $3 / $15 | **The default for most JARVIS work** — features, ordinary bug fixes, UI polish, a new endpoint, refactors, wiring config. |
-| **Opus 5** | Deepest reasoning. Slowest, priciest. | $5 / $25 | The hard ~10%: the fragile voice pipeline, concurrency/atomicity, prompt-salience, cross-file architecture, audits — the bugs that cost this project days. |
+| **Haiku 4.5** | `claude-haiku-4-5` | $1 / $5 | Fast, cheap, literal. Mechanical work: run tests, read logs, rename, move files, apply an obvious edit, tiny doc tweak. |
+| **Sonnet 4.6** | `claude-sonnet-4-6` | $3 / $15 | Previous-gen all-rounder. Only if you've pinned it; otherwise Sonnet 5 is strictly better at the same price. |
+| **Sonnet 5** | `claude-sonnet-5` | $3 / $15 | Strong all-rounder, best capability-per-rupee. **The default for most JARVIS work.** |
+| **Opus 4.6 → 4.7 → 4.8** | `claude-opus-4-6/-4-7/-4-8` | $5 / $25 | Older Opus point releases; each is a bit smarter than the last. Use only if Opus 5 isn't offered, or you deliberately pin one for run-to-run stability. |
+| **Opus 5** | `claude-opus-5` | $5 / $25 | Deepest reasoning, slowest, priciest. The hard ~10% of the work. |
 
-*Fable 5.1 is a writing/creative model — not for this code project.*
+*Fable 5 / 5.1 (`claude-fable-5-1`, $10 / $50) is a creative-writing model — not
+for this code project. Mythos 5 is project-restricted; ignore it here.*
 
-**Opus "Fast mode"** (`/fast`): Opus intelligence with faster output — same brain,
-less waiting. Good when you want Opus quality without the pause.
+### About the version numbers (4.6 vs 4.7 vs 4.8 vs 5)
+
+Within one family, a **higher number = smarter at the same price**, so there's no
+trade-off to agonise over: just use the **newest in each family** — **Sonnet 5**
+and **Opus 5**. The older `.x` releases exist mainly for API *pinning* (locking a
+version so behaviour doesn't shift under you) and for **Fast mode** availability
+(below). You don't pick Opus 4.6 over 4.8 to "save" anything — they cost the same;
+4.8 is just better. So in practice this whole project is a **two-model choice:
+Sonnet 5 for most things, Opus 5 for the hard things.**
+
+**Opus Fast mode** (`/fast`, available on Opus 5 / 4.8): full Opus intelligence
+with faster output — same brain, less waiting. Good when you want Opus quality
+without the pause.
 
 ## Effort levels — low → max
 
 Effort is how much the model *thinks* before answering. More effort helps **only
-on hard problems**; on easy ones it just costs more and runs slower.
+on hard problems**; on easy ones it just costs more and runs slower. (There's
+also **adaptive** — the model decides how much to think per turn; a fine default
+when you're unsure.)
 
 - **low** — trivial/mechanical; don't overthink it.
 - **medium** — the normal coding default.
 - **high** — multi-step reasoning, tricky bugs, real design work.
-- **xhigh / max** — the nastiest problems only: subtle concurrency, whole-subsystem
-  redesign, deep audits. Expensive; use when you're stuck or correctness is critical.
+- **xhigh** — nasty problems: subtle concurrency, whole-subsystem redesign.
+- **max** — last resort when correctness is critical and you're stuck. Slow, $$$.
 
 ## For JARVIS specifically (cost-first)
 
@@ -41,17 +60,16 @@ on hard problems**; on easy ones it just costs more and runs slower.
 
 ## Rules of thumb
 
-1. **Default: Sonnet 5, medium.** It handles most of JARVIS and costs a third of Opus.
-2. **Jump to Opus only for the genuinely hard, correctness-critical stuff** — the
+1. **Default: Sonnet 5, medium.** It handles most of JARVIS at a third of Opus's cost.
+2. **Jump to Opus 5 only for the genuinely hard, correctness-critical stuff** — the
    class of bug that already burned days here: message ordering, tombstone sync,
-   salience contagion, non-atomic migrations.
-3. **Don't crank effort by reflex.** high/max is for hard *reasoning*, not for
+   salience contagion, non-atomic migrations, memory scoring.
+3. **Newest in the family, always.** Same price, more capability — never pick an
+   older `.x` to economise; there's nothing to economise.
+4. **Don't crank effort by reflex.** high/max is for hard *reasoning*, not for
    making a simple edit feel "more thorough." It won't; it'll just cost more.
-4. **Cheapest tier that clears the bar.** Step up a tier or an effort level only
+5. **Cheapest tier that clears the bar.** Step up a tier or an effort level only
    when the current one visibly can't do it — then step back down.
-5. **ultracode is a separate switch** (multi-agent fan-out, cost "not a
+6. **ultracode is a separate switch** (multi-agent fan-out, cost "not a
    constraint"). Reserve it for a real deep sweep; it's the wrong default for
-   incremental work and it has hit usage limits on this account.
-
-*Prices are per 1M tokens and approximate — check current rates in the model
-picker. The point is the ratio: Haiku ≈ 1×, Sonnet ≈ 3×, Opus ≈ 5× on input.*
+   incremental work and has hit usage limits on this account.
