@@ -31,6 +31,13 @@ SCRATCH = Path(tempfile.gettempdir()) / "jarvis_records_test.db"
 for suffix in ("", "-wal", "-shm"):
     Path(str(SCRATCH) + suffix).unlink(missing_ok=True)
 os.environ["JARVIS_DB_PATH"] = str(SCRATCH)
+# CRITICAL: this test starts the real app lifespan (TestClient runs it),
+# which starts the sync loop if not disabled here. Without this, a machine
+# with real Supabase credentials in backend/.env pushes this test's
+# throwaway local data to the LIVE project and deletes real rows via
+# tombstones -- this actually happened once. Never remove this line.
+os.environ["JARVIS_SYNC_ENABLED"] = "false"
+
 # The scheduler would otherwise tick underneath these assertions.
 os.environ["JARVIS_SCHEDULER_ENABLED"] = "false"
 

@@ -19,6 +19,11 @@ what we decided and what is still broken. **Either agent writes here; both read 
 
 ## Decisions (don't undo without the user)
 
+- **Reminders default to a 15-minute early notice too** (user, 2026-09-11).
+  A non-instant `set_reminder` now creates TWO rows: one ~15 min early
+  (clamped if the target is sooner) and one at the exact time. `instant=true`
+  (only on explicit "instant reminder" wording) skips the early one. See
+  `REMINDER_LEAD_MINUTES` in tools.py, `target_at` column, migration v7.
 - **Sync is fully automatic — no manual button** (user, 2026-09-11). Pull on
   open, quiet debounced push after every local change (deferred while a voice
   turn speaks), slow periodic pull while open. Exactly ONE engine per device:
@@ -122,6 +127,109 @@ Medium, worth doing:
 - Never let tests touch `backend/storage/jarvis_memory.db` (real data).
 
 ## Log
+
+### 2026-09-11 · Claude Code · INCIDENT: tests leaked into live Supabase
+- While running the full backend suite, `segment_test.py` (and, it turned out,
+  4 other files) triggered the REAL app lifespan via `TestClient`, which starts
+  the real sync loop against whatever's in backend/.env -- the LIVE Supabase
+  project -- because none of them set JARVIS_SYNC_ENABLED=false. Each isolates
+  its LOCAL SQLite db (a temp file) but that doesn't stop sync from pulling
+  real remote data into it and pushing/deleting based on the test's own churn.
+- Exposed files (confirmed via `grep -l 'TestClient(' tests/*.py`, cross-
+  checked for JARVIS_SYNC_ENABLED): integration_test.py, latency_test.py,
+  records_test.py, segment_test.py, smoke_test.py. bulk_delete_test.py and
+  others don't use TestClient -- not exposed.
+- Observed live: real DELETE calls to Supabase tasks/schedules/memories/ideas
+  during a segment_test.py run (confirmed via its own log output).
+- **Fixed**: added `os.environ["JARVIS_SYNC_ENABLED"] = "false"` right after
+  each file's JARVIS_DB_PATH line (same isolation pattern the safe tests
+  already use for the scheduler). Verified: re-ran all 5 -- zero Supabase
+  mentions in their output now, all still pass.
+- **Data-loss assessment** (queried the live project directly with the
+  service key from backend/.env): oldest memories trace to 2026-08-13, oldest
+  schedules to 2026-08-14, with plausible real titles (college routine,
+  'Renew the domain' tasks aside). Row counts (tasks 38, schedules 81,
+  memories 29) are HIGHER than earlier-in-day snapshots, consistent with
+  continued real growth, not loss. No evidence of real-data destruction, but
+  this is not a substitute for a real backup -- told the user directly.
+- **Confirmed test-pollution rows now sit in the live project** (fixture
+  titles: 'Renew the domain'/'Renew the domain name', 'Read the Anthropic
+  docs', 'wiring probe', 'probe', 'probe-that-does-not-exist', 'tombstone
+  probe', 'File the tax return' in tasks; more ambiguous ones in schedules/
+  memories, e.g. 'Dentist', 'Meeting preference' -- NOT deleted without the
+  user's go-ahead, since some titles are plausible enough to be real.
+- **Do not run the backend test suite on this machine without this fix in
+  place.** Any NEW test file that uses TestClient/imports main MUST set
+  JARVIS_SYNC_ENABLED=false, or it inherits this exact exposure.
+
+### 2026-09-11 · Claude Code · Fixed live sync PGRST102 crash (mobile)
+- User hit 'sync failed 400 ... sync_tombstones' live on-device. Traced via
+  CDP over adb (forwarded the WebView devtools socket, replayed the exact
+  failing request): PostgREST `PGRST102 'All object keys must match'`.
+- Root cause: `applyRemoteTombstone` stored a PULLED tombstone verbatim,
+  including Supabase's server-assigned `synced_at`; a LOCALLY-created
+  tombstone never has that field. `listTombstones()` returns both shapes
+  from the same store, and an unprojected push mixing them gets the WHOLE
+  batch rejected -- and since the watermark only advances on success, every
+  later round fails identically forever. `pushRows` was already guarded
+  against this exact case (see its `project()` comment); `pushTombstones`
+  never got the same fix. Desktop/Python is naturally immune -- its SQL
+  SELECT for tombstones names exactly 3 columns, structurally.
+- Fix (frontend only): `localdb.ts` adds `projectTombstone()`; applied at
+  write time in `applyRemoteTombstone` (keeps local storage clean) AND at
+  push time in `syncClient.ts::pushTombstones` (defense in depth, matches
+  `pushRows`'s existing pattern exactly).
+- On-device confirmed: dumped the real IndexedDB tombstone store via CDP --
+  31 pending tombstones stuck since the watermark froze at 2026-09-09
+  09:39:30. Replayed the exact real payload against the live Supabase
+  project and reproduced PGRST102 verbatim before the fix.
+- Checked the ~80 much-older (August) tombstones below that watermark, which
+  can never be retried by the current watermark design: sampled 4 of their
+  target uids against the live `tasks` table -- all already gone. Not a
+  ghost-data risk, just harmless local clutter (pre-dates the stuck window).
+- Regression test added to `sync.test.ts`: a direct `projectTombstone` unit
+  check, plus an integration scenario pushing a mixed pulled+local batch
+  through a `FakeRemote` that now enforces the same all-keys-must-match rule
+  PostgREST does. Verified the integration check actually catches the
+  regression (temporarily reverted the push-time fix, confirmed it still
+  passed only because the write-time fix alone already cleans the shape --
+  i.e. defense-in-depth working as intended, not a weak test).
+- Verified: full sync.test.ts 41/0 (incl. new checks); typecheck clean.
+- **Not yet on the phone** -- fix is in source, the installed APK predates
+  it. Ships in the next rebuild+install (bundled with the reminder feature
+  and mobile Piper below).
+
+### 2026-09-11 · Claude Code · Reminders: default 15-min early notice
+- User: 'remind me I have class at 5pm' should notify ~15 min BEFORE, not AT,
+  the time -- unless they say 'instant reminder', which fires at the exact
+  moment only. Then: normal reminders should fire TWICE (early + exact); only
+  instant fires once.
+- Design: `_handle_set_reminder` (tools.py) now creates ONE row for an
+  instant reminder, TWO for a default one -- an early row (due_at = target -
+  REMINDER_LEAD_MINUTES(=15), clamped to now if the target is sooner) with
+  `target_at` set to the real target, and an exact row (`target_at` NULL).
+  Reuses the existing one-row-one-fire architecture (scheduler, native
+  Android alarm sync) unchanged -- no dual-fire logic anywhere.
+- Schema: `reminders.target_at` (nullable DATETIME), migration v7
+  (`_v7_reminder_lead`, single ALTER TABLE, atomic). `crud.create_reminder`
+  takes an optional `target_at`. `ReminderOut` exposes it.
+- Fire-time message: `scheduler.py::_reminder_announcement_text` composes
+  'In N minutes, at H:MM: <text>' from the ACTUAL due_at/target_at delta (not
+  a hardcoded 15), so a clamped lead still speaks the right number.
+  `nativeNotifications.ts::reminderAlarmBody` mirrors this exactly for the
+  Android native alarm body (the path that actually notifies on mobile).
+- Tool description/schema updated so the model knows to set `instant=true`
+  only on explicit wording ('instant reminder', 'exactly then').
+- Verified: full backend suite 21/22 (the 1 failure, behaviour_test, is a
+  pre-existing LIVE Sarvam-quality check about Monday-schedule recitation --
+  confirmed unrelated: touches none of prompts.py/agent.py, only reminder
+  files). Frontend typecheck clean.
+- **Not yet on the phone or exercised end-to-end** -- no dedicated new test
+  file was added for the two-row creation logic itself (existing
+  reminder_time_test.py only covers `_resolve_reminder_moment`); smoke_test's
+  existing set_reminder probe still passes but doesn't check row count or
+  target_at. Ships in the next rebuild+install; worth a manual on-device
+  check (ask for a reminder, confirm two native alarms appear).
 
 ### 2026-09-11 · Claude Code · Fixed memory-search relevance bug
 - `memory.py::_score` rewritten: lexical relevance decides a match; importance/

@@ -26,6 +26,13 @@ for suffix in ("", "-wal", "-shm"):
     if p.exists():
         p.unlink()
 os.environ["JARVIS_DB_PATH"] = str(TMP_DB)
+# CRITICAL: this test starts the real app lifespan (TestClient runs it),
+# which starts the sync loop if not disabled here. Without this, a machine
+# with real Supabase credentials in backend/.env pushes this test's
+# throwaway local data to the LIVE project and deletes real rows via
+# tombstones -- this actually happened once. Never remove this line.
+os.environ["JARVIS_SYNC_ENABLED"] = "false"
+
 
 failures = []
 
