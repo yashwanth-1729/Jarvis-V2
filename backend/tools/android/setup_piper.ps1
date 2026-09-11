@@ -92,8 +92,12 @@ if ((Test-Path $onnx) -and -not $Force) {
   $extractRoot = Join-Path $tmpDir "extract"
   Remove-Item -Recurse -Force $extractRoot -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
-  # tar on Windows 10+ (bsdtar) reads .tar.bz2 directly.
-  & tar -xf $tar -C $extractRoot
+  # Use Windows' own bsdtar explicitly. A bare `tar` can resolve to Git Bash's
+  # MSYS tar, which reads the `C:\...` path as a remote host ("Cannot connect
+  # to C:") and fails. bsdtar reads .tar.bz2 directly.
+  $winTar = Join-Path $env:SystemRoot "System32\tar.exe"
+  if (-not (Test-Path $winTar)) { $winTar = "tar" }
+  & $winTar -xf $tar -C $extractRoot
   if ($LASTEXITCODE -ne 0) { throw "extraction failed ($LASTEXITCODE)" }
 
   # The archive extracts into a top folder named after the model; flatten it
