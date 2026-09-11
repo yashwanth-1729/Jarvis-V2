@@ -72,14 +72,13 @@ them intact except the last part of #9.
 
 Confirmed high:
 
-1. **Memory search returns unrelated memories.** At `memory.py:283` the
-   SequenceMatcher term gives character-level credit ("nothing" vs "meeting"),
-   which clears the 0.15 guard. Importance and confidence then add about 0.81,
-   so the 0.62 floor never filters. Result: `search_memory` never says "nothing
-   found", and `context.py` injects up to 8 unrelated memories every turn as
-   "RELEVANT MEMORY". Fix: require real token/phrase overlap before the fuzzy
-   term counts, and compare the floor against the pre-boost score. This fails
-   the smoke_test check "no results handled cleanly".
+1. **FIXED (2026-09-11): memory search returned unrelated memories.**
+   `memory.py::_score` now separates lexical *relevance* (token/phrase overlap)
+   from the ranking boosts (importance/confidence/recency), and gates the
+   SequenceMatcher fuzz behind a real shared word / phrase substring / empty
+   token set (the last keeps Telugu matching, since the tokenizer drops its
+   short clusters). Zero relevance + non-empty query -> not a match. smoke_test
+   'no results handled cleanly' passes; full backend suite 22/22 green.
 2. **Migration v1 is not atomic** (`migrations.py:53`). The connection is
    autocommit and `apply()` never BEGINs, so a crash mid-rebuild strands every
    schedule in `schedules_old`. Fix: wrap each migration plus its
@@ -123,6 +122,18 @@ Medium, worth doing:
 - Never let tests touch `backend/storage/jarvis_memory.db` (real data).
 
 ## Log
+
+### 2026-09-11 · Claude Code · Fixed memory-search relevance bug
+- `memory.py::_score` rewritten: lexical relevance decides a match; importance/
+  confidence/recency only rank rows already relevant; fuzzy char-match is a
+  tiebreak gated behind a shared word, phrase substring, or empty token set.
+- Fixes: search_memory('zzzz-nothing') now returns nothing; unrelated memories
+  no longer injected into every turn's state block.
+- Telugu preserved (empty-token queries still fuzzy/substring match). The
+  tokenizer shattering Telugu into single chars is still the separate medium
+  issue (memory.py:57) — recall stays imprecise there, not worse.
+- Verified: memory_system_test 15/15, smoke_test ALL PASSED, full backend suite
+  22/22.
 
 ### 2026-09-11 · Claude Code · Android Piper setup script
 - `backend/tools/android/setup_piper.ps1`: one command to fetch the two large

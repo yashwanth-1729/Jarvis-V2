@@ -274,24 +274,48 @@ def _score(row: dict[str, Any], query: str, query_tokens: set[str], current: dat
     title_overlap = len(query_tokens & title_tokens) / max(1, len(query_tokens))
     body_overlap = len(query_tokens & body_tokens) / max(1, len(query_tokens))
     tag_overlap = len(query_tokens & tag_tokens) / max(1, len(query_tokens))
-    score = title_overlap * 4.0 + body_overlap * 2.2 + tag_overlap * 2.7
+
+    # Lexical relevance: whether the query actually shares words or a phrase with
+    # this row. Only this decides whether the row is a match at all -- the
+    # ranking boosts below (importance, confidence, recency) come *after*, and
+    # must never turn an unrelated fact into a hit on their own.
+    relevance = title_overlap * 4.0 + body_overlap * 2.2 + tag_overlap * 2.7
     if phrase and phrase in title_fold:
-        score += 3.0
+        relevance += 3.0
     elif phrase and phrase in body_fold:
-        score += 1.8
-    if phrase and title_fold:
-        score += SequenceMatcher(None, phrase[:180], title_fold[:180]).ratio() * 0.8
+        relevance += 1.8
+
+    # Character-level fuzz is a tiebreak, not evidence on its own. It applies
+    # only once a real word is already shared, or the phrase is a substring, or
+    # the query produced no usable tokens at all -- the last case is how
+    # non-Latin scripts (Telugu) match, since the tokenizer drops their short
+    # clusters. Without this gate the fuzz alone let unrelated rows score
+    # ("nothing" shares letters with "meeting"), which is the bug being fixed:
+    # search_memory returned matches for gibberish and the state block filled
+    # with irrelevant memories every turn.
+    if phrase and title_fold and (
+        query_tokens & (title_tokens | body_tokens | tag_tokens)
+        or phrase in title_fold
+        or not query_tokens
+    ):
+        relevance += SequenceMatcher(None, phrase[:180], title_fold[:180]).ratio() * 0.8
+
     hinted = _TYPE_HINTS.get(row["memory_type"], set())
     if query_tokens & hinted:
-        score += 0.9
+        relevance += 0.9
+
     standing_rule = row["memory_type"] == "PROCEDURAL" and (row["pinned"] or row["importance"] >= 0.7)
-    if standing_rule:
-        score = max(score, 0.72)
-    # Confidence and importance rank relevant results; they must never make an
-    # unrelated fact relevant by themselves. An empty query is the one useful
-    # exception (dashboard/debug callers asking for a compact general set).
-    if score < 0.15 and (query_tokens or phrase) and not standing_rule:
+
+    # No shared words and no phrase or fuzzy signal: not a match. Standing
+    # procedures are the deliberate exception -- they belong in context every
+    # turn -- and an empty query (dashboard/debug asking for a general set)
+    # skips the gate so it still returns a ranked slice of the store.
+    if relevance <= 0.0 and (query_tokens or phrase) and not standing_rule:
         return 0.0
+    if standing_rule:
+        relevance = max(relevance, 0.72)
+
+    score = relevance
     if row["memory_status"] == "CANDIDATE":
         score *= 0.75
     score += float(row["importance"]) * 0.55 + float(row["confidence"]) * 0.45
