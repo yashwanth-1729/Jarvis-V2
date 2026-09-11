@@ -4,6 +4,7 @@ import {
   CalendarRange,
   LibraryBig,
   ListChecks,
+  MessagesSquare,
   Settings2,
   type LucideIcon,
 } from "lucide-react";
@@ -39,7 +40,12 @@ function Mark({ className }: { className?: string }) {
 
 interface RailProps {
   view: ViewKey;
-  onViewChange: (view: ViewKey) => void;
+  /** Whether Chat currently owns the one content pane, instead of `view`. */
+  chatOpen: boolean;
+  /** Switches the content pane to a workspace view, closing Chat. */
+  onSelectView: (view: ViewKey) => void;
+  /** Switches the content pane to Chat. */
+  onOpenChat: () => void;
   counts: Partial<Record<ViewKey, number>>;
   /** Drives the status lamp: live, syncing, or unreachable. */
   status: "online" | "syncing" | "offline";
@@ -58,7 +64,51 @@ const STATUS_DOT: Record<RailProps["status"], string> = {
   offline: "bg-critical",
 };
 
-export function Rail({ view, onViewChange, counts, status, onOpenSettings }: RailProps) {
+/** One labelled row: an icon, a name, and an optional trailing count. */
+function RailButton({
+  active,
+  label,
+  icon: Icon,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon: LucideIcon;
+  count?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className="rail-item group cursor-pointer"
+    >
+      <Icon
+        aria-hidden
+        className={cn("h-[18px] w-[18px] shrink-0", active ? "text-accent" : "text-ink-faint group-hover:text-ink-muted")}
+        strokeWidth={active ? 2 : 1.75}
+      />
+      <span className="rail-label">{label}</span>
+      {!!count && count > 0 && (
+        <span aria-hidden className={cn("rail-count", active ? "text-accent" : "text-ink-faint")}>
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+export function Rail({
+  view,
+  chatOpen,
+  onSelectView,
+  onOpenChat,
+  counts,
+  status,
+  onOpenSettings,
+}: RailProps) {
   return (
     <nav
       aria-label="Primary"
@@ -74,37 +124,28 @@ export function Rail({ view, onViewChange, counts, status, onOpenSettings }: Rai
       </div>
 
       <div className="mt-4 flex flex-1 flex-col gap-0.5 px-2.5">
-        {VIEWS.map(({ key, label, icon: Icon }) => {
-          const active = key === view;
-          const count = counts[key] ?? 0;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onViewChange(key)}
-              aria-current={active ? "page" : undefined}
-              className={cn("rail-item group cursor-pointer")}
-            >
-              <Icon
-                aria-hidden
-                className={cn("h-[18px] w-[18px] shrink-0", active ? "text-accent" : "text-ink-faint group-hover:text-ink-muted")}
-                strokeWidth={active ? 2 : 1.75}
-              />
-              <span className="rail-label">{label}</span>
-              {count > 0 && (
-                <span
-                  aria-hidden
-                  className={cn(
-                    "rail-count",
-                    active ? "text-accent" : "text-ink-faint",
-                  )}
-                >
-                  {count > 99 ? "99+" : count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {/* Chat is a destination, not a permanent column — see page.tsx. It
+            leads the list because it is the primary way in, the same reason
+            it leads the console on a phone. */}
+        <RailButton
+          active={chatOpen}
+          label="Chat"
+          icon={MessagesSquare}
+          onClick={onOpenChat}
+        />
+
+        <div className="my-2 h-px shrink-0 bg-line" aria-hidden />
+
+        {VIEWS.map(({ key, label, icon }) => (
+          <RailButton
+            key={key}
+            active={!chatOpen && key === view}
+            label={label}
+            icon={icon}
+            count={counts[key]}
+            onClick={() => onSelectView(key)}
+          />
+        ))}
       </div>
 
       {/* No voice control here. The console carries the single primary CTA;

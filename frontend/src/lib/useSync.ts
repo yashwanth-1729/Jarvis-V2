@@ -5,6 +5,7 @@ import * as React from "react";
 import {
   type AutoSyncController,
   type SyncPhase,
+  bootstrapSupabaseConfig,
   describeAge,
   getSupabaseConfig,
   lastSyncAt,
@@ -52,33 +53,39 @@ export function useAutoSync({
   pulledRef.current = onPulled;
 
   React.useEffect(() => {
-    const isConfigured = getSupabaseConfig() !== null;
-    setConfigured(isConfigured);
-
     let alive = true;
+    let controller: AutoSyncController | null = null;
+
     void lastSyncAt().then((at) => {
       if (alive) setLastAt(at);
     });
 
-    if (!enabled || !isConfigured) {
-      return () => {
-        alive = false;
-      };
-    }
+    void (async () => {
+      // A first-run desktop device has nothing in localStorage yet but the
+      // local backend may already know its Supabase project — fill from
+      // there before deciding sync has nothing to work with. A no-op
+      // everywhere else (Android's backend has nothing to hand over; a
+      // device that already has a config keeps exactly what it has).
+      const config = enabled ? await bootstrapSupabaseConfig() : getSupabaseConfig();
+      if (!alive) return;
+      setConfigured(config !== null);
 
-    const controller: AutoSyncController = startAutoSync({
-      onChange: (status) => {
-        if (!alive) return;
-        setPhase(status.phase);
-        setMessage(status.message);
-        if (status.at) setLastAt(status.at);
-      },
-      onPulled: () => pulledRef.current?.(),
-    });
+      if (!enabled || !config) return;
+
+      controller = startAutoSync({
+        onChange: (status) => {
+          if (!alive) return;
+          setPhase(status.phase);
+          setMessage(status.message);
+          if (status.at) setLastAt(status.at);
+        },
+        onPulled: () => pulledRef.current?.(),
+      });
+    })();
 
     return () => {
       alive = false;
-      controller.stop();
+      controller?.stop();
     };
   }, [enabled]);
 

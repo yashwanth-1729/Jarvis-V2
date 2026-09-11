@@ -128,6 +128,84 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Desktop switched to mobile's sync architecture; backend engine removed
+- User: desktop sync 'seems past one', asked to remove it fully and adopt
+  mobile's approach instead. Before touching anything, surfaced a real risk
+  to the user rather than guessing: `jarvis_client_owned_data` was also
+  standing in for 'is this Android' in `system_tools_enabled` and
+  `scheduler_enabled` -- flipping it for desktop would have silently
+  disabled desktop's shell/file/web tools and its reminder scheduler. User
+  chose the full switch anyway, decoupling done properly first.
+- Added `jarvis_android` (config.py), set only by Android's own
+  `jarvis_server.py` entry point. Rekeyed `system_tools_enabled`,
+  `scheduler_enabled`, and `memory.py`'s `refresh_markdown_vault` early-
+  return onto it instead of `jarvis_client_owned_data`. Verified via two
+  fixed tests (`scheduler_test.py`, `system_tools_test.py` -- both
+  previously simulated 'mobile' via the OLD flag alone and started failing
+  the instant it stopped disabling things on desktop; updated both to
+  assert the new, correct behavior: client-owned-data desktop keeps tools
+  and scheduler, `jarvis_android=true` still turns them off).
+- `main.py`'s lifespan already had the exact right conditional
+  (`if client_owned_data: log and skip; else: start the engine`) -- setting
+  `JARVIS_CLIENT_OWNED_DATA=true` in `backend/.env` was the ENTIRE
+  activation step for the architecture switch itself. Removed the dead
+  branch that used to start `sync.run_forever()`.
+- `app/services/sync.py`: was a 482-line, carefully-built two-way engine
+  (documented conflict resolution, tombstones, watermark semantics --
+  genuinely good code, not what was actually broken). Trimmed to just
+  `SYNC_COLUMNS`, the one piece `app/api/localstore.py`'s seed/drain bridge
+  still needs. Deleted `tests/sync_test.py` (482 lines, tested the removed
+  engine specifically) and confirmed no other file referenced the removed
+  symbols (`grep` for `SupabaseAdapter`/`StorageAdapter`/`run_forever`/etc
+  across app/ and tests/, clean).
+- New `GET /api/local/sync-bootstrap` (localstore.py, gated by the existing
+  `_require_client_owned()`): hands the frontend the Supabase URL/service
+  key already sitting in `backend/.env` on this same machine, once, only
+  when the client's own localStorage is still empty (never overwrites a
+  value the user changed later). Android's bundled backend has these blank
+  by design, so it returns nothing there and mobile's existing manual
+  Settings entry is untouched -- confirmed this is the correct behavior,
+  not a new one, by checking `jarvis_server.py` never sets them.
+- Frontend: `syncClient.ts` gained `bootstrapSupabaseConfig()` (fetch-once,
+  seed localStorage, fall through silently if the backend has nothing or
+  isn't up yet); `useSync.ts`'s init effect now awaits it before deciding
+  whether to start `startAutoSync` -- restructured from a sync effect to an
+  async IIFE inside the effect since a React effect callback itself cannot
+  be async, with the `alive` guard preserved.
+- **Root-caused a false negative during verification**: manually starting a
+  test backend and hitting `/api/health` initially showed
+  `client_owned_data: false` and the new endpoint 404'd, even after the
+  `.env`/code edits were saved. Diagnosed rather than assumed correct: found
+  port 8000 was held by an ORPHANED Python subprocess (PID from `C:\Program
+  Files\Python313\python.exe`) left over from launching the Tauri desktop
+  app earlier that session and never cleaned up when its window closed --
+  confirms the desktop app spawns its own backend as a child process from
+  the SAME source tree (not a frozen/bundled copy, unlike Android's
+  Chaquopy build) and does not reliably kill it on window close. Killed it,
+  restarted a clean instance, then both checks passed.
+- **Verified live, full round trip**: with a clean backend + a fresh dev-
+  server frontend tab (empty IndexedDB, no localStorage), watched
+  `localStorage` get auto-seeded with the real Supabase URL/key, the sync
+  banner go idle -> 'Syncing...' -> gone with a 'Connected' status dot, and
+  the Schedule view populate with the SAME real data
+  (Monday, 16 plans, 3x 'probe' at 9:00 AM, 'Jarvis V4 update session',
+  'Study block', 45 overlaps) the user's own desktop screenshot showed
+  earlier this session -- a genuine pull from the real Supabase project via
+  the client-side engine, not a mock.
+- Checks: backend suite 24/24 (after fixing the two tests above). Frontend
+  typecheck clean, all 5 frontend test files passing. Rebuilt the desktop
+  Tauri app with this AND the two-pane shell change together (the shell
+  change's own build had gone stale once these edits landed on top of it)
+  and installed it.
+- Left over from the OLD engine, deliberately not touched this pass:
+  `jarvis_sync_enabled`/`jarvis_sync_interval`/`sync_configured` in
+  config.py are now fully unused dead settings (nothing reads them any
+  more), and several test files still defensively set
+  `JARVIS_SYNC_ENABLED=false` (now a harmless no-op). Left alone rather than
+  touching a dozen+ files for a purely cosmetic cleanup with no behavior
+  change -- a reasonable target for a coordinated cleanup pass later, not
+  urgent.
+
 ### 2026-09-12 · Claude Code · Desktop UI redesign, pass 1 (Rail nav + transition glitch)
 - User: desktop UI 'sucks', 'some buttons are not even responsive', busy,
   typography too small. Asked to install a design-taste skill from

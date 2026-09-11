@@ -381,13 +381,20 @@ async def main() -> None:
         names = {t["function"]["name"] for t in tools.openai_tools()}
         check("offered on desktop", "run_command" in names)
 
-        cfg.settings.jarvis_client_owned_data = True   # the mobile build
+        # Desktop is client-owned-data too now (2026-09-12); system_tools_enabled
+        # keys off jarvis_android, not this flag, specifically so this stays true.
+        cfg.settings.jarvis_client_owned_data = True
+        desktop_client_owned = {t["function"]["name"] for t in tools.openai_tools()}
+        check("still offered on a client-owned-data desktop", "run_command" in desktop_client_owned)
+        cfg.settings.jarvis_client_owned_data = False
+
+        cfg.settings.jarvis_android = True   # the actual Android build
         mobile = {t["function"]["name"] for t in tools.openai_tools()}
-        check("hidden on mobile", "run_command" not in mobile)
+        check("hidden on Android", "run_command" not in mobile)
         outcome = await tools.execute_tool("run_command", {"command": "echo hi"})
         check("  ...and refused even if called directly",
               outcome.is_error and "not available" in outcome.content, outcome.content[:90])
-        cfg.settings.jarvis_client_owned_data = False
+        cfg.settings.jarvis_android = False
 
         cfg.settings.jarvis_system_tools = False       # operator switched it off
         check("hidden when the operator disables it",

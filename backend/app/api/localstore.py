@@ -1,9 +1,10 @@
 """Bridge between a client-owned data store and the agent's database.
 
-On the desktop, SQLite *is* the user's data. On the phone it is not: IndexedDB
-in the WebView holds the authoritative copy and syncs it to Supabase, while the
-backend is the AI runtime. That leaves a gap, because the agent's tools read and
-write SQLite directly and have no idea the real data lives somewhere else.
+Every platform runs client-owned-data now (2026-09-12): IndexedDB in the
+WebView holds the authoritative copy and syncs it to Supabase, while this
+backend is only the AI runtime. That leaves a gap, because the agent's tools
+read and write SQLite directly and have no idea the real data lives
+somewhere else.
 
 Two endpoints close it, and the shape follows from the agent needing to *read*
 as well as write:
@@ -202,3 +203,31 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
 
     logger.info("Provider credentials %s", "set" if key else "cleared")
     return {"configured": bool(key)}
+
+
+@router.get("/sync-bootstrap", summary="Hand a first-run client its Supabase credentials")
+async def sync_bootstrap() -> dict[str, str]:
+    """Save a desktop user from retyping a key that is already on their disk.
+
+    Desktop's ``backend/.env`` has held the real Supabase URL and service key
+    since before sync moved client-side -- they were already cleartext on
+    this exact machine, just read by this process instead of the browser.
+    Handing them to the frontend once, over localhost, to seed its own
+    localStorage is not a new exposure; it removes a manual copy-paste step
+    that would otherwise reproduce a value already sitting on disk here.
+
+    Android's bundled backend never has these set (its ``.env`` ships empty,
+    deliberately -- the service key must never enter the APK), so this always
+    returns blanks there and the client falls back to its existing manual
+    entry in Settings, unchanged.
+
+    The client calls this at most once (only when its own localStorage is
+    still empty) -- see `frontend/src/lib/syncClient.ts` -- so a user who
+    later clears or edits their stored credentials is never overwritten by
+    this endpoint on a subsequent launch.
+    """
+    _require_client_owned()
+    return {
+        "supabase_url": settings.supabase_url.strip(),
+        "supabase_key": settings.supabase_service_key.strip(),
+    }

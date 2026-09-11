@@ -533,22 +533,36 @@ export default function CommandCenterPage() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
-        {/* Shell: rail · console · work surface.
-            Below `lg` the console and work surface stack, rail stays fixed. */}
+        {/* Shell: rail · one content pane.
+            Below `lg` the rail is replaced by bottom navigation; at every
+            width there is exactly one content pane, switched by nav choice —
+            Chat, or whichever workspace view is selected. Desktop used to
+            show the console and the work surface as two permanent side-by-
+            side columns alongside the rail. Three simultaneous regions read
+            as cluttered rather than considered, and it fought the console
+            for width it did not have to give up: a full-width Chat reads
+            like a real destination instead of a cramped sidebar, and the
+            same is true in reverse for the board. This is the exact
+            one-pane-at-a-time model the phone already used (see `chatOpen`
+            below) — desktop now gets it too instead of being the one layout
+            that never adopted it. */}
         <main
           className={
-            // One pane at a time on a phone, everything at once on a desktop.
-            // Below `lg` the rail is replaced by bottom navigation, so the
-            // content gets the full width instead of losing a strip of it to
-            // chrome that a thumb cannot comfortably reach anyway.
             "relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden " +
-            "lg:grid-cols-[var(--rail-w)_var(--console-w)_1fr] lg:grid-rows-1"
+            "lg:grid-cols-[var(--rail-w)_1fr] lg:grid-rows-1"
           }
         >
           <div className="hidden lg:block">
             <Rail
               view={view}
-              onViewChange={(next) => transitionUi(() => setView(next))}
+              chatOpen={chatOpen}
+              onSelectView={(next) =>
+                transitionUi(() => {
+                  setChatOpen(false);
+                  setView(next);
+                })
+              }
+              onOpenChat={() => transitionUi(() => setChatOpen(true))}
               counts={railCounts}
               status={status}
               onOpenSettings={() => setSettingsOpen(true)}
@@ -557,15 +571,10 @@ export default function CommandCenterPage() {
 
           {/* Console. Voice is the primary interface, so its CTA leads the column
               and typing sits below as the fallback. One emphasised control here;
-              everything else on the screen is subordinate to it.
-
-              On a phone this is a destination rather than a permanent column:
-              it used to occupy 44% of the height at all times, which left the
-              board — the thing most glances are for — squeezed into the
-              remainder. */}
+              everything else on the screen is subordinate to it. */}
           <div
             className={
-              "min-h-0 flex-col border-b border-line lg:flex lg:border-b-0 " +
+              "min-h-0 flex-col border-b border-line lg:border-b-0 " +
               (chatOpen ? "flex" : "hidden")
             }
           >
@@ -581,7 +590,7 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          <div className={"min-h-0 overflow-hidden lg:block " + (chatOpen ? "hidden" : "block")}>
+          <div className={"min-h-0 overflow-hidden " + (chatOpen ? "hidden" : "block")}>
             <Dashboard
               view={view}
               state={state}

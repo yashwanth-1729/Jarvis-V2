@@ -106,6 +106,43 @@ export function setSupabaseConfig(config: SupabaseConfig | null): void {
 }
 
 /**
+ * Fill an empty Supabase config from the local backend's own `.env`, once.
+ *
+ * Desktop's `backend/.env` has held the real Supabase URL and service key
+ * since before sync moved client-side — this is not a new value reaching the
+ * browser, just this device's own already-on-disk value saving the user a
+ * copy-paste. Android's bundled backend ships those settings blank on
+ * purpose (the service key must never enter the APK), so this call there
+ * simply finds nothing and does nothing — Settings' manual entry is
+ * untouched.
+ *
+ * Only runs when localStorage is still empty, so a value the user has since
+ * cleared or deliberately changed (e.g. pointing at a different project) is
+ * never overwritten on a later launch. `API_BASE` is imported lazily to
+ * avoid a module cycle with `api.ts`.
+ */
+export async function bootstrapSupabaseConfig(): Promise<SupabaseConfig | null> {
+  const existing = getSupabaseConfig();
+  if (existing) return existing;
+  try {
+    const { API_BASE } = await import("@/lib/api");
+    const response = await timedFetch(`${API_BASE}/api/local/sync-bootstrap`, {
+      method: "GET",
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { supabase_url?: string; supabase_key?: string };
+    const url = (body.supabase_url ?? "").trim();
+    const key = (body.supabase_key ?? "").trim();
+    if (!url || !key) return null;
+    const config: SupabaseConfig = { url: url.replace(/\/$/, ""), key };
+    setSupabaseConfig(config);
+    return config;
+  } catch {
+    return null; // No backend reachable yet, or it has nothing configured either.
+  }
+}
+
+/**
  * Local wall-clock time as `YYYY-MM-DDTHH:MM:SS`.
  *
  * Matches `backend/app/core/timeutil.py` exactly. Not `toISOString()`, which

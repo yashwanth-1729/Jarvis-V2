@@ -32,7 +32,7 @@ from app.core.config import settings
 from app.db import crud
 from app.db.database import db
 from app.providers import close_providers
-from app.services import scheduler, sync
+from app.services import scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,22 +53,21 @@ async def lifespan(_: FastAPI):
     if swept:
         logger.info("Cleared %d completed task(s) off the board", swept)
 
-    # Cross-device sync. SQLite above stays the source of truth; this only
-    # mirrors it, so a failure here must never stop JARVIS from starting.
-    stop_sync = asyncio.Event()
-    sync_task: asyncio.Task[None] | None = None
-    if settings.jarvis_client_owned_data:
-        # Mobile: the WebView owns the data (IndexedDB) and runs the only sync
-        # engine against Supabase. This backend's SQLite is a throwaway working
-        # copy, so a second engine here would race the client and double-write
-        # the same rows to the mirror. Exactly one engine per device.
-        logger.info("Sync runs in the client on this build; backend sync disabled.")
-    elif settings.jarvis_sync_enabled and settings.sync_configured:
-        sync_task = asyncio.create_task(sync.run_forever(stop_sync))
-    elif settings.jarvis_sync_enabled:
-        logger.info(
-            "Sync is idle - set SUPABASE_URL and SUPABASE_SERVICE_KEY in "
-            "backend/.env to mirror this device."
+    # Cross-device sync. There used to be a second engine here, running
+    # against this process's own SQLite, for whichever platform did not set
+    # jarvis_client_owned_data. As of 2026-09-12 every platform sets it: the
+    # WebView (mobile or desktop) owns the data in IndexedDB and runs the
+    # only sync engine, against Supabase, client-side (see
+    # frontend/src/lib/syncClient.ts). Exactly one engine per device is the
+    # whole point -- a second one here would race the client and double-write
+    # the same rows to the mirror. If jarvis_client_owned_data is ever false
+    # again (a build that reintroduces a backend-authoritative mode), sync
+    # simply does not run; that mode does not currently exist, so there is
+    # nothing here to start.
+    if not settings.jarvis_client_owned_data:
+        logger.warning(
+            "jarvis_client_owned_data is false but no backend sync engine "
+            "exists any more (removed 2026-09-12) -- this device will not sync."
         )
 
     # Makes the timetable act rather than merely exist. Off on mobile, where the
@@ -107,13 +106,6 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
-        if sync_task is not None:
-            # Ask the loop to stop between rounds, then cancel if it is asleep
-            # on its interval. Cancelling alone would abandon a round mid-push.
-            stop_sync.set()
-            sync_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await sync_task
         if scheduler_task is not None:
             stop_scheduler.set()
             scheduler_task.cancel()

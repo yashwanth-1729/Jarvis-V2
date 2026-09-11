@@ -61,6 +61,12 @@ def _configure(files_dir: str) -> None:
     # reach the board the user is looking at.
     os.environ.setdefault("JARVIS_CLIENT_OWNED_DATA", "true")
 
+    # The actual platform signal -- desktop is client-owned-data too now (see
+    # above), but only Android is sandboxed and foreground-only. This is what
+    # config.py's system_tools_enabled/scheduler_enabled key off instead of
+    # the data-ownership flag, so desktop keeps its shell tools and scheduler.
+    os.environ.setdefault("JARVIS_ANDROID", "true")
+
 
 class _LogcatHandler(logging.Handler):
     """Send Python log records where they can actually be read on a phone.

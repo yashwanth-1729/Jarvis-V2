@@ -427,6 +427,70 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Desktop is client-owned-data now; the backend sync engine
+  is gone:** Desktop's Python backend used to own SQLite directly and sync
+  it to Supabase on its own timer (`app/services/sync.py`), with no status
+  visible in the UI. Mobile instead lets the WebView's IndexedDB own the
+  data and syncs it client-side (`frontend/src/lib/syncClient.ts`), with a
+  passive "Syncing…" banner. At the user's request, desktop now adopts
+  mobile's architecture instead of just adding a banner to the old engine.
+  Before flipping the flag: found that `jarvis_client_owned_data` was also
+  standing in for "is this Android" in two unrelated places —
+  `system_tools_enabled` (shell/filesystem/network tools) and
+  `scheduler_enabled` (reminders) both turned off whenever it was true, for
+  reasons that only apply to Android's sandboxed, foreground-only process
+  and never applied to desktop. Flipping the flag naively would have
+  silently disabled desktop's reminders and tool access. Fixed by
+  introducing a separate `jarvis_android` flag (set only by
+  `jarvis_server.py`, Android's own entry point) and rekeying those two
+  properties on it instead — verified with two updated tests
+  (`scheduler_test.py`, `system_tools_test.py`) that now explicitly assert
+  a client-owned-data desktop keeps both, while Android still loses them.
+  `main.py`'s lifespan already had the right conditional
+  (`if settings.jarvis_client_owned_data: ...backend sync disabled`) — no
+  backend startup code needed touching beyond removing the now-dead branch
+  that used to start the old engine.
+  `app/services/sync.py` trimmed from a full push/pull engine (482 lines,
+  its own 32-check test suite) to just `SYNC_COLUMNS`, which
+  `app/api/localstore.py`'s seed/drain bridge still needs. `sync_test.py`
+  deleted — it tested code that no longer exists. Added
+  `GET /api/local/sync-bootstrap`: desktop's `backend/.env` already had the
+  real Supabase URL and service key in cleartext on that same machine; this
+  endpoint hands them to the frontend once (only when localStorage is still
+  empty, never overwriting a value the user has since changed) so desktop
+  self-configures instead of requiring the same key to be copy-pasted a
+  second time. Returns blanks on Android by design (its bundled `.env` never
+  carries the service key), so mobile's existing manual entry in Settings is
+  untouched.
+  Verified live, not just read: started the actual backend from source with
+  the new `.env` (`JARVIS_CLIENT_OWNED_DATA=true`), confirmed
+  `/api/health` reports it and `/api/local/sync-bootstrap` returns the real
+  credentials, then loaded the frontend against it and watched a genuinely
+  empty IndexedDB pull real data from Supabase for the first time — the
+  same Monday schedule (16 plans, 45 overlaps) the user's own desktop
+  screenshot had shown earlier, this time synced client-side. Status went
+  from nothing shown to "Syncing…" then "Connected", matching mobile
+  exactly.
+  Checks: backend suite 24/24 (both updated tests confirmed passing in both
+  directions); frontend typecheck clean, all frontend tests passing. Rebuilt
+  the desktop Tauri app and installed it with everything through this point
+  — the earlier UI pass 1 build had gone stale once these sync edits landed
+  on top of it, so this build carries both.
+- **2026-09-12 — Desktop shell: two panes instead of three.** User feedback
+  after pass 1: the permanent three-column layout (rail, console, work
+  surface, all always visible) read as cluttered even with the Rail
+  fixed. Folded Chat and the workspace (Task Board/Schedule/Notes) into one
+  toggled content pane, reusing the exact one-pane-at-a-time mechanism
+  mobile already used (`chatOpen`) instead of inventing a second one —
+  desktop's `lg:flex`/`lg:block` overrides had been forcing both panes
+  visible regardless of that state; removing them was most of the fix.
+  Grid dropped from `[rail][console][1fr]` to `[rail][1fr]`. Rail gained a
+  "Chat" destination (leads the list, same reasoning as it leading the
+  console on a phone) so there is an explicit way back to it. Chat's own
+  content already centers at a 760px max-width regardless of container
+  width, so going full-pane needed no changes inside `Chat.tsx` itself.
+  Checks: typecheck clean; live-verified in the Browser pane at 1440x900
+  (Chat and each workspace view render full-pane and swap cleanly).
 - **2026-09-12 — Desktop UI, pass 1 (nav + transition + smallest text):**
   User feedback: desktop looked bad, "some buttons are not even responsive,"
   layout busy, typography too small. Installed two design-audit skills

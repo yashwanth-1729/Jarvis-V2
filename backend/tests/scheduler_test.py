@@ -221,9 +221,14 @@ async def main() -> None:
 
         print("\n== gating ==")
         check("scheduler runs on desktop", cfg.settings.scheduler_enabled is True)
+        # Desktop is client-owned-data too now (2026-09-12); jarvis_android is
+        # the platform signal scheduler_enabled actually keys off.
         cfg.settings.jarvis_client_owned_data = True
-        check("forced off on mobile", cfg.settings.scheduler_enabled is False)
+        check("still on for a client-owned-data desktop", cfg.settings.scheduler_enabled is True)
         cfg.settings.jarvis_client_owned_data = False
+        cfg.settings.jarvis_android = True
+        check("forced off on Android", cfg.settings.scheduler_enabled is False)
+        cfg.settings.jarvis_android = False
         cfg.settings.jarvis_scheduler_enabled = False
         check("off when the operator disables it", cfg.settings.scheduler_enabled is False)
         cfg.settings.jarvis_scheduler_enabled = True

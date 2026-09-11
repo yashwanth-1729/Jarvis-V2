@@ -144,13 +144,29 @@ class Settings(BaseSettings):
     jarvis_db_pool_size: int = Field(default=5, alias="JARVIS_DB_POOL_SIZE")
 
     #: True when the *client* owns the user's data and this backend is only
-    #: the AI runtime -- the arrangement on mobile, where IndexedDB is
-    #: authoritative and SQLite is a disposable working copy. Enables the
-    #: /api/local bridge, which would otherwise compete with the Supabase sync
-    #: engine for the same change queue.
+    #: the AI runtime -- IndexedDB is authoritative and SQLite is a disposable
+    #: working copy. Enables the /api/local bridge, which drains the client's
+    #: own change queue instead of a backend-side sync engine doing it.
+    #:
+    #: Originally an Android-only flag, and for a while the codebase used it
+    #: as a stand-in for "is this Android" everywhere -- see
+    #: ``system_tools_enabled``/``scheduler_enabled`` below for why that was
+    #: wrong. It is purely about data ownership now: 2026-09-12, desktop
+    #: adopted the same client-owned-data architecture mobile already used
+    #: (one client-side sync engine, shared by both platforms, instead of a
+    #: second engine living in this backend) -- ``jarvis_android`` is the
+    #: platform signal now.
     jarvis_client_owned_data: bool = Field(
         default=False, alias="JARVIS_CLIENT_OWNED_DATA"
     )
+
+    #: True only inside the Android APK's sandboxed Chaquopy process. Split out
+    #: from ``jarvis_client_owned_data`` because desktop now sets that flag
+    #: too (see above) but is not sandboxed and not foreground-only -- its
+    #: shell/filesystem tools work fine and it can run a background scheduler
+    #: all day. Set by the Android build's own entry point
+    #: (``jarvis_server.py``), never by a human.
+    jarvis_android: bool = Field(default=False, alias="JARVIS_ANDROID")
 
     #: Whether the agent may reach outside its own database -- shell, files,
     #: the network. Off makes JARVIS the command center it has always been; on
@@ -230,13 +246,15 @@ class Settings(BaseSettings):
     def system_tools_enabled(self) -> bool:
         """Whether shell/filesystem/network tools are offered to the model.
 
-        Two gates, not one. The setting is the operator's intent; the
-        client-owned-data flag is the platform. That flag is only ever true in
-        the Android build, where the process is confined to the app sandbox --
-        a shell there can reach nothing the user cares about, so offering it
-        would spend tokens on every request to advertise a dead end.
+        Two gates, not one. The setting is the operator's intent; ``jarvis_android``
+        is the platform. Sandboxed inside the Android APK, a shell can reach
+        nothing the user cares about, so offering it would spend tokens on
+        every request to advertise a dead end. Desktop is not sandboxed --
+        this stays on there even now that desktop is also client-owned-data,
+        which is exactly why this is keyed on ``jarvis_android`` and not on
+        ``jarvis_client_owned_data`` any more.
         """
-        return self.jarvis_system_tools and not self.jarvis_client_owned_data
+        return self.jarvis_system_tools and not self.jarvis_android
 
     @property
     def scheduler_enabled(self) -> bool:
@@ -248,7 +266,7 @@ class Settings(BaseSettings):
         process the OS is about to freeze, and the announcements would arrive in
         a burst whenever the user next opened the app.
         """
-        return self.jarvis_scheduler_enabled and not self.jarvis_client_owned_data
+        return self.jarvis_scheduler_enabled and not self.jarvis_android
 
     @property
     def has_api_key(self) -> bool:

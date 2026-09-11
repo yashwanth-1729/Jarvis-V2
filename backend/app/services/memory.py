@@ -524,12 +524,15 @@ async def capture_inferred_candidate(user_text: str, source_ref: str | None = No
 async def refresh_markdown_vault() -> None:
     """Materialise a readable desktop Markdown view without becoming storage.
 
-    Android remains IndexedDB-authoritative.  Writing files inside its private
-    Python sandbox would add no useful capability, so only desktop maintains
-    this projection.
+    Android skips this. Writing files inside its private Chaquopy sandbox
+    would add no useful capability -- nothing outside the app can see them --
+    so only a real desktop filesystem gets this projection. Keyed on
+    ``jarvis_android`` specifically, not ``jarvis_client_owned_data``: desktop
+    is client-owned-data too now, and unlike Android it has a real, visible
+    filesystem where this file is genuinely useful.
     """
     global _vault_fingerprint
-    if settings.jarvis_client_owned_data:
+    if settings.jarvis_android:
         return
     raw = await db.fetch_all("SELECT * FROM memories ORDER BY updated_at DESC")
     fingerprint = tuple(
