@@ -40,6 +40,7 @@ from app.llm.tools_system import SYSTEM_TOOLS_GUIDANCE, environment_note
 from app.providers import get_chat_provider
 from app.providers.base import ProviderError
 from app.services.context import build_context_snapshot
+from app.services import identity
 from app.services import memory as memory_service
 from app.services import surfaces
 
@@ -581,6 +582,32 @@ async def run_turn(
         inferred_candidate = await memory_service.capture_inferred_candidate(user_text)
     except Exception:  # noqa: BLE001 - learning must never block the actual answer
         logger.exception("Could not capture inferred memory candidate")
+
+    # Deterministic pre-LLM intents -- "who are you", today the only one --
+    # are checked before anything provider-shaped runs. Placed after memory
+    # capture on purpose: "My name is Rahul, who are you?" should still teach
+    # JARVIS the user's name even though the question itself never reaches
+    # the model. Matched, this replaces the entire rest of the turn: no
+    # panel detection (nothing here is asking for one), no history load, no
+    # provider call, no tool loop -- just the canonical answer, spoken and
+    # saved to the transcript exactly like any other reply, so a follow-up
+    # question can still refer back to it.
+    special = identity.detect_special_intent(user_text)
+    if special is not None:
+        logger.info("Special intent matched: %s", special.name)
+        yield {"type": "text", "data": {"text": special.response}}
+        assistant = _assistant_message(special.response, [])
+        await crud.append_chat_message("assistant", special.response, assistant)
+        yield {
+            "type": "done",
+            "data": {
+                "stop_reason": "stop",
+                "refresh": [],
+                "usage": {},
+                "text": special.response,
+            },
+        }
+        return
 
     # Emitted before the model runs, so the panel opens while JARVIS is still
     # thinking rather than after it has finished speaking. Hanging this off a

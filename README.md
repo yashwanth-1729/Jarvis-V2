@@ -427,6 +427,46 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Deterministic identity intent, ahead of the LLM:** "Who are
+  you / what are you / who made you / introduce yourself" style questions
+  (typed or spoken, in any language JARVIS transcribes to English text) are
+  now caught by `app.services.identity.detect_special_intent` — a regex
+  classifier in the same style and for the same reason as
+  `app.services.surfaces` (free, deterministic, runs on the latency path
+  before the model) — and answered with one canonical, hand-written
+  introduction (`identity.JARVIS_INTRODUCTION`, the single source of truth)
+  instead of an LLM call. Wired into `agent.run_turn`, right after memory
+  candidate capture and before the chat provider, history load, or panel
+  detection — so "My name is Rahul, who are you?" still teaches JARVIS the
+  name, but the question itself never reaches Sarvam. The matched reply is
+  yielded as an ordinary `text` event and persisted to the transcript exactly
+  like any other answer, so it plays through the existing TTS chunking
+  pipeline unchanged and a follow-up question can still refer back to it.
+  Deliberately anchored to "you"/"jarvis" as the object throughout ("who
+  created **you**", "what is **jarvis**"), so it does not fire on "who is
+  Yashwanth", "who created Python", or "what are you doing" — see
+  `identity.py`'s docstrings for the full false-positive reasoning.
+  Designed for one more canned intent to be added later (capabilities,
+  creator/founder info, privacy, help, demo) as one more entry in
+  `identity.py`'s intent list, with no other code to change.
+  **Investigated, not implemented: caching the introduction's Piper audio.**
+  Would only help the desktop Piper path — Android's on-device voice runs
+  entirely client-side (see the 2026-09-12 entry above), so a server-side
+  cache cannot reach it at all — and would mean re-deriving the introduction's
+  chunk boundaries outside the normal streaming pipeline (or handing over one
+  giant audio blob, re-introducing the whole-phrase-before-any-audio latency
+  the same day's Piper streaming work just removed). Does not cleanly fit;
+  not built. The real latency win — skipping the LLM round trip entirely — is
+  already in place regardless.
+  Checks: 89 offline classification checks (`identity_intent_test.py`, every
+  MUST/MUST-NOT example in the spec plus embedded/case-variance/empty-input
+  edges) and 9 offline wiring checks against a throwaway database with the
+  chat provider swapped for one that raises if it's ever called
+  (`identity_turn_test.py`) — both pass. Full backend suite otherwise green;
+  `reminder_lead_test`'s past-instant-reminder case fails both with and
+  without this change (confirmed via `git stash`), so it is pre-existing and
+  unrelated. Backend-only change, installed on the Android device; not yet
+  confirmed by voice on-device.
 - **2026-09-12 — On-device Piper now streams sentence by sentence, synthesizing
   up to 3 phrases concurrently:** English voice replies on Android used to
   build each phrase's entire audio before any of it could play. A short

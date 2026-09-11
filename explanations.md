@@ -128,6 +128,75 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Deterministic JARVIS_IDENTITY_INTENT, ahead of the LLM
+- New `app/services/identity.py`: a regex classifier (`detect_special_intent`)
+  for 'who/what are you', 'introduce yourself', 'who made/built/created
+  you/jarvis', 'what is jarvis', 'what kind of assistant are you' -- matched
+  even mid-sentence (`re.search`, not `match`). Deliberately keyword/pattern
+  matching over an embedding classifier, same reasoning `surfaces.py`
+  documents for panel intent: runs on every turn on the latency path, so it
+  has to be free, and a missed match costs nothing (the model can already
+  answer 'who are you' itself) while a false match is the only real risk --
+  every pattern is anchored to 'you'/'jarvis' as the object and excludes the
+  given false-positive shapes ('who are you calling/talking about', 'what
+  are you doing/working on/thinking about') via negative lookahead.
+- `JARVIS_IDENTITY_INTRODUCTION` -> named `JARVIS_INTRODUCTION` in code
+  (matches the file's own naming: `identity.py` module, so
+  `identity.JARVIS_INTRODUCTION` reads cleanly) -- one triple-quoted
+  constant, verbatim from the spec, the only place this text exists.
+- Wired into `agent.run_turn`, positioned AFTER
+  `memory_service.capture_inferred_candidate(user_text)` and BEFORE
+  `surfaces.detect`/`get_chat_provider`/history load: this ordering is load-
+  bearing, not arbitrary -- 'My name is Rahul, who are you?' must still
+  teach JARVIS the name via the existing memory-candidate path even though
+  the question itself short-circuits before the model ever sees it. On a
+  match: yields one `text` event with the canonical string, persists it to
+  `chat_messages` via the same `_assistant_message`/`append_chat_message`
+  path a normal reply uses (so history/follow-ups work identically), yields
+  a `done` event with `stop_reason: 'stop'` (matters for `chat.py`'s SSE
+  wrapper -- without an explicit `done`, its own fallback sends
+  `stop_reason: 'error'`, which is the wrong signal for a successful
+  canned answer), then returns -- skipping `surfaces.detect`, history load,
+  the provider call, and the whole tool loop entirely.
+- Applies uniformly to typed chat (`chat.py`), voice (`realtime.py`), and
+  the sentinel daemon endpoint (`sentinel.py`) -- all three only ever
+  consume `run_turn`'s `text`/`done`/`error` events, confirmed by reading
+  all three call sites before writing the change, so no caller-side code
+  needed touching. Voice mode's existing sentence-chunking/TTS pipeline
+  (`_first_chunk`/`_split_sentences` in `realtime.py`) runs on the canonical
+  text exactly as it would on live LLM output -- the intro's line breaks
+  double as its own sentence boundaries via the existing `
++` split rule,
+  so it is spoken with the same short-line pacing it was written in, with no
+  special-casing needed in the TTS path.
+- **Audio pre-cache: investigated, not implemented.** Would only help
+  desktop Piper -- Android's on-device voice is entirely client-side (see
+  the streaming-Piper entry above), unreachable from a server-side cache --
+  and would need the introduction's audio pre-split at the SAME chunk
+  boundaries the streaming pipeline computes live, or delivered as one
+  blob (re-introducing the whole-phrase-before-any-audio latency the
+  streaming-Piper fix just removed same day). Does not cleanly fit the
+  current architecture per the task's own condition; not built. The
+  latency goal that mattered (skip the LLM round trip) is already met.
+- Modularity: `identity.py`'s `SpecialIntent(name, matches, response)` +
+  `_INTENTS` tuple is set up so a future canned intent (capabilities,
+  creator/founder info, privacy, help, demo) is one more tuple entry --
+  `run_turn` only ever asks 'does anything match', nothing else changes.
+- Tests: `identity_intent_test.py` (89 checks, offline, pure regex --
+  every MUST/MUST-NOT example from the spec verbatim, plus embedded-in-
+  sentence, case-insensitivity, and empty/None-input edges) and
+  `identity_turn_test.py` (9 checks, offline, throwaway DB, chat provider
+  replaced with one that raises AssertionError if called at all -- proves
+  the bypass is real, not just that the regex matches; also proves an
+  ordinary turn is completely unaffected). Both pass. Full backend suite:
+  all green except `reminder_lead_test`'s past-instant-reminder case, which
+  fails identically with this change stashed out (`git stash` + rerun,
+  confirmed before assuming it was mine) -- pre-existing, unrelated, not
+  touched.
+- Backend-only change (no frontend/Android files touched); rebuilt and
+  installed on the Android device since Chaquopy bundles Python source at
+  build time. Not yet confirmed by voice on the device.
+
 ### 2026-09-12 · Claude Code · On-device Piper 'parts parts' -- investigated and fixed
 - User report: English voice on Android played a short opener then a long
   silent gap, then rushed through the rest -- worse on medium/long replies,
