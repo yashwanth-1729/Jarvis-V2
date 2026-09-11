@@ -57,7 +57,13 @@ async def lifespan(_: FastAPI):
     # mirrors it, so a failure here must never stop JARVIS from starting.
     stop_sync = asyncio.Event()
     sync_task: asyncio.Task[None] | None = None
-    if settings.jarvis_sync_enabled and settings.sync_configured:
+    if settings.jarvis_client_owned_data:
+        # Mobile: the WebView owns the data (IndexedDB) and runs the only sync
+        # engine against Supabase. This backend's SQLite is a throwaway working
+        # copy, so a second engine here would race the client and double-write
+        # the same rows to the mirror. Exactly one engine per device.
+        logger.info("Sync runs in the client on this build; backend sync disabled.")
+    elif settings.jarvis_sync_enabled and settings.sync_configured:
         sync_task = asyncio.create_task(sync.run_forever(stop_sync))
     elif settings.jarvis_sync_enabled:
         logger.info(

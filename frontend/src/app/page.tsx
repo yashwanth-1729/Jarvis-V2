@@ -523,6 +523,7 @@ export default function CommandCenterPage() {
       >
         <SyncBanner
           className="shrink-0"
+          enabled={recordsLocal}
           onSynced={handleSynced}
         />
 

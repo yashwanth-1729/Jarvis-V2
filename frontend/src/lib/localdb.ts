@@ -96,6 +96,36 @@ const META_STORE = "__meta";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+// ---------------------------------------------------------------------------
+// Local-change notifications
+// ---------------------------------------------------------------------------
+//
+// Every write to the synced tables funnels through `putRows`/`deleteRow`, so a
+// single notification here is enough for the auto-sync controller to know a
+// push is due. Kept dependency-free (a plain Set) so `localdb` stays importable
+// on the server render, and every callback is isolated so one throwing listener
+// cannot swallow a write.
+type ChangeListener = () => void;
+const changeListeners = new Set<ChangeListener>();
+
+/** Subscribe to local writes; returns an unsubscribe. */
+export function onLocalChange(listener: ChangeListener): () => void {
+  changeListeners.add(listener);
+  return () => {
+    changeListeners.delete(listener);
+  };
+}
+
+function emitLocalChange(): void {
+  for (const listener of changeListeners) {
+    try {
+      listener();
+    } catch {
+      // A listener's failure must never break the write that triggered it.
+    }
+  }
+}
+
 /** True in a browser/webview, false during the static-export prerender. */
 export function isAvailable(): boolean {
   return typeof indexedDB !== "undefined";
@@ -234,6 +264,7 @@ export async function putRows(table: SyncedTable, rows: SyncRow[]): Promise<void
       if (row.uid) pending.put({ table_name: table, uid: row.uid });
     }
   });
+  emitLocalChange();
 }
 
 /** Rows still awaiting publication, oldest edit first. */
@@ -361,6 +392,7 @@ export async function deleteRow(
     t.objectStore(PENDING_STORE).delete([table, uid]);
     t.objectStore(TOMBSTONE_STORE).put({ table_name: table, uid, deleted_at: deletedAt });
   });
+  emitLocalChange();
 }
 
 /** Apply a deletion that arrived from the remote.

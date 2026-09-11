@@ -31,12 +31,40 @@ import {
   listPending,
   listTombstones,
   mergeRows,
+  onLocalChange,
+  pendingCount,
   project,
   setMeta,
 } from "@/lib/localdb";
 
 /** Supabase caps a REST response at 1000 rows; page rather than truncate. */
 const PAGE_SIZE = 1000;
+
+/**
+ * Hard ceiling on any single Supabase request.
+ *
+ * The bug that made sync "keep loading" forever was a `fetch` with no timeout:
+ * on a flaky mobile network a request can hang indefinitely, and the round
+ * behind it never resolves, so the UI sits in "syncing" until the app is
+ * killed. Every request now races an abort timer, turning an infinite hang into
+ * an ordinary error the caller retries later.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+async function timedFetch(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Runtime configuration
@@ -145,7 +173,7 @@ export class SupabaseRemote implements Remote {
       });
       if (cursor) params.set("synced_at", `gt.${cursor}`);
 
-      const response = await fetch(`${this.base}/${table}?${params}`, { headers: this.headers });
+      const response = await timedFetch(`${this.base}/${table}?${params}`, { headers: this.headers });
       if (!response.ok) {
         throw new Error(`${response.status} GET ${table}: ${(await response.text()).slice(0, 200)}`);
       }
@@ -163,7 +191,7 @@ export class SupabaseRemote implements Remote {
   private async upsert(table: string, rows: unknown[]): Promise<void> {
     if (!rows.length) return;
     for (let start = 0; start < rows.length; start += PAGE_SIZE) {
-      const response = await fetch(`${this.base}/${table}`, {
+      const response = await timedFetch(`${this.base}/${table}`, {
         method: "POST",
         headers: { ...this.headers, Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify(rows.slice(start, start + PAGE_SIZE)),
@@ -207,7 +235,7 @@ export class SupabaseRemote implements Remote {
     for (let start = 0; start < uids.length; start += PAGE_SIZE) {
       const batch = uids.slice(start, start + PAGE_SIZE);
       const list = batch.map((uid) => `"${uid.replace(/"/g, '""')}"`).join(",");
-      const response = await fetch(`${this.base}/${table}?uid=in.(${list})`, {
+      const response = await timedFetch(`${this.base}/${table}?uid=in.(${list})`, {
         method: "DELETE",
         headers: { ...this.headers, Prefer: "return=minimal" },
       });
@@ -412,6 +440,195 @@ export async function syncOnce(remote?: Remote): Promise<SyncResult> {
     result.error = error instanceof Error ? error.message : String(error);
   }
   return result;
+}
+
+/**
+ * Publish local changes without pulling.
+ *
+ * The change-driven pusher uses this instead of a full round: an edit made here
+ * only needs to *leave*, and pulling on every keystroke would waste the network
+ * and risk overwriting the row the user is still editing with an in-flight
+ * remote copy. Never throws — same contract as `syncOnce`.
+ */
+export async function pushOnce(remote?: Remote): Promise<SyncResult> {
+  const result = emptyResult();
+  if (!isAvailable()) {
+    result.skipped = "local storage unavailable";
+    return result;
+  }
+  if (!remote) {
+    const config = getSupabaseConfig();
+    if (!config) {
+      result.skipped = "Supabase not configured";
+      return result;
+    }
+    remote = new SupabaseRemote(config);
+  }
+  try {
+    await push(remote, result);
+    await setMeta("lastSyncAt", result.at);
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Automatic sync controller
+// ---------------------------------------------------------------------------
+//
+// Replaces the old manual "Sync now" button. The contract the user asked for:
+//
+//   * on open, pull once so the device is up to date before they touch anything
+//   * after every local change, quietly push — debounced, so a burst of edits
+//     is one round, and deferred while a voice turn is speaking so it never
+//     competes with the audio pipeline
+//   * while the app is open, pull on a slow interval to catch other devices
+//   * on background/foreground, flush and refresh
+//
+// There is no correctness dependency on any of this timing: the pending set and
+// tombstones are durable, so a skipped or interrupted tick simply happens next.
+
+export type SyncPhase = "idle" | "syncing" | "done" | "error";
+
+export interface AutoSyncStatus {
+  phase: SyncPhase;
+  at: string | null;
+  message: string | null;
+}
+
+export interface AutoSyncController {
+  stop(): void;
+  /** Force a full round now (used on foreground); coalesces if already busy. */
+  syncNow(): void;
+  status(): AutoSyncStatus;
+}
+
+export interface AutoSyncOptions {
+  onChange?: (status: AutoSyncStatus) => void;
+  /** Fired after a round that changed local rows, so the board can refresh. */
+  onPulled?: () => void;
+  pushDebounceMs?: number;
+  pullIntervalMs?: number;
+}
+
+/** A voice turn is speaking: set by the voice UI so pushes wait for silence. */
+function voiceActive(): boolean {
+  if (typeof window === "undefined") return false;
+  return (window as unknown as { __jarvisVoiceActive?: boolean }).__jarvisVoiceActive === true;
+}
+
+const NOOP_CONTROLLER: AutoSyncController = {
+  stop() {},
+  syncNow() {},
+  status: () => ({ phase: "idle", at: null, message: null }),
+};
+
+/**
+ * Start automatic sync. Returns a no-op controller when there is nothing to do
+ * (no local storage, or Supabase not configured), so callers need no guard.
+ */
+export function startAutoSync(options: AutoSyncOptions = {}): AutoSyncController {
+  const pushDebounceMs = options.pushDebounceMs ?? 2500;
+  const pullIntervalMs = options.pullIntervalMs ?? 45_000;
+
+  if (typeof window === "undefined" || !isAvailable() || !getSupabaseConfig()) {
+    return NOOP_CONTROLLER;
+  }
+  const remote = new SupabaseRemote(getSupabaseConfig()!);
+
+  let status: AutoSyncStatus = { phase: "idle", at: null, message: null };
+  let busy = false;
+  let stopped = false;
+  let pushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const emit = (next: Partial<AutoSyncStatus>) => {
+    status = { ...status, ...next };
+    options.onChange?.(status);
+  };
+
+  const settle = (result: SyncResult, pulled: boolean) => {
+    if (result.error) {
+      emit({ phase: "error", message: summarize(result) });
+      return;
+    }
+    emit({ phase: "done", at: result.at, message: summarize(result) });
+    if (pulled && (moved(result) || result.deletedLocally)) options.onPulled?.();
+  };
+
+  // Full push + pull. Skipped (not queued) if a round is already running — the
+  // durable pending set means nothing is lost by waiting for the next trigger.
+  const runRound = async () => {
+    if (busy || stopped) return;
+    busy = true;
+    emit({ phase: "syncing" });
+    try {
+      settle(await syncOnce(remote), true);
+    } finally {
+      busy = false;
+    }
+  };
+
+  const runPush = async () => {
+    if (busy || stopped) return;
+    if (voiceActive()) {
+      schedulePush(1500); // try again shortly, once the turn is likely done
+      return;
+    }
+    busy = true;
+    emit({ phase: "syncing" });
+    try {
+      settle(await pushOnce(remote), false);
+    } finally {
+      busy = false;
+    }
+  };
+
+  function schedulePush(delay = pushDebounceMs): void {
+    if (stopped) return;
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      pushTimer = null;
+      void runPush();
+    }, delay);
+  }
+
+  // Every local write nudges the debounced pusher.
+  const unsubscribe = onLocalChange(() => schedulePush());
+
+  // Slow pull to catch other devices while the app stays open.
+  const interval = setInterval(() => {
+    if (!voiceActive()) void runRound();
+  }, pullIntervalMs);
+
+  // Background: flush anything pending. Foreground: a fresh round.
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") {
+      void pendingCount().then((count) => {
+        if (count > 0) void runPush();
+      });
+    } else {
+      void runRound();
+    }
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+
+  // Open: pull immediately so the device is current before the user acts.
+  void runRound();
+
+  return {
+    stop() {
+      stopped = true;
+      if (pushTimer) clearTimeout(pushTimer);
+      clearInterval(interval);
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisibility);
+    },
+    syncNow() {
+      void runRound();
+    },
+    status: () => status,
+  };
 }
 
 /** When the last successful sync finished, or null if it never has. */

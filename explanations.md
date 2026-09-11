@@ -19,6 +19,13 @@ what we decided and what is still broken. **Either agent writes here; both read 
 
 ## Decisions (don't undo without the user)
 
+- **Sync is fully automatic — no manual button** (user, 2026-09-11). Pull on
+  open, quiet debounced push after every local change (deferred while a voice
+  turn speaks), slow periodic pull while open. Exactly ONE engine per device:
+  mobile = the WebView (IndexedDB) via `syncClient.startAutoSync`; desktop =
+  the backend loop. Backend sync is disabled when `client_owned_data` (mobile).
+  The proven storage/identity layer (uid/updated_at/tombstones/LWW) was KEPT;
+  only the orchestration + UX were rebuilt.
 - **Piper wins for English TTS** (user, 2026-09-11), on desktop AND mobile.
   Desktop is shipped. Mobile: run the same voice on-device via **sherpa-onnx**
   (prebuilt arm64 AAR, Kotlin API) — NOT Chaquopy Python (no arm64 onnx wheel).
@@ -116,6 +123,36 @@ Medium, worth doing:
 - Never let tests touch `backend/storage/jarvis_memory.db` (real data).
 
 ## Log
+
+### 2026-09-11 · Claude Code · Sync rebuilt (orchestration + UX)
+- User: sync 'keeps loading', wants auto pull-on-open + secret background push,
+  no manual button, on both platforms. Rebuilt the orchestration; kept the
+  tested data model.
+- Root causes found: (a) frontend `fetch` had NO timeout -> a flaky network
+  hung the round forever = 'keeps loading'; (b) mobile never auto-pulled (the
+  old `useSync` was manual button + on-hide only); (c) on mobile BOTH the
+  Chaquopy backend AND the WebView synced to Supabase = two engines racing.
+- Fixes:
+  - `syncClient.ts`: `timedFetch` (15s AbortController) on every request;
+    `pushOnce` (push-only); `startAutoSync` controller — pull on open, debounced
+    push (2.5s) on each local change, 45s periodic pull, flush on background,
+    round on foreground. Overlap-guarded; never throws.
+  - `localdb.ts`: `onLocalChange` emitted from the two write funnels
+    (`putRows`/`deleteRow`) so the pusher wakes on every edit. Pull-side merges
+    do NOT emit (no push->pull->push loop).
+  - `useSync.ts`: `useAutoSync({enabled,onPulled})` replaces the manual hook.
+    `SyncBanner.tsx`: passive status only (no buttons); shows while syncing or
+    on error, else nothing. `enabled` gates it to client-owned (mobile).
+  - `main.py`: backend sync disabled when `client_owned_data`, so mobile has one
+    engine (the client). Desktop unchanged (backend loop still syncs on boot +
+    interval).
+- Verified: frontend typecheck clean; `tests/sync.test.ts` 39/0;
+  backend sync_test 39/0, records_test 46/0. smoke_test still fails only on the
+  pre-existing memory-search bug (Open issues #1), unrelated to sync.
+- Follow-up (low priority): the push defers while `window.__jarvisVoiceActive`
+  is true, but VoiceMode does not set that flag yet. Pushes are tiny and async
+  so impact is minimal; wire the flag around a turn when convenient.
+- Not run on device (mobile not connected). Install when the user connects it.
 
 ### 2026-09-11 · Claude Code · Android Piper TTS (started)
 - Decision confirmed: max Piper model (`en_US-ryan-high`) on desktop AND mobile.

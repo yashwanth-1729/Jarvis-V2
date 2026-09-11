@@ -1,124 +1,60 @@
 "use client";
 
-import { AlertTriangle, Check, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { useSync } from "@/lib/useSync";
+import { useAutoSync } from "@/lib/useSync";
 
 /**
- * The launch-time sync prompt.
+ * A passive sync indicator.
  *
- * A bar, never a dialog. The app has already rendered from local storage by the
- * time this appears, so blocking the screen to ask about the network would make
- * a fast start *feel* slow for no gain — the data behind it is already on
- * screen and already usable. Everything here is skippable.
+ * There is no "Sync now" button any more — sync is automatic (pull on open,
+ * quiet push after every change). So this shows *status*, not a control: a thin
+ * line while a round is running, and a quiet notice if one failed, which the
+ * next automatic round clears on its own. When idle it renders nothing, so a
+ * healthy app shows no chrome here at all.
  */
 export function SyncBanner({
   className,
+  enabled,
   onSynced,
 }: {
   className?: string;
-  /** Fired after a round that changed something, so the page can react. */
+  /** True where the client owns the data and runs sync (mobile). */
+  enabled: boolean;
+  /** Fired after a round that pulled changes, so the page can refresh. */
   onSynced?: () => void;
 }) {
-  const { phase, age, message, configured, sync, movedCount } = useSync();
+  const { phase, message } = useAutoSync({ enabled, onPulled: onSynced });
 
-  // A sync that pulled rows leaves the runtime's working copy stale and the
-  // rendered board out of date, so the page needs to know.
-  const seenRef = React.useRef(0);
-  React.useEffect(() => {
-    if (movedCount > seenRef.current) {
-      seenRef.current = movedCount;
-      onSynced?.();
-    }
-  }, [movedCount, onSynced]);
-  const [dismissed, setDismissed] = React.useState(false);
+  // Nothing to show unless a round is in flight or the last one failed.
+  if (phase !== "syncing" && phase !== "error") return null;
 
-  // Nothing to offer until Supabase is configured, and no point nagging after
-  // the user has waved it away this session.
-  if (!configured || dismissed) return null;
-
-  // A finished, uneventful round retires itself via the hook; keep the bar for
-  // rounds that actually did something, and for failures.
-  const tone =
-    phase === "error" ? "error" : phase === "done" ? "done" : "idle";
-
-  const label =
-    phase === "syncing"
-      ? "Syncing…"
-      : phase === "error"
-        ? (message ?? "Sync failed")
-        : phase === "done"
-          ? (message ?? "Synced")
-          : age === "never synced"
-            ? "Not synced yet"
-            : `Last synced ${age}`;
-
-  const Icon = phase === "error" ? AlertTriangle : phase === "done" ? Check : RefreshCw;
+  const isError = phase === "error";
+  const Icon = isError ? AlertTriangle : RefreshCw;
 
   return (
     <div
       className={cn(
-        "sync-notice flex items-center gap-3 border-b px-3 py-2",
-        // The app's own 180ms enter curve. motion-safe only: the entrance is
-        // decoration, and a reader who asked for less motion should not have
-        // to sit through it.
+        "sync-notice flex items-center gap-2.5 border-b px-3 py-1.5",
         "motion-safe:animate-fade-in",
-        tone === "error"
-          ? "border-critical/30 bg-critical/10"
-          : "border-line bg-surface-1",
+        isError ? "border-critical/30 bg-critical/10" : "border-line bg-surface-1",
         className,
       )}
     >
       <Icon
         aria-hidden
         className={cn(
-          "h-4 w-4 shrink-0",
+          "h-3.5 w-3.5 shrink-0",
           phase === "syncing" && "motion-safe:animate-spin",
-          tone === "error" ? "text-critical" : tone === "done" ? "text-accent" : "text-ink-dim",
+          isError ? "text-critical" : "text-ink-dim",
         )}
         strokeWidth={2}
       />
-
-      {/* Announced politely: a status update should never steal focus from
-          whatever the user is already doing. */}
-      <p aria-live="polite" className="min-w-0 flex-1 truncate text-sm text-ink-dim">
-        {label}
+      <p aria-live="polite" className="min-w-0 flex-1 truncate text-xs text-ink-dim">
+        {phase === "syncing" ? "Syncing…" : (message ?? "Sync failed — will retry")}
       </p>
-
-      {phase !== "syncing" && (
-        <button
-          type="button"
-          onClick={sync}
-          className={cn(
-            // 44px: the touch-target minimum, and the same height as the
-            // primary CTA in VoiceLauncher so the two read as one system.
-            "inline-flex h-11 shrink-0 cursor-pointer items-center rounded px-4",
-            "text-sm font-medium transition-colors duration-150",
-            "sync-action text-accent hover:bg-accent/10",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-            "focus-visible:ring-offset-2 focus-visible:ring-offset-surface-1",
-          )}
-        >
-          {phase === "error" ? "Retry" : "Sync now"}
-        </button>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setDismissed(true)}
-        aria-label="Dismiss sync notice"
-        className={cn(
-          // Small glyph, full-size hit area — the icon is 16px, the target is
-          // 44px square.
-          "-mr-1 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded",
-          "text-ink-dim transition-colors duration-150 hover:text-ink",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-        )}
-      >
-        <X aria-hidden className="h-4 w-4" strokeWidth={2} />
-      </button>
     </div>
   );
 }
