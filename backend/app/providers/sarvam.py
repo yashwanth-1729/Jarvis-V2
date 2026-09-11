@@ -19,6 +19,7 @@ import asyncio
 import base64
 import json
 import logging
+import time
 from typing import Any, AsyncIterator, Sequence
 
 import httpx
@@ -102,9 +103,25 @@ def _latest_user_chars(messages: Sequence[dict[str, Any]]) -> int:
     return 0
 
 
-def _chat_request_timeout(messages: Sequence[dict[str, Any]]) -> float:
+#: Ceiling on how long a per-request model override may stall before the turn
+#: fails over to the configured default (see `SarvamChat._resolve_model`).
+#:
+#: The override exists *because* it is the faster model -- voice mode's
+#: conversations variant answers in about a second -- so one that has produced
+#: nothing after this long is not slow, it is not answering. Waiting out the
+#: full chat timeout only to fail over anyway makes the first turn of an
+#: outage read as broken; failing over here makes it read as merely slow.
+#: Comfortably above a healthy first token, well under the normal ceiling.
+OVERRIDE_MODEL_TIMEOUT_SECONDS = 12.0
+
+
+def _chat_request_timeout(
+    messages: Sequence[dict[str, Any]], override: bool = False
+) -> float:
     if _latest_user_chars(messages) >= settings.jarvis_typed_stream_chars:
         return max(settings.sarvam_chat_timeout, settings.sarvam_long_chat_timeout)
+    if override:
+        return min(OVERRIDE_MODEL_TIMEOUT_SECONDS, settings.sarvam_chat_timeout)
     return settings.sarvam_chat_timeout
 
 
@@ -168,13 +185,51 @@ class _SarvamBase:
 # ---------------------------------------------------------------------------
 
 class SarvamChat(_SarvamBase):
+    #: How long to stop routing to a per-request model after it failed to
+    #: respond at all. Measured on 2026-09-11, when `sarvam-105b-conversations`
+    #: (the voice model) began timing out on *every* request -- streaming and
+    #: not, with tools and without -- while `sarvam-105b` answered the same
+    #: prompt in ~1.2s throughout. Voice mode hung on every turn as a result.
+    #:
+    #: Without this, each turn pays the full timeout before failing over, so
+    #: an outage makes every single reply unusably slow rather than just the
+    #: first. Short enough that recovery is picked up on its own within a few
+    #: minutes; long enough that a whole conversation does not keep re-probing
+    #: a model that is down.
+    VOICE_MODEL_COOLDOWN_SECONDS = 180.0
+
     def __init__(self) -> None:
         super().__init__(timeout=settings.sarvam_chat_timeout)
         self.model = settings.sarvam_chat_model
         self._result = ChatResult()
+        #: monotonic deadline until which `model=` overrides are bypassed.
+        self._override_down_until = 0.0
 
     def last_result(self) -> ChatResult:
         return self._result
+
+    def _resolve_model(self, model: str | None) -> str:
+        """Which model this request should actually use.
+
+        A per-request override (voice mode's conversations variant) is skipped
+        while it is in cooldown after failing to respond, so the turn goes
+        straight to the configured default instead of stalling again.
+        """
+        if not model or model == self.model:
+            return model or self.model
+        if time.monotonic() < self._override_down_until:
+            logger.info(
+                "Skipping %s while it is in cooldown; using %s", model, self.model,
+            )
+            return self.model
+        return model
+
+    def _mark_override_down(self, model: str) -> None:
+        self._override_down_until = time.monotonic() + self.VOICE_MODEL_COOLDOWN_SECONDS
+        logger.warning(
+            "%s did not respond; routing to %s for the next %.0fs",
+            model, self.model, self.VOICE_MODEL_COOLDOWN_SECONDS,
+        )
 
     async def stream(
         self,
@@ -190,10 +245,11 @@ class SarvamChat(_SarvamBase):
                 yield chunk
             return
 
+        requested = self._resolve_model(model)
         payload: dict[str, Any] = {
             # Voice mode overrides this per request with the conversations
             # variant, which skips reasoning entirely and is far lower latency.
-            "model": model or self.model,
+            "model": requested,
             "messages": list(messages),
             "stream": True,
             "max_tokens": max_tokens or settings.jarvis_max_tokens,
@@ -224,7 +280,10 @@ class SarvamChat(_SarvamBase):
                 "POST",
                 "/v1/chat/completions",
                 json=payload,
-                timeout=httpx.Timeout(_chat_request_timeout(messages), connect=10.0),
+                timeout=httpx.Timeout(
+                    _chat_request_timeout(messages, override=requested != self.model),
+                    connect=10.0,
+                ),
             ) as response:
                 if response.status_code >= 400:
                     await response.aread()
@@ -319,13 +378,28 @@ class SarvamChat(_SarvamBase):
                 # chat was unaffected because its non-streaming path already
                 # retries. Reopen the pool and use that same proven path for
                 # this turn instead of leaving voice mode silent.
+                #
+                # Retrying the *same* model is wrong when the model itself is
+                # the thing not responding: on 2026-09-11 the voice model
+                # timed out on every request while the default answered
+                # normally, so the retry simply stalled a second time and the
+                # turn hung for both timeouts before failing. When a
+                # per-request override is what failed, fail over to the
+                # configured default and put the override in cooldown so the
+                # rest of the conversation does not keep paying for it.
+                fallback = requested
+                if requested != self.model:
+                    self._mark_override_down(requested)
+                    fallback = self.model
                 logger.warning(
                     "Sarvam streaming failed before output (%s: %s); "
-                    "falling back to a retried completion",
-                    type(exc).__name__, detail,
+                    "falling back to a retried completion on %s",
+                    type(exc).__name__, detail, fallback,
                 )
                 await self.aclose()
-                async for chunk in self._complete(messages, tools, model, max_tokens):
+                async for chunk in self._complete(
+                    messages, tools, fallback, max_tokens, reasoning_effort
+                ):
                     yield chunk
                 return
             raise ProviderUnavailable(
@@ -369,8 +443,9 @@ class SarvamChat(_SarvamBase):
         unstreamed request finishes the whole turn faster (1.61s) than the
         streamed one does (2.47s) despite having no head start.
         """
+        requested = self._resolve_model(model)
         payload: dict[str, Any] = {
-            "model": model or self.model,
+            "model": requested,
             "messages": list(messages),
             "stream": False,
             "max_tokens": max_tokens or settings.jarvis_max_tokens,
@@ -384,13 +459,39 @@ class SarvamChat(_SarvamBase):
 
         self._result = ChatResult()
 
-        response = await _post_with_retry(
-            self._http(),
-            "/v1/chat/completions",
-            "chat/completions",
-            json=payload,
-            timeout=httpx.Timeout(_chat_request_timeout(messages), connect=10.0),
-        )
+        is_override = requested != self.model
+        try:
+            response = await _post_with_retry(
+                self._http(),
+                "/v1/chat/completions",
+                "chat/completions",
+                # Retrying a model that is not answering just multiplies the
+                # wait before the fallback that will actually work. The
+                # default model keeps the full retry budget, which is what
+                # protects against a genuinely dropped connection.
+                attempts=1 if is_override else _RETRY_ATTEMPTS,
+                json=payload,
+                timeout=httpx.Timeout(
+                    _chat_request_timeout(messages, override=is_override),
+                    connect=10.0,
+                ),
+            )
+        except ProviderUnavailable:
+            # Same reasoning as the streaming path: if the model that did not
+            # respond was a per-request override, the default is very likely
+            # still healthy, so try it once rather than failing the turn.
+            if requested == self.model:
+                raise
+            self._mark_override_down(requested)
+            payload["model"] = self.model
+            await self.aclose()
+            response = await _post_with_retry(
+                self._http(),
+                "/v1/chat/completions",
+                "chat/completions",
+                json=payload,
+                timeout=httpx.Timeout(_chat_request_timeout(messages), connect=10.0),
+            )
         if response.status_code >= 400:
             _raise_for_status(response, "chat/completions")
 

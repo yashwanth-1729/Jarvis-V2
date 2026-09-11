@@ -318,6 +318,14 @@ packet has escaped, failure is surfaced without retrying the whole phrase.
 Packets are not individually silence-trimmed, which would erase valid pauses
 inside speech. Existing conservative trimming still applies to complete WAVs.
 
+Chat has a separate failover for the per-request model override (voice mode's
+`sarvam-105b-conversations`). The override gets a 12s timeout and one attempt;
+if it produces nothing, `SarvamChat` retries the turn on the configured chat
+model and bypasses the override for 180s, so an upstream outage costs one slow
+turn rather than a hang on every turn. The configured model keeps the normal
+timeout and three-attempt retry, and its failure is surfaced as an error
+rather than looped. Per-turn `reasoning_effort` is carried through the failover.
+
 ## Remaining parts of the reference
 
 - **Continuous capture and partial ASR:** Still absent. ScriptProcessor captures

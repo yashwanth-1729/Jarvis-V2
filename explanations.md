@@ -128,6 +128,31 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-11 · Claude Code · Voice stuck in 'Working on it': upstream outage + failover
+- User report: after the transcript, voice mode never produced a reply.
+  Cause is upstream, not the reasoning-effort changes: `sarvam-105b-conversations`
+  (still listed by /v1/models) timed out on every request -- streaming and not,
+  with and without tools -- while `sarvam-105b` answered the same prompt in
+  ~1.2s. The old pre-output fallback retried the SAME model, so turns hung.
+- Fix in `providers/sarvam.py`: override model gets 12s + 1 attempt, then fails
+  over to the configured model and is bypassed for 180s (`_resolve_model`,
+  `_mark_override_down`). Also fixed: the old fallback dropped `reasoning_effort`.
+  Live: first turn ~14s, later 0.6-0.8s. STT measured unaffected.
+- Note: `backend/.env` pins `SARVAM_REASONING_EFFORT=low`, so the earlier
+  config-default change to `""` only affects Android (no .env there).
+- `segment_test` hung in 3 of 4 runs with this change (passed once, in 8s) and
+  passed the one run without it. A faulthandler stack dump of the last hang
+  showed STT returning `402 No credits available`: the session sets `halted`,
+  `end_turn` never sends `turn`, and the test's `receive_json()` has no
+  timeout, so it blocks forever. The earlier hangs had STT 200s; their cause is
+  undetermined because credits ran out mid-investigation. The failover itself
+  is covered offline by `model_failover_test.py`.
+- **Sarvam credits are exhausted** (402 on chat and STT, 2026-09-11 ~21:33).
+  Repeated full-suite runs this session (several test files hit live Sarvam)
+  were a large part of that. No chat/STT/Sarvam TTS works until it is topped up.
+- Left: confirm by voice on-device; consider switching back only if the
+  conversations model recovers (the cooldown re-probes it every 180s).
+
 ### 2026-09-11 · Claude Code · STT realtime WebSocket: measured, not built
 - User asked to implement Sarvam's realtime STT WebSocket (the PDF's #1 lever)
   after the reasoning-effort work. Before writing any integration code,

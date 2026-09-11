@@ -427,6 +427,19 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-11 — Voice model failover:** On 2026-09-11 `sarvam-105b-conversations`
+  (the voice model) began timing out on every request while `sarvam-105b`
+  answered normally, so voice turns sat in "Working on it" forever: the old
+  fallback retried the same unresponsive model. `SarvamChat` now gives a
+  per-request model override 12s and a single attempt, then fails over to the
+  configured chat model and skips the override for 180s. Measured against the
+  live outage: first voice turn ~14s (was an indefinite hang), later turns
+  0.6–0.8s. STT was measured unaffected (0.34–0.39s warm). Offline regression
+  coverage in `tests/model_failover_test.py` (16 checks). Desktop backend
+  suite: 23 of 24 passed; `segment_test` hung, and its last run was blocked by
+  a Sarvam `402 No credits available` — the account ran out of credit during
+  testing. Android build installed on the device; not confirmed by voice
+  on-device, which needs credit.
 - **2026-09-11 — Local English TTS (Piper):** English replies are now spoken by
   a local Piper neural voice (`en_US-ryan-high`, the high-quality tier) on the
   desktop backend instead of Sarvam: free, private, no per-call latency. Every
