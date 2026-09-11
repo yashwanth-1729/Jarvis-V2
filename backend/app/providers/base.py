@@ -96,8 +96,15 @@ class ChatProvider(Protocol):
         model: str | None = None,
         max_tokens: int | None = None,
         incremental: bool = True,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """Yield chunks as they arrive.
+
+        ``reasoning_effort``, when given, overrides the provider's configured
+        default for this one call -- e.g. escalating a turn a cheap local
+        classifier flagged as genuinely needing it, without changing the
+        default every other turn gets. ``None`` (the default) means "use
+        whatever the provider is configured with".
 
         The final :class:`ChatResult` is retrieved from :meth:`last_result`
         after the iterator is exhausted, mirroring the SDK `get_final_message`

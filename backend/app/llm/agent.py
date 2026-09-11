@@ -446,6 +446,45 @@ def wants_schedule(text: str) -> bool:
     return bool(_ABOUT_SCHEDULE.search(text or ""))
 
 
+#: Real reasoning-shaped requests: compare, explain why, plan across
+#: constraints, work something out. Deliberately narrow and English-anchored
+#: -- most JARVIS turns are commands or lookups ("add a task", "what's my
+#: schedule", "remind me at five"), which need none of this, and a classifier
+#: that fires too eagerly defeats the point: it would add reasoning latency
+#: to exactly the turns this exists to keep fast.
+_REASONING_SHAPED = re.compile(
+    r"\b("
+    r"compar\w*|"
+    r"why\b|"
+    r"explain\b|"
+    r"pros and cons|trade[- ]?offs?|"
+    r"which (?:is|one|option) (?:is )?(?:better|best|worse)|"
+    r"plan (?:my|a|out|the)|"
+    r"figure out|work out|"
+    r"calculat\w*|how much (?:in total|altogether)|"
+    r"step[- ]by[- ]step|think (?:it |this )?through|in detail|thoroughly"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def reasoning_effort_for(user_text: str) -> str | None:
+    """Escalate reasoning only for turns that plausibly need it, at zero cost.
+
+    Runs a regex over text already in hand -- no network call, no extra model
+    round trip -- so this can never add latency to a turn it does not
+    escalate. Conservative on purpose: the base rate is `False`, so the vast
+    majority of turns (commands, lookups, small talk) pay nothing extra, and
+    only a real match pays the cost reasoning genuinely costs. Returns
+    ``None`` to mean "use the provider's own default" rather than repeating
+    that default here, so a future config change does not need a matching
+    edit in two places.
+    """
+    if _REASONING_SHAPED.search(user_text or ""):
+        return "low"
+    return None
+
+
 async def _build_state_message(user_text: str = "") -> dict[str, Any]:
     """The volatile half: what is true right now.
 
@@ -630,6 +669,10 @@ async def run_turn(
     # of a single turn.
     offered_tools = openai_tools()
 
+    # Same reasoning_effort for every iteration of this turn too -- a
+    # multi-step tool cycle is answering the same question throughout.
+    reasoning_effort = reasoning_effort_for(user_text)
+
     # True once the question has been folded into `messages` as a real turn.
     tool_cycle_started = False
 
@@ -680,6 +723,7 @@ async def run_turn(
                 model=model,
                 max_tokens=max_tokens,
                 incremental=voice or stream_typed,
+                reasoning_effort=reasoning_effort,
             ):
                 if chunk.kind == "text":
                     yield {"type": "text", "data": {"text": chunk.text}}

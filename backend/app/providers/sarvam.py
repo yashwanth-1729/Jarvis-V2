@@ -183,9 +183,10 @@ class SarvamChat(_SarvamBase):
         model: str | None = None,
         max_tokens: int | None = None,
         incremental: bool = True,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         if not incremental:
-            async for chunk in self._complete(messages, tools, model, max_tokens):
+            async for chunk in self._complete(messages, tools, model, max_tokens, reasoning_effort):
                 yield chunk
             return
 
@@ -198,8 +199,9 @@ class SarvamChat(_SarvamBase):
             "max_tokens": max_tokens or settings.jarvis_max_tokens,
             "temperature": settings.sarvam_temperature,
         }
-        if settings.sarvam_reasoning_effort:
-            payload["reasoning_effort"] = settings.sarvam_reasoning_effort
+        effort = reasoning_effort if reasoning_effort is not None else settings.sarvam_reasoning_effort
+        if effort:
+            payload["reasoning_effort"] = effort
         if tools:
             payload["tools"] = list(tools)
 
@@ -354,6 +356,7 @@ class SarvamChat(_SarvamBase):
         tools: Sequence[dict[str, Any]] | None,
         model: str | None,
         max_tokens: int | None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """One request, one response, the whole completion at once.
 
@@ -373,8 +376,9 @@ class SarvamChat(_SarvamBase):
             "max_tokens": max_tokens or settings.jarvis_max_tokens,
             "temperature": settings.sarvam_temperature,
         }
-        if settings.sarvam_reasoning_effort:
-            payload["reasoning_effort"] = settings.sarvam_reasoning_effort
+        effort = reasoning_effort if reasoning_effort is not None else settings.sarvam_reasoning_effort
+        if effort:
+            payload["reasoning_effort"] = effort
         if tools:
             payload["tools"] = list(tools)
 
