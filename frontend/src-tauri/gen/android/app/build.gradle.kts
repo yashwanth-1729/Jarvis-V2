@@ -132,6 +132,10 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // On-device English TTS: runs the same high-tier Piper voice as desktop
+    // natively on arm64 (Chaquopy has no onnxruntime wheel for Android). Fetch
+    // with backend/tools/android/setup_piper.ps1 -- gitignored, not committed.
+    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

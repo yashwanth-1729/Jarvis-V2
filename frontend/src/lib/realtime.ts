@@ -1,6 +1,16 @@
 import { SpeechQueue } from "@/lib/speechQueue";
 import { API_BASE } from "@/lib/api";
+import { isNativeTtsAvailable, synthesizeNative } from "@/lib/nativeTts";
 import type { VoiceSessionState } from "@/types";
+
+/**
+ * English's speaking-rate nudge, applied to on-device synthesis.
+ *
+ * Must track `Language("en-IN", ...).pace` in `backend/app/core/languages.py`
+ * (currently 1.04) -- this is the client-side mirror for the one case where
+ * the client, not the backend, drives Piper (see the `"phrase"` case below).
+ */
+const ENGLISH_PACE = 1.04;
 
 /* ==========================================================================
  * Capture + voice activity detection
@@ -552,7 +562,14 @@ export class VoiceSession {
   async start(): Promise<void> {
     this.setState("connecting");
 
-    const url = `${API_BASE.replace(/^http/, "ws")}/api/voice/session?audio=pcm16`;
+    // Advertise the on-device English voice only when it is actually ready
+    // (Android with the model provisioned); the server then sends English
+    // chunks as `"phrase"` text instead of synthesizing them via Sarvam. This
+    // is a per-connection decision made once, here -- a native engine that
+    // fails mid-session degrades per-phrase (see the `"phrase"` case below),
+    // not by falling back to a second server round-trip.
+    const nativeEnglish = isNativeTtsAvailable() ? "&english_tts=client" : "";
+    const url = `${API_BASE.replace(/^http/, "ws")}/api/voice/session?audio=pcm16${nativeEnglish}`;
     const socket = new WebSocket(url);
     this.socket = socket;
 
@@ -688,6 +705,25 @@ export class VoiceSession {
         await this.queue.push(
           bytes.buffer, String(payload.text ?? ""), Number(payload.seq ?? 0),
           payload.format === "pcm16" ? Number(payload.sample_rate) : undefined,
+        );
+        break;
+      }
+      case "phrase": {
+        // English chunk the server skipped synthesizing, because this session
+        // advertised a native voice at connect time (see `start()`). Reserve
+        // this chunk's place in the queue NOW, synchronously, exactly like the
+        // "audio" case above does by calling `push()` before any await --
+        // otherwise a slow on-device synthesis could land after a later
+        // chunk's (possibly Sarvam, possibly native) audio and reorder
+        // playback. If synthesis fails, `pushDeferred` falls back to its
+        // normal failure path: the caption is still revealed, silently
+        // without audio, exactly as a real TTS failure already degrades.
+        if (Number(payload.gen ?? 0) < this.turnGen) break;
+        const text = String(payload.text ?? "");
+        await this.queue.pushDeferred(
+          () => synthesizeNative(text, ENGLISH_PACE)
+            .then((speech) => ({ audio: speech.pcm, sampleRate: speech.sampleRate })),
+          text,
         );
         break;
       }
