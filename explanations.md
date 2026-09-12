@@ -128,6 +128,86 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Desktop's own credentials handoff was silently disabling voice on every launch
+- User set a new SARVAM_API_KEY and asked why voice mode had no way to edit
+  the schedule anymore. Root-caused rather than assumed: `/api/health`'s
+  `api_key_configured` flipped between `true` (right after a fresh restart)
+  and `false` (moments later, consistently) on the SAME process with the
+  SAME `.env` -- not a config-loading bug (proved via a temporary debug
+  probe written directly into `config.py`/`main.py`: `settings.sarvam_api_key`
+  held the correct 36-char key, in the identical object, in the identical
+  process, at the exact moment `/api/health` was reporting it as absent
+  seconds later).
+- **Actual cause**: `app/api/localstore.py`'s `POST /api/local/credentials`
+  -- built when only Android was ever `jarvis_client_owned_data` (a packaged
+  APK ships no real `.env`, so the client hands the backend its own stored
+  key on every connect) -- unconditionally does
+  `settings.sarvam_api_key = <whatever the client sent>`. Today's earlier
+  change ([switch desktop to mobile's sync architecture]) made
+  `jarvis_client_owned_data` true for DESKTOP too, which activated a
+  frontend code path (`sendProviderKey()` in `agentBridge.ts`, called from
+  `page.tsx`'s first-contact handshake, gated on exactly that flag) that
+  desktop had never triggered before. Desktop's browser `localStorage` has
+  never needed to hold a Sarvam key -- it always came from `backend/.env` --
+  so it sends an EMPTY key, and the backend obediently overwrote its own
+  correct, freshly-loaded key with blank, disabling voice
+  (`has_api_key` -> false) within seconds of every single app launch, with
+  no error surfaced anywhere. This is the same class of bug as the
+  `jarvis_client_owned_data` vs `jarvis_android` overload fixed earlier
+  today for `system_tools_enabled`/`scheduler_enabled` -- just a second,
+  separate spot the same flag-overload reached that wasn't audited at the
+  time.
+- **Fix** (`localstore.py`, backend-only): `POST /api/local/credentials` now
+  treats an EMPTY incoming key as a no-op when `not settings.jarvis_android
+  and settings.has_api_key` -- i.e. "this browser has never stored one" is
+  no longer indistinguishable from "the user wants it cleared," except on
+  Android, where it still means exactly what it always has (blank input =
+  clear, unchanged). A desktop user typing a real key into Settings'
+  "Provider key" field still works exactly as before and takes priority --
+  only a genuinely blank value is now ignored, and only when a working key
+  is already active.
+- Verified live end-to-end, twice, not just via the API: killed and
+  relaunched the installed desktop app from a clean process state, waited
+  well past the frontend's startup handshake window (12s), and confirmed
+  `api_key_configured: true` and `voice/config`'s `enabled: true` held
+  stable both times (previously it flipped to `false` within seconds, every
+  time, reproducibly). Then opened the actual dev-server frontend in a
+  browser and confirmed the "Talk to JARVIS / Start talking" voice launcher
+  -- entirely ABSENT before the fix (that `enabled` flag is exactly what
+  gates its rendering) -- now appears, and that opening voice mode renders
+  its full HUD (mute/half-duplex controls, exit button) correctly.
+- **Did not touch the schedule-editing UI itself** -- it was never broken.
+  Traced `ScheduleSurface.tsx`'s `onEdit` -> `SurfaceLayer.tsx`'s
+  `setEditing` -> the shared `RecordEditor` -> `updateEvent()` chain end to
+  end and confirmed it was already fully wired for voice mode specifically
+  (`SurfaceHost` at `placement="voice"` uses `z-[60]`, above VoiceMode's own
+  `z-50` HUD; `RecordEditor` itself is `z-[100]`, above both). Also verified
+  the backend tool this whole path calls, `update_schedule_event`, offline
+  against an isolated fixture DB: matched an entry by name + weekday and
+  applied a time change correctly (`"Updated #1 'Java Lab' [COLLEGE] Monday
+  3:00 PM - 4:30 PM."`) -- the tool-calling path was never the problem
+  either. The entire user-visible symptom ("no option to edit from voice")
+  was fully explained by voice mode being disabled outright, with nothing
+  in the UI to signal why.
+- While investigating, also found and cleaned up 4 leftover test-fixture
+  rows still sitting in the live Supabase project from the 2026-09-11
+  test-pollution incident (3 "probe"-titled schedule ROUTINE entries, 1
+  "probe"-titled idea) that the user had noticed as unexplained "random
+  blocks" in their schedule/routines. Deleted properly -- inserted a
+  matching `sync_tombstones` row for each before deleting, so a stale local
+  copy on mobile cannot resurrect them on its next sync -- rather than a
+  bare `DELETE`. User asked that this become standard practice going
+  forward: clean up test/probe data in the same session it's found or
+  created, rather than leaving it flagged for later. Saved as a memory
+  (`clean-up-test-fixtures`) so future sessions do this by default.
+- Checks: offline import check on the edited module; live restart-and-hold
+  verification above (twice); offline `update_schedule_event` tool check;
+  browser confirmation of the voice launcher appearing and the HUD
+  rendering. Not yet re-verified against the packaged Android build (the
+  Android carve-out in this fix is the untouched, previously-correct path,
+  but a real on-device check would still be the honest way to confirm
+  nothing there regressed).
+
 ### 2026-09-12 · Claude Code · Root-caused and fixed segment_test.py's flakiness
 - User asked to investigate why `segment_test.py` had failed intermittently
   during this session's test runs (it was previously chalked up in an

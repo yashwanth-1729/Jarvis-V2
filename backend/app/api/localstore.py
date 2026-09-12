@@ -190,10 +190,30 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
 
     The value is never logged, and the response reports only whether a key is
     now present.
+
+    **Desktop carve-out.** This endpoint predates desktop being client-owned
+    at all -- only Android ever called it, because only Android's sandboxed
+    ``.env`` genuinely ships with no key. Desktop adopting the same sync
+    architecture (2026-09-12) made its frontend start calling this too, on
+    every app open, with whatever this browser's own localStorage holds --
+    which is empty on a machine that has only ever relied on the real key
+    already sitting in ``backend/.env``, since desktop never needed to type
+    it into Settings. An empty key here silently overwrote the correct one on
+    every single launch, disabling voice mode outright (`has_api_key` false)
+    with no visible error -- caught live: `/api/health` flipped from
+    `api_key_configured: true` right after a fresh restart to `false` within
+    seconds, as soon as the frontend's first-contact handshake ran.
+    Android's `.env` has no key to protect, so an empty value there still
+    means exactly what it always has -- "clear it" -- and that path is
+    untouched. Desktop's Settings panel can still type in an override key at
+    any time; only a *blank* value is now treated as "nothing to hand over"
+    rather than "erase the working one" when a real key is already active.
     """
     _require_client_owned()
 
     key = (payload.get("sarvam_api_key") or "").strip()
+    if not key and not settings.jarvis_android and settings.has_api_key:
+        return {"configured": True}
     settings.sarvam_api_key = key
 
     # The HTTP clients bake the key into their auth header when first built and

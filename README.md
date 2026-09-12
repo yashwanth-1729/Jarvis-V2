@@ -430,6 +430,26 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Fixed desktop's own credentials handoff silently disabling
+  voice mode on every launch.** `POST /api/local/credentials` (built for
+  Android, where a packaged APK ships no real `.env` and the client must
+  supply its own stored key) started running on desktop too once desktop
+  adopted `jarvis_client_owned_data` for its sync architecture earlier the
+  same day. Desktop's browser storage has never needed to hold a Sarvam
+  key — it always came from `backend/.env` — so it sent an empty one on
+  every app launch, and the backend obediently overwrote its correct key
+  with blank, disabling voice within seconds every time with no visible
+  error. Fixed in `localstore.py`: an empty incoming key is now a no-op
+  when a real key is already configured and this isn't Android; a real key
+  typed into Settings still works and takes priority; Android's own
+  blank-means-clear behavior is unchanged. Verified live by restarting the
+  installed app twice and confirming `api_key_configured`/voice `enabled`
+  both stay `true` well past the startup handshake (previously flipped to
+  `false` within seconds, reproducibly) — and confirmed the "Talk to
+  JARVIS" voice launcher, invisible before the fix, now renders. Also
+  cleaned up 4 leftover test-fixture rows in live Supabase data from an
+  earlier, already-documented test-pollution incident, which the user had
+  noticed as unexplained entries in their schedule.
 - **2026-09-12 — Fixed `segment_test.py`'s real hang, not just its symptom.**
   User asked to investigate its intermittent test-suite failures. Root cause:
   its websocket loops called Starlette's `WebSocketTestSession.receive_json()`,
