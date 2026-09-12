@@ -138,37 +138,69 @@ class CloseAppInput(BaseModel):
     #: default: closing "one Chrome window" should not take every Chrome
     #: process with it just because the name matched more than one.
     all_matches: bool = False
+    #: Set by the second half of the confirm-then-act flow (see tools.py's
+    #: _handle_close_app) -- killing a process can drop unsaved work with no
+    #: save prompt, unlike everything else in this module, so it gets the
+    #: same two-step gate `run_command`/`delete_record` already use.
+    confirmed: bool = False
+
+
+def resolve_close_targets(payload: CloseAppInput):
+    """Find what `close_app` would act on, without acting.
+
+    Split out from `_close_app` so the confirmation step (tools.py) can show
+    the user exactly what is about to close -- same processes the real close
+    would target -- before anything is actually terminated. Returns
+    `(targets, error)`; exactly one is empty/`None`.
+    """
+    import psutil
+
+    if payload.pid is None and not payload.name_contains:
+        return [], "Give either pid or name_contains."
+
+    if payload.pid is not None:
+        try:
+            return [psutil.Process(payload.pid)], None
+        except psutil.NoSuchProcess:
+            return [], f"No process with pid {payload.pid}."
+
+    query = payload.name_contains.strip().lower()  # type: ignore[union-attr]
+    targets: list[psutil.Process] = []
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            if query in (proc.info.get("name") or "").lower():
+                targets.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    if not targets:
+        return [], f"No running process matches '{payload.name_contains}'."
+    if len(targets) > 1 and not payload.all_matches:
+        names = ", ".join(f"{p.info.get('name', '?')} (pid {p.pid})" for p in targets[:8])
+        return [], (
+            f"{len(targets)} processes match '{payload.name_contains}': {names}"
+            + (", ..." if len(targets) > 8 else "")
+            + ". Name one by pid, or pass all_matches=true to close every match."
+        )
+    return targets, None
+
+
+def describe_close_targets(targets) -> str:
+    """Render resolved targets the same way the real close reports them."""
+    described = []
+    for proc in targets:
+        try:
+            described.append(f"{proc.name()} (pid {proc.pid})")
+        except Exception:  # noqa: BLE001 - process may have exited; pid is still useful
+            described.append(f"pid {proc.pid}")
+    return ", ".join(described)
 
 
 async def _close_app(payload: CloseAppInput) -> tuple[bool, str]:
     import psutil
 
-    if payload.pid is None and not payload.name_contains:
-        return False, "Give either pid or name_contains."
-
-    targets: list[psutil.Process] = []
-    if payload.pid is not None:
-        try:
-            targets = [psutil.Process(payload.pid)]
-        except psutil.NoSuchProcess:
-            return False, f"No process with pid {payload.pid}."
-    else:
-        query = payload.name_contains.strip().lower()  # type: ignore[union-attr]
-        for proc in psutil.process_iter(["pid", "name"]):
-            try:
-                if query in (proc.info.get("name") or "").lower():
-                    targets.append(proc)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        if not targets:
-            return False, f"No running process matches '{payload.name_contains}'."
-        if len(targets) > 1 and not payload.all_matches:
-            names = ", ".join(f"{p.info.get('name', '?')} (pid {p.pid})" for p in targets[:8])
-            return False, (
-                f"{len(targets)} processes match '{payload.name_contains}': {names}"
-                + (", ..." if len(targets) > 8 else "")
-                + ". Name one by pid, or pass all_matches=true to close every match."
-            )
+    targets, error = resolve_close_targets(payload)
+    if error:
+        return False, error
 
     closed: list[str] = []
     failed: list[str] = []

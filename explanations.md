@@ -128,6 +128,74 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Confirm-then-act gate on close_app/browser_submit
+- Follow-up to the computer-control work below: user asked to build the
+  permission-confirmation UI the `risk` field was added for (this session's
+  own "recommended next step").
+- Chose NOT to build a new UI component. Found the codebase already has the
+  exact right shape, twice: `delete_record` and `tools_system.py`'s
+  `run_command` both use a two-step "first call describes and does nothing,
+  second call with `confirmed=true` acts" pattern -- no popup, no new
+  frontend, the confirmation is just an ordinary assistant message the user
+  answers in the same chat/voice turn. Reused it rather than inventing a
+  second mechanism.
+- Scoped the gate to exactly the two tools tagged `risk="high"`:
+  `close_app` (kills a process -- unsaved work in it is gone instantly, no
+  save prompt of its own) and `browser_submit` (the moment a form actually
+  posts/searches/logs in/purchases -- squarely the "submitting a form",
+  "sending a message" category this app's own top-level safety rules already
+  require explicit permission for). Deliberately did NOT gate any
+  `medium`-risk tool (click, type, navigate, toggle, hotkeys, clipboard
+  writes, launch_app) -- `run_command`'s own confirmation list is a short,
+  specific set of destructive patterns, not "every command", and a personal
+  assistant that stops to confirm every ordinary click/type would not
+  actually be usable. If a specific medium action turns out to need this in
+  practice, the mechanism already generalizes; not preemptively applied
+  everywhere.
+- `tools_os_control.py`: added `CloseAppInput.confirmed: bool = False`; split
+  `_close_app`'s target-resolution logic out into a new
+  `resolve_close_targets()` (find what would be closed, without closing it)
+  and `describe_close_targets()` (render the same way the real close
+  reports), so the confirmation preview and the real close necessarily see
+  identically resolved targets -- no risk of the preview describing one set
+  of processes and the real action hitting a different one.
+- `tools_browser.py`: added `BrowserSubmitInput(ElementRefInput)` with its
+  own `confirmed` field (kept separate from the shared `ElementRefInput`
+  click/get_text/type/etc. reuse, so the new field doesn't leak into tools
+  that don't need it); added `describe_element()`, a thin public wrapper
+  around the existing private `_resolve()` lookup, for the same
+  "resolve-without-acting" reason -- and because it raises the same
+  `ReferenceNotFoundError`/`StaleReferenceError` `_resolve` always has, an
+  invalid element reference is refused with the normal clean error before
+  the model is ever told to ask for confirmation on it.
+- `tools.py`: `_handle_close_app` and a new dedicated `_handle_browser_submit`
+  (replacing the generic `_computer_action(browser_submit)` one-liner, since
+  this one needs branching logic the generic adapter can't express) both gate
+  on `payload.confirmed` first. Both `ToolSpec.description`s and
+  `input_schema`s updated so the model is told the two-step contract
+  up front, not left to infer it from a runtime message alone.
+- Verified this is not just "looks right" -- ran it: an unconfirmed
+  `close_app` against a real running process (this venv's own python.exe)
+  returned `CONFIRMATION REQUIRED` and left it running; the identical call
+  with `confirmed=true` against a disposable spawned process (`ping -t`)
+  actually terminated it (`"Closed: PING.EXE (pid ...)"`); an unconfirmed
+  `close_app`/`browser_submit` with no valid target (nonexistent process
+  name, a made-up `[eN]` reference) returned a plain error, not a
+  confirmation prompt -- confirming the "refuse invalid targets before
+  offering to confirm" ordering actually holds and doesn't ask the user to
+  confirm something that could never have happened anyway.
+- Checks: the offline `execute_tool` script above; `smoke_test.py`,
+  `system_tools_test.py`, and `computer_control_test.py` re-run clean
+  (100/100, 24/24, all pass) after the change; full backend suite re-run
+  with no new failures beyond the pre-existing `reminder_lead_test.py`.
+- Updated `docs/computer-control.md`'s risk-categorization section (now
+  documents the actual gate, not just the field that used to sit unused) and
+  its known-limitations/future-extension-points sections accordingly.
+- **Not built, still open**: a visible in-UI confirmation card. The gate
+  currently produces plain chat/voice text, matching `delete_record`/
+  `run_command`'s existing convention exactly -- reasonable to leave as-is
+  unless it proves insufficient in practice.
+
 ### 2026-09-12 · Claude Code · Agentic computer control (UI Automation, browser, OS-level)
 - User: implement structured computer control for JARVIS -- Windows UI/
   accessibility control, browser DOM control, native OS automation -- as a

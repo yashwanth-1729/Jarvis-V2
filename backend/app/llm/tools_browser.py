@@ -290,6 +290,15 @@ class BrowserTypeInput(ElementRefInput):
     clear_first: bool = True
 
 
+class BrowserSubmitInput(ElementRefInput):
+    #: Set by the second half of the confirm-then-act flow (see tools.py's
+    #: _handle_browser_submit) -- submitting a form can send/post/purchase/log
+    #: in, the same category of action the app's own safety rules already
+    #: require explicit confirmation for, so it gets the same two-step gate
+    #: `run_command`/`delete_record` use.
+    confirmed: bool = False
+
+
 class BrowserSelectInput(ElementRefInput):
     value: str = Field(min_length=1, description="The <option>'s value or visible label.")
 
@@ -501,6 +510,17 @@ def _resolve(tab_id_hint: str | None, element_id: str):
     raise last_error or ReferenceNotFoundError(f"'{element_id}' does not exist.")
 
 
+def describe_element(element_id: str) -> str:
+    """The label `_resolve` would use, without acting on the element.
+
+    For the confirm-then-act preview (`browser_submit`): raises the same
+    `ReferenceNotFoundError`/`StaleReferenceError` `_resolve` would, so an
+    invalid id is refused before ever asking for confirmation.
+    """
+    _locator, label = _resolve(None, element_id)
+    return label
+
+
 async def browser_click(payload: ElementRefInput) -> tuple[bool, str]:
     locator, label = _resolve(None, payload.element_id)
     try:
@@ -531,7 +551,7 @@ async def browser_clear(payload: ElementRefInput) -> tuple[bool, str]:
     return True, f"Cleared {label}."
 
 
-async def browser_submit(payload: ElementRefInput) -> tuple[bool, str]:
+async def browser_submit(payload: BrowserSubmitInput) -> tuple[bool, str]:
     locator, label = _resolve(None, payload.element_id)
     try:
         await locator.press("Enter", timeout=10_000)

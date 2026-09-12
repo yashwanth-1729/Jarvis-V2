@@ -430,6 +430,36 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Computer control: confirm-then-act gate on `close_app` and
+  `browser_submit`.** These are the only two tools tagged `risk="high"` in
+  the computer-control layer added earlier the same day — closing a process
+  can drop unsaved work instantly with no save prompt, and submitting a form
+  can post/search/log in/purchase, the category of action this app's own
+  safety rules already require explicit confirmation for. Rather than a new
+  UI widget, both reuse the existing two-step shape `run_command` and
+  `delete_record` already established: the first call (no `confirmed=true`)
+  resolves and describes exactly what would happen — the real process(es)
+  `close_app` would kill, or the real element `browser_submit` would submit
+  from — and does nothing; only a second call with `confirmed=true` acts. An
+  invalid target (no matching process, an ambiguous name, an unknown/stale
+  element reference) is refused with a plain error at the first step, before
+  ever asking for confirmation. `close_app`'s target resolution was split out
+  of the close logic itself (`resolve_close_targets`/`describe_close_targets`
+  in `tools_os_control.py`) so the preview and the real close see identically
+  resolved targets; `browser_submit` gained its own `describe_element()` in
+  `tools_browser.py` for the same reason. Every other `medium`-risk
+  computer-control tool (click, type, navigate, toggle, hotkeys, clipboard
+  writes, launching an app) still executes immediately — deliberately not
+  gated, matching how narrowly `run_command`'s own confirmation list is
+  scoped and how a personal assistant needs to feel to actually be usable.
+  Checks: an offline script exercising `execute_tool` directly confirmed (a)
+  an unconfirmed `close_app` on a real target returns `CONFIRMATION
+  REQUIRED` and changes nothing, (b) the same call with `confirmed=true`
+  actually terminates the target process, (c) a `close_app`/`browser_submit`
+  call with no valid target is a plain error, not a confirmation prompt.
+  Full backend suite re-run clean afterward (`smoke_test`,
+  `system_tools_test`, `computer_control_test`, and the rest — see
+  explanations.md for the complete list).
 - **2026-09-12 — Agentic computer control: UI Automation, browser, and OS-level
   automation.** JARVIS can now act on the machine itself, not just its own
   records: click and type into real Windows applications, drive a real browser

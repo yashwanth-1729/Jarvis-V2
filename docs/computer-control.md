@@ -50,15 +50,43 @@ deliberately distinguished (via a persistent `_ever_issued` set that survives
 table resets) because they call for different model behavior — re-inspect,
 versus stop guessing ids.
 
-## Risk categorization
+## Risk categorization and the confirmation gate
 
 `ToolSpec` (in `tools.py`) carries a `risk: Literal["low","medium","high"]`
-field. It is not enforced by a permission UI yet — per the task's own scope,
-that's future work — but every new tool is tagged now so a gate can read it
-later without re-auditing 27 tool definitions. Rough rule applied: read-only
-inspection is `low`; clicking/typing/toggling within an app is `medium`;
-closing processes, sending arbitrary hotkeys, and clipboard writes are
-`medium`-`high` depending on reversibility.
+field. Rough rule applied: read-only inspection is `low`; clicking/typing/
+toggling within an app is `medium` (ordinary, reversible actions — no
+confirmation, same as `add_task` or `update_schedule_event` today);
+`high` is reserved for the two actions that are genuinely hard to undo:
+**`close_app`** (kills a process; any unsaved work in it is gone instantly,
+with no save prompt of its own) and **`browser_submit`** (the moment a form
+actually posts/searches/logs in/purchases — the same category of action this
+app's own safety rules already require explicit confirmation for elsewhere).
+
+Both `high`-risk tools reuse the exact two-step confirm-then-act shape
+`run_command`/`delete_record` already established, rather than a new UI
+widget:
+
+1. The first call (no `confirmed` field, or `confirmed=false`) does **not**
+   act. It resolves exactly what the action would target — the real
+   process(es) `close_app` would kill, or the real element `browser_submit`
+   would submit from — and returns a `CONFIRMATION REQUIRED` message naming
+   it, with an instruction to read it back to the user verbatim.
+2. Only a second call with `confirmed=true` actually performs the action.
+
+This needs no new frontend component: the confirmation is a normal assistant
+message in the existing chat/voice turn, and the user's "yes, close it"
+becomes the model's next tool call. `resolve_close_targets()`/
+`describe_close_targets()` (`tools_os_control.py`) and `describe_element()`
+(`tools_browser.py`) are the small building blocks that let the confirmation
+step describe the real target without performing the action — an invalid
+target (no matching process, an ambiguous name, a stale/unknown element
+reference) is refused with a plain error at this first step too, before ever
+asking for confirmation.
+
+Every `medium`-risk tool still executes immediately — the gate exists for the
+two `high`-risk actions only, matching how narrowly `run_command`'s own
+confirmation list is scoped (a short list of destructive shell patterns, not
+"every command").
 
 ## What's registered as an LLM tool (and what isn't)
 
@@ -111,9 +139,17 @@ descriptions and schemas the way it already does for the 25 original tools.
 - **Windows only.** `list_processes`/`open_path` degrade to a clear message
   on other platforms; everything else assumes Windows and isn't guarded for
   other OSes, matching this desktop app's existing scope.
-- **No permission-enforcement UI yet.** The `risk` field exists on every
-  `ToolSpec` for this; nothing currently gates a `high`-risk call behind
-  confirmation. Structure is in place, enforcement is not built.
+- **Confirmation gate covers only `close_app` and `browser_submit`.** Every
+  other `medium`-risk tool (clicking, typing, navigating, toggling, hotkeys,
+  clipboard writes, launching an app) executes immediately without asking —
+  deliberate, matching how narrowly this app's other confirmation gate
+  (`run_command`'s destructive-pattern list) is scoped, and how the personal-
+  assistant use case actually needs to feel (constant confirmation prompts for
+  routine UI actions would make the feature unusable). If a different medium
+  action turns out to need the same gate in practice, it is the same
+  `confirmed: bool` + "first call describes, second call with confirmed=true
+  acts" shape already used by `close_app`/`browser_submit` — no new mechanism
+  to build, just wiring it onto that tool's `Input` model and handler.
 - **`SendInput` needs true OS foreground focus.** `ui_click`/`ui_set_text`
   can fail with "SendInput() inserted only 0 out of N keyboard events" if the
   target window isn't the actual foreground window (Windows blocks
@@ -135,7 +171,12 @@ descriptions and schemas the way it already does for the 25 original tools.
 - Wire the remaining implemented-but-unregistered functions
   (`ui_scroll`, `ui_expand_collapse`, `ui_window_action`, multi-tab browser
   management, file upload) into `tools.py` when a real use case needs them.
-- Build the permission-confirmation UI the `risk` field was added for.
+- Extend the confirm-then-act gate to another `medium`-risk tool if it turns
+  out to need one in practice (same shape as `close_app`/`browser_submit`,
+  see above).
+- A visible in-UI confirmation card (rather than the plain chat/voice text
+  message the gate currently produces) if the text-only confirmation ever
+  feels insufficient in practice.
 - A macOS/Linux `tools_os_control.py` backend, if JARVIS desktop ever runs
   there — the module boundary already isolates OS-specific code from the
   tool-facing `ToolSpec` layer.

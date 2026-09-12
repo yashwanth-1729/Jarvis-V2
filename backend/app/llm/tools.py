@@ -66,6 +66,8 @@ from app.llm.tools_os_control import (
     ListProcessesInput,
     OpenPathInput,
     SendHotkeyInput,
+    describe_close_targets,
+    resolve_close_targets,
     is_supported as os_tools_supported,
     unsupported_outcome as os_tools_unsupported,
 )
@@ -101,12 +103,14 @@ from app.llm.tools_ui_automation import (
 from app.llm.tools_browser import (
     BrowserFindInput,
     BrowserNavigateInput,
+    BrowserSubmitInput,
     ElementRefInput as BrowserElementRefInput,
     BrowserInspectInput,
     BrowserTypeInput,
     ReferenceNotFoundError as BrowserRefNotFound,
     StaleReferenceError as BrowserRefStale,
     TabIdInput as BrowserTabIdInput,
+    describe_element as browser_describe_element,
     browser_click,
     browser_current_url,
     browser_find,
@@ -2148,7 +2152,28 @@ async def _handle_launch_app(payload: LaunchAppInput) -> ToolOutcome:
 async def _handle_close_app(payload: CloseAppInput) -> ToolOutcome:
     if not os_tools_supported():
         return ToolOutcome(content=os_tools_unsupported("close_app"), is_error=True)
-    audit.info("close_app pid=%s name_contains=%s all=%s", payload.pid, payload.name_contains, payload.all_matches)
+
+    if not payload.confirmed:
+        # Same two-step shape as run_command/delete_record: resolve exactly
+        # what this would act on, describe it, and stop -- closing a process
+        # can drop unsaved work instantly, with no save prompt of its own.
+        targets, error = resolve_close_targets(payload)
+        if error:
+            return ToolOutcome(content=error, is_error=True)
+        names = describe_close_targets(targets)
+        return ToolOutcome(
+            content=(
+                f"CONFIRMATION REQUIRED -- this would close: {names}. Any unsaved work in "
+                "it is lost immediately, with no save prompt. Read this back to the user "
+                "exactly, and only call again with confirmed=true if they agree."
+            ),
+            display={"pending": True, "targets": names},
+        )
+
+    audit.info(
+        "close_app pid=%s name_contains=%s all=%s confirmed=%s",
+        payload.pid, payload.name_contains, payload.all_matches, payload.confirmed,
+    )
     ok, message = await os_close_app(payload)
     return ToolOutcome(content=message, is_error=not ok)
 
@@ -2197,7 +2222,31 @@ _handle_browser_inspect = _computer_query(browser_inspect)
 _handle_browser_find = _computer_query(browser_find)
 _handle_browser_click = _computer_action(browser_click)
 _handle_browser_type = _computer_action(browser_type)
-_handle_browser_submit = _computer_action(browser_submit)
+
+
+async def _handle_browser_submit(payload: BrowserSubmitInput) -> ToolOutcome:
+    if not payload.confirmed:
+        # Same two-step shape as _handle_close_app -- submitting a form can
+        # send, post, purchase, or log in, the category of action this app's
+        # own safety rules already require explicit confirmation for.
+        # describe_element raises the normal Ref-error KeyErrors for a bad
+        # element_id, which execute_tool's outer handler turns into a clean
+        # ToolOutcome -- an invalid reference is refused before asking to
+        # confirm anything.
+        label = browser_describe_element(payload.element_id)
+        return ToolOutcome(
+            content=(
+                f"CONFIRMATION REQUIRED -- this would submit the form from {label} "
+                "(e.g. posting, searching, logging in, or another page action). Read "
+                "this back to the user, and only call again with confirmed=true if "
+                "they agree."
+            ),
+            display={"pending": True, "element": label},
+        )
+    ok, message = await browser_submit(payload)
+    return ToolOutcome(content=message, is_error=not ok)
+
+
 _handle_browser_get_text = _computer_action(browser_get_text)
 _handle_browser_current_url = _computer_action(browser_current_url)
 _handle_browser_title = _computer_action(browser_title)
@@ -3087,7 +3136,10 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         description=(
             "Close a running application by pid or by a name substring. If a name matches "
             "more than one process, this refuses and lists them -- call list_processes or "
-            "pass a pid, or pass all_matches=true to close every match."
+            "pass a pid, or pass all_matches=true to close every match. The first call "
+            "without confirmed=true only describes what would close and does not close "
+            "anything; read that back to the user and call again with confirmed=true only "
+            "if they agree -- closing drops unsaved work instantly, with no save prompt."
         ),
         input_schema={
             "type": "object",
@@ -3095,6 +3147,7 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
                 "pid": {"type": "integer", "description": "Exact process id, if known."},
                 "name_contains": {"type": "string", "description": "Case-insensitive substring of the process name."},
                 "all_matches": {"type": "boolean", "description": "Close every process matching name_contains, not just a single unambiguous one."},
+                "confirmed": {"type": "boolean", "description": "Set true only after the user has confirmed closing the exact target(s) named in the first call's response."},
             },
         },
         model=CloseAppInput,
@@ -3424,13 +3477,22 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         name="browser_submit",
         capability="system",
         risk="high",
-        description="Press Enter in a field to submit its form -- the usual way to trigger a search or a login after browser_type.",
+        description=(
+            "Press Enter in a field to submit its form -- the usual way to trigger a "
+            "search, post, purchase, or login after browser_type. The first call without "
+            "confirmed=true only describes what would submit and does not submit "
+            "anything; read that back to the user and call again with confirmed=true "
+            "only if they agree."
+        ),
         input_schema={
             "type": "object",
-            "properties": {"element_id": {"type": "string", "description": "An [eN] reference to the field to submit from."}},
+            "properties": {
+                "element_id": {"type": "string", "description": "An [eN] reference to the field to submit from."},
+                "confirmed": {"type": "boolean", "description": "Set true only after the user has confirmed submitting the exact form named in the first call's response."},
+            },
             "required": ["element_id"],
         },
-        model=BrowserElementRefInput,
+        model=BrowserSubmitInput,
         handler=_handle_browser_submit,
     ),
     ToolSpec(
