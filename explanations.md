@@ -128,6 +128,126 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Gemini for English chat, Sarvam as its own fallback
+- User: for English replies, use Gemini as the LLM (STT stays Sarvam, TTS
+  stays Piper), fall back to Sarvam if Gemini fails; non-English keeps
+  Sarvam's whole stack; when Gemini is in use and a search is needed, prefer
+  its own `google_search` grounding, falling back to the existing
+  `web_search` tool if that fails. Provided a Gemini API key via Google AI
+  Studio (`GEMINI_API_KEY`, `GEMINI_MODEL` in `.env`).
+- **Verified the live API before writing any provider code**, the same
+  discipline this project already applies to Sarvam ("probe the live
+  endpoint, docs have been wrong before" — here Google's own docs, not
+  Sarvam's). Findings that would have been wrong to assume from training
+  data or a single doc fetch:
+  - `gemini-2.5-flash` 404s for new API keys — Google's own error message
+    names `gemini-3.6-flash` as the replacement and points at a whole new
+    "Interactions API" the docs half-reference. Model names on this vendor
+    churn fast.
+  - Every Gemini 3.x model "thinks" by default and that budget comes out of
+    the SAME `max_output_tokens` the visible answer does — measured a
+    200-token cap returning empty text with the entire budget spent on
+    thinking, on THREE different 3.x models. `thinking_budget: 0` (the
+    2.5-era way to disable it) is flatly rejected on 3.x; `thinking_level`
+    ("low"/"medium"/"high") is accepted but even "low" still burns real
+    tokens on 3.5/3.6.
+  - Measured latency head-to-head, identical prompt: `gemini-3.5-flash-lite`
+    ~1.7s to first token / ~4s total; `gemini-3.6-flash` ~9s / ~13s. Flash-lite
+    is the only one of the two worth defaulting to for a voice-adjacent
+    assistant, so that is `GEMINI_MODEL`'s default despite Google's own error
+    message steering toward 3.6.
+  - A function-call response part carries a `thoughtSignature` field that
+    Gemini 3.x **requires verbatim** if that exact call is ever replayed in a
+    later turn's history — confirmed live: a hand-built multi-turn request
+    without it came back a hard 400 ("Function call is missing a
+    thought_signature"), not a soft warning as the error text half-implies.
+  - `google_search` (built-in grounding) hit a 429 RESOURCE_EXHAUSTED on the
+    very first attempt on this fresh key/project — the free tier's grounding
+    quota is apparently near zero. Its error text is generic
+    ("You exceeded your current quota...") and never mentions "search" —
+    important, because it means the fallback trigger can't be
+    keyword-matched on the error message; see below.
+- **Built `app/providers/gemini.py`**: `GeminiChat` (talks only to Gemini,
+  raises this project's normal `ProviderError` subclasses) and
+  `EnglishChatProvider` (tries Gemini, falls back to Sarvam on any
+  `ProviderError` raised before anything was yielded -- exactly the
+  "a request may be replayed only until something has crossed the provider
+  boundary" rule this codebase already applies to Sarvam's own voice-model
+  override, reused verbatim rather than reinvented). A 60s cooldown after a
+  Gemini failure, shorter than Sarvam's own 180s override cooldown since a
+  whole-provider outage recovering into normal English answers matters more
+  than not re-probing a single dead model variant.
+- **thoughtSignature handling**: rather than threading a Gemini-specific
+  field through the shared, provider-agnostic message history (used
+  identically by Sarvam and persisted to the chat_messages table), kept it
+  entirely inside `GeminiChat` as a process-lifetime `id -> {name,
+  signature}` cache, populated the moment a call is first issued. Translating
+  history TO Gemini's shape: a call with a cached signature is replayed
+  exactly; a call `GeminiChat` never issued (Sarvam's history, or an id from
+  before this process started) has its structured function-call part
+  dropped and only its text kept, and the corresponding tool-result message
+  folds into a plain "Result: ..." text turn instead of an orphaned
+  `functionResponse`. This trades some structural precision on very old or
+  cross-provider history for needing zero changes to the shared data model —
+  matches this codebase's own stated provider-isolation goal ("swapping
+  vendors is a new module here plus an env var; nothing in the agent, the
+  API layer or the UI changes").
+- **Fixed a real bug in my own first draft before it shipped**: the first
+  version of `stream()` used `client.post()` against the
+  `streamGenerateContent` endpoint and buffered every chunk into a list,
+  yielding them only after the whole response finished — silently defeating
+  the entire point of a streaming call (no first-token latency benefit,
+  despite "streaming" being the reason to use this endpoint at all).
+  Rewrote to use `client.stream()` properly and yield each `ChatChunk` the
+  instant its SSE line arrives, matching `SarvamChat`'s own established
+  shape exactly. Caught by re-reading my own diff against Sarvam's pattern,
+  not by a test — worth being honest that this session did not catch it via
+  automated coverage.
+- **Search fallback**: `google_search` is sent on every Gemini call
+  alongside this app's own `function_declarations` (Gemini 3+ models support
+  combining built-in and custom tools in one request). If that first attempt
+  fails and nothing has been emitted yet, retries once with `google_search`
+  removed — regardless of the error's wording, per the finding above that
+  the real quota error never mentions "search." The model still has its own
+  `web_search`/`fetch_url` function tools in the retried request, so it can
+  reach for those instead. Confirmed this is not hypothetical: it fired on
+  every single live test in this session, because this account's grounding
+  quota is already exhausted.
+- **Wired into `agent.py`**: English routing reuses this file's own existing
+  rule ("the text console stays in English") — `language is None` (always
+  true for typed chat) or a code starting with "en" selects
+  `get_english_chat_provider()`; anything else keeps
+  `get_chat_provider()` (Sarvam), completely untouched by this change.
+- Verified live through the REAL agent loop, not just raw HTTP probes:
+  (1) a plain English question answered correctly via Gemini
+  (`provider: gemini`, `gemini-3.5-flash-lite`); (2) an English request
+  needing a tool call (`add_task`) correctly called the tool, received its
+  result, and continued to a natural follow-up reply — proving the full
+  multi-turn round trip including thoughtSignature persistence actually
+  works, not just a single-shot call; (3) deliberately broke Gemini (a
+  nonexistent model name) and confirmed the SAME turn completed correctly
+  via Sarvam instead, with the expected cooldown log line; (4) confirmed via
+  live INFO-level logs that the search-grounding retry fires and recovers
+  automatically on a real 429, mid-turn, invisibly to the model and the
+  user; (5) confirmed a non-English turn (`language="te-IN"`) reports
+  `provider: sarvam` and never touches Gemini at all.
+- Added `tests/gemini_provider_test.py` (18 offline checks, no credits
+  spent): tool-declaration translation, HTTP-status-to-ProviderError mapping
+  for 401/404/429/5xx, the full `_to_contents` translation matrix (system
+  extraction; a recognised call replayed with its signature; an
+  unrecognised call's structured part dropped while its text and result
+  survive as plain text), and the Sarvam fallback plus its cooldown, against
+  a stubbed transport mirroring `model_failover_test.py`'s own established
+  pattern.
+- Checks: `gemini_provider_test.py` 18/18; full backend suite re-run; five
+  live end-to-end scenarios above.
+- **Not done**: no equivalent "Gemini for X" option exists for non-English
+  languages — this was explicitly scoped to English only, per the request.
+  `GEMINI_CHAT_TIMEOUT` (30s) has not been tuned against a genuinely slow
+  Gemini response in practice, only against the measured-fast lite-tier
+  model; if a future model swap regresses latency, this is the first knob
+  to check.
+
 ### 2026-09-12 · Claude Code · A real "Reminders" section, view/edit/add/delete, both platforms
 - User: add a separate section to view/edit/add/delete reminders on both
   desktop and mobile. Investigated before building: `POST`/`GET`/`DELETE

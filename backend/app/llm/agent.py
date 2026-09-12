@@ -37,7 +37,7 @@ from app.llm.prompts import (
 )
 from app.llm.tools import execute_tool, openai_tools, tool_requires_arguments
 from app.llm.tools_system import SYSTEM_TOOLS_GUIDANCE, environment_note
-from app.providers import get_chat_provider
+from app.providers import get_chat_provider, get_english_chat_provider
 from app.providers.base import ProviderError
 from app.services.context import build_context_snapshot
 from app.services import identity
@@ -619,8 +619,15 @@ async def run_turn(
     if wanted:
         yield {"type": "surface", "data": wanted}
 
+    # English replies get their own model selection (Gemini, by default, with
+    # Sarvam as its own per-turn fallback -- see get_english_chat_provider);
+    # every other language keeps Sarvam's whole stack unchanged. Typed chat
+    # never sets `language` at all -- "the text console stays in English" is
+    # already this file's own rule a few lines up for prompt-building, and
+    # the same default applies here for the same reason.
+    is_english = language is None or language.split("-")[0].lower() == "en"
     try:
-        provider = get_chat_provider()
+        provider = get_english_chat_provider() if is_english else get_chat_provider()
     except ProviderError as exc:
         yield {"type": "error", "data": {"message": str(exc)}}
         return

@@ -49,6 +49,12 @@ async def main():
     from app.db.database import db
     from app.llm.agent import run_turn
 
+    # This file tests Sarvam specifically (see its own docstring), including
+    # its reasoning_content streaming -- pin English routing here regardless
+    # of get_english_chat_provider's own default (Gemini, since 2026-09-12),
+    # which has no visible reasoning text to stream at all.
+    settings.jarvis_english_llm = "sarvam"
+
     print(f"\nchat model : {settings.sarvam_chat_model}")
     print(f"max_tokens : {settings.jarvis_max_tokens}")
     print(f"key set    : {settings.has_api_key}")

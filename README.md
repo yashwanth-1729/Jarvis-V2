@@ -343,6 +343,8 @@ do not put them in this README or commit them.
 | `SARVAM_TTS_PACE`, `SARVAM_TTS_TEMPERATURE` | Existing voice controls |
 | `JARVIS_ENGLISH_TTS` | Engine for English speech: `piper` (local, default) or `sarvam` (cloud). Non-English is always Sarvam. |
 | `JARVIS_PIPER_MODEL`, `JARVIS_PIPER_PACE` | Piper voice path (default `models/piper/en_US-ryan-high.onnx`) and global speed nudge |
+| `JARVIS_ENGLISH_LLM` | Model for English REPLY TEXT: `gemini` (default, falls back to Sarvam per turn on failure) or `sarvam`. Non-English is always Sarvam's whole stack. |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini auth and model id (default `gemini-3.5-flash-lite` — see [docs/gemini-chat.md](docs/gemini-chat.md)) |
 | `JARVIS_CLIENT_OWNED_DATA` | Android IndexedDB/SQLite bridge mode |
 | `JARVIS_DB_PATH` | SQLite location |
 | `JARVIS_SYSTEM_TOOLS`, `JARVIS_SCHEDULER_ENABLED` | Desktop capabilities |
@@ -434,6 +436,37 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Gemini answers English chat, with Sarvam as its own
+  fallback.** New `app/providers/gemini.py`: `EnglishChatProvider` tries
+  Gemini first for any English reply (typed chat's default, or voice mode
+  with English selected), and replays the same request on Sarvam if Gemini
+  errors before yielding anything — with a 60s cooldown so an outage doesn't
+  make every turn pay Gemini's timeout. Every other language is completely
+  unaffected: still Sarvam's whole stack, chosen by `agent.py`'s own
+  existing "the text console stays in English" rule. STT stays Sarvam and
+  TTS stays Piper/Sarvam regardless of which model wrote the reply text.
+  Google Search grounding is sent on every Gemini call alongside this app's
+  own tools; a failed grounding attempt retries once without it, so the
+  model still has `web_search`/`fetch_url` to reach for — this fired live on
+  every test this session, since the project's Gemini key has no meaningful
+  grounding quota yet. Verified against the real API before writing any
+  provider code (Google's own docs and model names both drifted mid-session
+  — `gemini-2.5-flash` already 404s for new keys) and verified through the
+  real agent loop afterward: a plain English reply, a full multi-turn tool
+  call with Gemini's required `thoughtSignature` correctly persisted and
+  replayed, a deliberately broken Gemini falling back to Sarvam cleanly, and
+  a Telugu turn confirmed never touching Gemini at all. New:
+  `gemini-3.5-flash-lite` measured ~4s total per reply vs Sarvam's typical
+  sub-second — the first thing to check if voice responsiveness ever
+  regresses. `JARVIS_ENGLISH_LLM=gemini|sarvam`, `GEMINI_API_KEY`,
+  `GEMINI_MODEL` in `.env` — see
+  [docs/gemini-chat.md](docs/gemini-chat.md). Checks: 18 new offline checks
+  in `tests/gemini_provider_test.py` (message translation, error mapping,
+  the Sarvam fallback and its cooldown, against a stubbed transport); full
+  backend suite green afterward (two existing tests —
+  `identity_turn_test.py`, `integration_test.py` — updated to explicitly pin
+  Sarvam, since both test Sarvam-specific behavior that a default English
+  provider switch would otherwise silently stop exercising).
 - **2026-09-12 — A real Reminders section: view, add, edit, delete, on both
   platforms.** `POST`/`GET`/`DELETE /api/reminders` already existed but were
   never wired to any UI; added the missing `PATCH /api/reminders/{id}` and

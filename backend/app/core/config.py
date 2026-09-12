@@ -70,6 +70,17 @@ class Settings(BaseSettings):
     )
     sarvam_temperature: float = Field(default=0.2, alias="SARVAM_TEMPERATURE")
     sarvam_chat_timeout: float = Field(default=45.0, alias="SARVAM_CHAT_TIMEOUT")
+
+    # --- Gemini (English chat only; Sarvam remains the whole stack for every
+    # other language) ---------------------------------------------------
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    # gemini-3.5-flash-lite measured ~1.7s to first token / ~4s total on a
+    # plain conversational prompt; gemini-3.6-flash measured ~9s / ~13s on
+    # the same prompt (its "thinking" overhead is much larger and not fully
+    # suppressible via thinking_config). For a voice-adjacent assistant the
+    # lite tier is the only one of the two worth using by default.
+    gemini_model: str = Field(default="gemini-3.5-flash-lite", alias="GEMINI_MODEL")
+    gemini_chat_timeout: float = Field(default=30.0, alias="GEMINI_CHAT_TIMEOUT")
     #: Large typed prompts need longer for the provider's first output, especially
     #: after a tool cycle. This applies only when the current user message crosses
     #: ``jarvis_typed_stream_chars``; ordinary and voice turns keep the fast limit.
@@ -121,6 +132,16 @@ class Settings(BaseSettings):
     #: because Piper's ONNX stack has no arm64 Chaquopy wheel.
     jarvis_english_tts: Literal["piper", "sarvam"] = Field(
         default="piper", alias="JARVIS_ENGLISH_TTS"
+    )
+    #: Which model answers when the reply language is English. "gemini" tries
+    #: Gemini first and falls over to Sarvam for that turn if it errors or
+    #: times out (see `providers.gemini.EnglishChatProvider`); "sarvam" keeps
+    #: English on the same stack as every other language. STT and TTS are
+    #: unaffected either way — this only ever changes which model writes the
+    #: reply text. Non-English replies always use Sarvam's whole stack,
+    #: regardless of this setting.
+    jarvis_english_llm: Literal["gemini", "sarvam"] = Field(
+        default="gemini", alias="JARVIS_ENGLISH_LLM"
     )
     #: Path to the Piper .onnx voice, relative to backend/ or absolute. The
     #: high-quality "ryan" voice is the default; a .onnx.json of the same name
@@ -271,6 +292,10 @@ class Settings(BaseSettings):
     @property
     def has_api_key(self) -> bool:
         return bool(self.sarvam_api_key.strip())
+
+    @property
+    def has_gemini_key(self) -> bool:
+        return bool(self.gemini_api_key.strip())
 
     @property
     def sync_configured(self) -> bool:

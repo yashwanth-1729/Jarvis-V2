@@ -83,6 +83,7 @@ async def main() -> int:
 
     # --- identity turn: must short-circuit before the provider ------------
     agent.get_chat_provider = lambda: _ProviderMustNotBeCalled()  # type: ignore[assignment]
+    agent.get_english_chat_provider = lambda: _ProviderMustNotBeCalled()  # type: ignore[assignment]
 
     events = [event async for event in agent.run_turn("My name is Rahul, who are you?")]
     kinds = [event["type"] for event in events]
@@ -154,7 +155,12 @@ async def main() -> int:
         reached_provider = True
         return _FakeProvider()
 
+    # A plain-English turn (no `language` argument, same as typed chat)
+    # now resolves the provider via `get_english_chat_provider` -- see
+    # 2026-09-12's Gemini-for-English routing -- so both getters need the
+    # stub; only one of them will actually be called for this turn.
     agent.get_chat_provider = _fake_get_chat_provider  # type: ignore[assignment]
+    agent.get_english_chat_provider = _fake_get_chat_provider  # type: ignore[assignment]
     ordinary_events = [event async for event in agent.run_turn("how are you doing today")]
     check("an ordinary turn still reaches the chat provider", reached_provider)
     check(
