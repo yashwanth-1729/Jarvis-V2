@@ -128,6 +128,63 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · jarvis-oss scaffold: SLDT sync core (stage 1)
+- User is building an open-source edition of JARVIS (desktop + Android) that
+  swaps the paid app's Supabase mirror for **SLDT** (server-independent
+  encrypted sync over a publicly addressable object store -- GitHub Contents
+  API in this stage) plus BYOK for LLM/STT/TTS. Agreed scope with the user:
+  new tree at `jarvis-oss/` in this same repo (not a separate repo, not a
+  runtime flag inside the existing app), built in stages -- this entry is
+  stage 1 only: the sync engine as a standalone, tested library, no UI.
+- Chose TypeScript over Python for the engine after reading
+  `backend/app/services/sync.py`: that file explains the *paid* app's real
+  sync engine was retired from Python and now lives entirely in
+  `frontend/src/lib/syncClient.ts`, because Tauri desktop and the Android
+  build share the same webview frontend. SLDT slots into that same
+  integration point on both platforms with no native code, so it follows
+  that precedent instead of reinventing it in Python.
+- Built `jarvis-oss/sldt/src/`: `identity.ts` (Argon2id via `hash-wasm`,
+  domain-separated encryption/auth keys, `SLDT:<datasetId>:<secret>` recovery
+  code), `crypto.ts` (AES-256-GCM via Web Crypto, fixed-bucket padding,
+  SHA-256/HMAC), `canonicalJson.ts` (key-sorted JSON for signing),
+  `objects.ts` (per-object encrypted envelope), `manifest.ts` (signed,
+  hash-chained, revision-checked manifest), `conflict.ts`
+  (revision-then-deviceId tiebreak, never wall-clock), `store.ts` (`Store`
+  CAS interface, `InMemoryStore`, and a `GitHubStore` shaped for the real
+  Contents API but fed its request function by the caller -- no live network
+  code exists yet), `sync.ts` (the pull/resolve/push/CAS-retry algorithm).
+- Two real bugs found and fixed while writing `tests/sync.test.ts` (worth
+  flagging since they're the kind that "look done" until traced by hand):
+  (1) a conflict winner that keeps its own revision number is invisible to a
+  revision-only "did anything change" check, so a losing device's next sync
+  would silently keep stale content forever -- fixed by tracking a
+  `knownHash` per object and comparing hashes, not just revisions
+  (`sync.ts`); (2) the per-object CAS write used a hardcoded `null` expected
+  version, which broke on every second edit to the same object once the
+  object already existed remotely -- fixed by threading the store's real
+  version token (`storeVersion`) through pull/push. Also fixed integrity
+  hashing: it was computed by parsing the envelope back to JSON first, so a
+  genuinely corrupted/bit-rotted object crashed the whole sync with a
+  `SyntaxError` instead of being reported as `CorruptObject` -- hash is now
+  over the raw stored bytes, no parsing on that path.
+- Verified: `npm test` in `jarvis-oss/sldt/` -- 5 files, 51 assertions, 0
+  failures, no network calls and no provider credits spent. Covers: first
+  device publish, cross-device pull, concurrent-edit conflict resolution and
+  convergence, tombstone delete propagation (including a late-joining third
+  device not resurrecting the delete), wrong-key rejection (`TamperDetected`),
+  and corrupted-ciphertext detection. `npx tsc --noEmit` is clean. This is
+  source-level verification only -- nothing has been run against a live
+  GitHub repo, and no proxy/UI/app exists yet to verify on-device.
+- Updated `README.md` (top pointer + Maintenance entry) and
+  `docs/architecture.md` (note in "Record lifecycle and synchronization")
+  per this repo's documentation rule. Nothing under `backend/`, `frontend/`,
+  or `native/` was touched -- the paid app's Supabase path is unaffected.
+- **Left for the next stage** (not started): the stateless write proxy;
+  wiring `sync.ts` into an actual frontend/IndexedDB persistence layer for
+  `SyncState` and the local object set; any desktop/Android UI (pairing,
+  recovery code entry, store configuration); BYOK settings for LLM/STT/TTS
+  providers. See `jarvis-oss/sldt/README.md` for the full deferred list.
+
 ### 2026-09-13 · Claude Code · Desktop backend watchdog -- survives a mid-session crash
 - User's desktop app showed "Backend unreachable"; the window had been open
   since before an unrelated session killed the backend process for testing.

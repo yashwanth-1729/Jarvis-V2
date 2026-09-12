@@ -12,6 +12,12 @@ ranked retrieval, temporal validity, review, correction history, action recall a
 the readable Markdown vault now operate as one local-first system. See the
 [JARVIS 3.0 release note](docs/releases/3.0.0.md).
 
+An open-source variant is being built alongside this app under
+[`jarvis-oss/`](jarvis-oss/), replacing the Supabase-backed sync mirror with
+SLDT (server-independent encrypted sync over a publicly addressable object
+store) and BYOK provider credentials. It does not modify this app or its data
+path; see [`jarvis-oss/sldt/README.md`](jarvis-oss/sldt/README.md) for status.
+
 ## Run and build
 
 From the repository root in PowerShell:
@@ -435,6 +441,26 @@ a boundary, protocol, dependency, provider, storage policy or platform behavior
 changes. Record checks actually run and distinguish source changes from installed
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
+
+- **2026-09-13 — Open-source variant scaffolded: SLDT sync core.** Started
+  `jarvis-oss/`, a parallel open-source edition of the desktop/Android apps
+  that swaps the paid app's Supabase mirror for SLDT — an encrypted sync
+  protocol over a publicly addressable, "dumb" object store (GitHub Contents
+  API in this stage), with no database or session server. This entry covers
+  stage 1 only: `jarvis-oss/sldt/` is a standalone TypeScript library —
+  Argon2id identity/key derivation, AES-256-GCM per-object encryption, a
+  signed and hash-chained manifest with replay/rollback detection,
+  deterministic (revision-then-deviceId) conflict resolution, tombstone
+  deletes, and the CAS sync algorithm — with no UI, no proxy server, and no
+  wiring into the frontend, desktop, or Android builds yet. Verified with
+  `npm test` (5 files, 51 assertions, no network/no credits): first-device
+  publish, cross-device pull, concurrent-edit convergence, delete
+  propagation including a late-joining device not resurrecting a tombstone,
+  wrong-key rejection, and corrupted-ciphertext handling that reports the
+  bad object rather than crashing the sync cycle. `npx tsc --noEmit` is
+  clean. Nothing in the existing paid app (`backend/`, `frontend/`,
+  `native/`) was touched. See [`jarvis-oss/sldt/README.md`](jarvis-oss/sldt/README.md)
+  for what's deferred (proxy, UI, BYOK, persistence wiring).
 
 - **2026-09-13 — Desktop backend now survives its own crashes.** JARVIS's
   desktop app already auto-started its Python backend on launch

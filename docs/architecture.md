@@ -126,6 +126,15 @@ The Supabase mirror adds `memories.expires_at`, `ideas.page_uid` and the
 `note_pages` table. Legacy PRIVATE memory categories migrate to LONG_TERM; the
 current app exposes no public/private category control.
 
+This mirror is specific to the paid app. The open-source variant under
+`jarvis-oss/` replaces it with SLDT (`jarvis-oss/sldt/`): a signed, versioned
+manifest plus per-object AES-256-GCM envelopes on a publicly addressable
+object store (a GitHub repo in this stage) instead of Supabase, with
+deterministic revision+deviceId conflict resolution in place of the
+`updated_at` comparison above. As of this note only the sync engine itself
+exists (unit-tested, no network calls); no proxy, UI, or app wiring is built
+yet, and neither this app's boundaries nor its Supabase path are affected.
+
 ## Systematic memory boundary
 
 The `memories` row remains the durable synced unit, but its content is now a
