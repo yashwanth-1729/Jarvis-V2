@@ -128,6 +128,68 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Root-caused and fixed segment_test.py's flakiness
+- User asked to investigate why `segment_test.py` had failed intermittently
+  during this session's test runs (it was previously chalked up in an
+  earlier session's notes to "the account ran out of credit during
+  testing" -- true then, but not the whole story, as this investigation
+  found).
+- Reproduced by actually running it standalone rather than trusting the
+  full-suite log: hit `PermissionError: ... jarvis_segment_test.db ...
+  being used by another process` on the very first line. Traced the lock
+  to two live `python.exe tests/segment_test.py` processes
+  (`Get-CimInstance Win32_Process`) that had been running, unkilled, for
+  ~40+ minutes since an earlier background full-suite run -- confirming a
+  process from that EARLIER run was still stuck, not freshly hung.
+- **Root cause**: `run_cases()`'s two websocket loops used
+  `while time.time() < deadline: frame = socket.receive_json()`. Starlette's
+  `WebSocketTestSession.receive_json()` is a plain blocking call with no
+  timeout parameter of its own (confirmed via `inspect.signature` --
+  it does not accept one) -- it blocks on an anyio memory-stream handoff to
+  the app's own websocket handler. The `deadline` variable only gets
+  re-checked BETWEEN calls; if the SINGLE call currently in flight never
+  returns (a live-provider stall, or anything that stops the handler from
+  ever sending another frame), the surrounding `while` loop's timeout is
+  worthless -- confirmed exactly this shape live, not assumed from reading
+  the code.
+- Also root-caused why one hung run poisons every run after it: the file
+  lock on the shared `jarvis_segment_test.db` from a stuck process
+  survives until that process is killed, so any later invocation
+  (including a perfectly healthy new run) fails at its very first line,
+  before doing anything -- this is very likely why the same file used to
+  show up as "flaky": one real hang early in a session, from a live-API
+  stall, could make every subsequent run in that session fail identically
+  for a completely different, secondary reason.
+- **Fix** (test file only, no app code touched): added `_receive()` -- runs
+  `socket.receive_json()` in a one-worker `ThreadPoolExecutor` and calls
+  `future.result(timeout=...)`, so a hung call actually times out instead
+  of blocking the surrounding loop forever. Both while-loops now pass
+  `min(30, deadline - time.time())` per call instead of relying on the
+  deadline alone, and treat a timeout as a clean, specific check failure
+  ("server kept responding (no single frame hung)") rather than hanging.
+  Also hardened the startup: unlinking a locked leftover temp db now falls
+  back to a pid-suffixed path for this run instead of crashing before the
+  test even starts, so one still-stuck process can no longer cascade-fail
+  every run after it.
+- **The underlying thread cannot be cancelled** -- a blocking socket read
+  has no cooperative cancellation point -- so a timed-out `_receive()`
+  leaves its worker thread blocked forever, same as before, just now
+  isolated to one throwaway thread instead of the whole test. Since that
+  thread is non-daemon, letting the process exit normally would have hung
+  it anyway (the exact behavior just diagnosed). Fixed by calling
+  `os._exit(code)` in `if __name__ == "__main__":` instead of a plain
+  `raise SystemExit`, after flushing stdout -- deliberate use of a hard
+  exit, same reasoning `tools_system.py`'s `_kill_tree` already documents
+  for an unresponsive process: "the fallback still stops us waiting on it
+  forever."
+- Verified, not assumed: killed the two ~40-minute-old stuck processes,
+  confirmed clean via `tasklist`, then ran the fixed file twice back to
+  back -- both times all 5 checks passed AND the process count returned to
+  baseline within 2 seconds of exit (no orphan), confirmed via `tasklist`
+  after each run.
+- Full backend suite re-run after the fix; see this entry's own checks line
+  once the run this session started finishes.
+
 ### 2026-09-12 · Claude Code · Confirm-then-act gate on close_app/browser_submit
 - Follow-up to the computer-control work below: user asked to build the
   permission-confirmation UI the `risk` field was added for (this session's

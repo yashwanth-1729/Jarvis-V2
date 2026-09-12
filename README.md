@@ -430,6 +430,27 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Fixed `segment_test.py`'s real hang, not just its symptom.**
+  User asked to investigate its intermittent test-suite failures. Root cause:
+  its websocket loops called Starlette's `WebSocketTestSession.receive_json()`,
+  a blocking call with no timeout of its own, inside a
+  `while time.time() < deadline` loop — the deadline only gets checked
+  *between* calls, so one call that never returns (a live-provider stall)
+  hangs forever regardless of the deadline. Confirmed live, not assumed: two
+  `segment_test.py` processes were still running, unkilled, ~40 minutes after
+  an earlier test run — and their leftover lock on the shared temp SQLite
+  file was independently causing every later run to fail immediately with
+  `PermissionError` before doing anything, which is why the failure looked
+  different (and "flaky") each time. Fixed in the test file only: each
+  `receive_json()` call now runs in a bounded worker thread
+  (`concurrent.futures`) with a real per-call timeout, a timeout is reported
+  as a specific check failure instead of hanging, a locked leftover temp db
+  falls back to a fresh path instead of crashing the next run, and the
+  script force-exits (`os._exit`) instead of waiting on a thread blocked on
+  a socket read that can never be cancelled. Verified by killing the stuck
+  processes and running the fixed file twice — both times all 5 checks
+  passed and the process count returned to baseline within 2 seconds, no
+  orphan left behind.
 - **2026-09-12 — Computer control: confirm-then-act gate on `close_app` and
   `browser_submit`.** These are the only two tools tagged `risk="high"` in
   the computer-control layer added earlier the same day — closing a process
