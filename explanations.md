@@ -128,6 +128,127 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Agentic computer control (UI Automation, browser, OS-level)
+- User: implement structured computer control for JARVIS -- Windows UI/
+  accessibility control, browser DOM control, native OS automation -- as a
+  full production-quality feature, not a proof of concept, with an explicit
+  "do not ask me questions, make the engineering decisions yourself" mandate.
+  Inspected the existing `tools.py`/`tools_system.py` architecture first
+  (`ToolSpec`/`ToolOutcome`/`execute_tool` dispatch, lazy heavy-dep imports so
+  Android/Chaquopy never pays for desktop-only deps, `capability="system"`
+  gated by `settings.system_tools_enabled`) and built on it rather than
+  inventing a parallel system.
+- **New modules** (`backend/app/llm/`): `tools_automation_common.py` (shared
+  `ElementRegistry` -- generation-stamped `[e1.3]` references, replacing
+  screenshots/coordinates with structured lookups that go stale automatically
+  when re-inspected rather than resolving against a moved table);
+  `tools_ui_automation.py` (pywinauto/Windows UI Automation: list/focus
+  windows, inspect, find, click, set/get text, press key, toggle, select,
+  scroll, expand/collapse, window actions); `tools_browser.py`
+  (Playwright/Chromium: open, navigate, inspect, find, click, type, submit,
+  get text, current URL, title); `tools_os_control.py` (psutil/pywin32:
+  list/close processes, launch apps, open paths, send hotkeys, clipboard
+  get/set). New deps in `requirements.txt`: `pywinauto`, `pywin32`, `psutil`,
+  `playwright` (+ `playwright install chromium`, ~300MB, done in this venv).
+  27 of ~45 written functions registered as `ToolSpec`s in `tools.py` --
+  deliberately not all of them, matching the project's own documented
+  "salience contagion"/prompt-bloat lesson and the `GetDashboardSummaryInput`
+  precedent; unregistered functions (`ui_scroll`, `ui_expand_collapse`,
+  `ui_window_action`, multi-tab browser mgmt, file upload) exist and work,
+  just aren't in the model's tool list yet. Added `risk: low|medium|high` to
+  `ToolSpec` for a future permission gate -- structure only, no enforcement
+  UI built (out of scope per the task, and the user's own standing "optimize
+  for working now, not production hardening" instruction).
+- **Real bugs found via live testing, not assumed correct from reading code**:
+  (1) `pywinauto`'s `UIAWrapper` (from `.children()`) has no `.exists()`
+  method -- only `WindowSpecification` does; fixed the liveness check in
+  `_resolve()` to use `.is_visible()`, verified it correctly returns `False`
+  after a real window close. (2) `type_keys()`'s default `pause=0.01`
+  corrupted text on modern Windows 11 Notepad's "Document" control (which has
+  no `set_edit_text`) -- found via a direct byte-for-byte comparison test;
+  fixed at `pause=0.03`, and `ui_set_text` now reads back what it wrote and
+  fails loudly if it doesn't match, rather than trusting the write succeeded.
+  (3) The original `ElementRegistry.get()` misclassified never-issued
+  references as stale due to string-prefix parsing; fixed with a persistent
+  `_ever_issued` set that survives table resets, so "never existed" and
+  "existed, but superseded" get correctly different error messages -- this
+  distinction was explicitly requested (model should know whether to give up
+  vs. re-inspect). (4) Playwright 1.62.0 (the installed version) has removed
+  `page.accessibility.snapshot()` -- confirmed via `AttributeError`, not
+  assumed from training data; switched to `locator.aria_snapshot()` (a
+  YAML-like text format) with a new regex line-parser (`_ARIA_LINE`) since
+  it's text, not a traversable dict. (5) A clipboard `try/finally:
+  CloseClipboard()` executed even when the preceding `OpenClipboard()` itself
+  had raised, producing a misleading masking error ("Thread does not have a
+  clipboard open") instead of the real cause -- found via
+  `smoke_test.py`'s "no handler raised" probe; fixed with
+  `_open_clipboard_with_retry()` (5 attempts, 0.05s apart -- clipboard
+  contention from other processes is routine and brief on Windows) called
+  BEFORE the try/finally, so close only ever runs after a confirmed open.
+- **Data-safety check performed before trusting `close_app`'s test coverage**:
+  `computer_control_test.py`'s Notepad scenario launches Notepad, types into
+  it, then calls `close_app(name_contains="notepad", all_matches=True)`. A
+  pre-existing, genuinely unsaved "*students.txt - Notepad" window (real user
+  data, not created by the test) kept appearing in `ui_list_windows` output
+  during test runs and would have matched that same close call. Verified,
+  rather than assumed, that this was safe: `Stop-Process`-killed the process
+  and relaunched Notepad -- Windows 11's modern Notepad has its own local
+  session-restore/autosave independent of process lifetime, and the
+  "*students.txt" tab came back intact. No data was destroyed by testing,
+  but flagging this for whoever runs this test suite next: it does forcibly
+  terminate every Notepad-titled window it finds, and relies on Notepad's own
+  recovery feature as the safety net, not on the test itself being gentle.
+- **`computer_control_test.py` (new, 24 checks)**: TEST 1/4 (launch Notepad
+  via the OS tool, not a UI click -> inspect -> find the editor -> set text ->
+  read back exactly what was typed -> close), TEST 5 (a never-issued
+  reference raises `ReferenceNotFoundError` with an actionable message; a
+  reference superseded by a later inspection raises `StaleReferenceError`),
+  TEST 3 (list windows -> focus Calculator -> inspect its real structure),
+  TEST 2 (open a real browser session -> navigate to example.com -> inspect
+  the accessibility tree -> find a link -> read its text -> click it ->
+  verify the URL actually changed). All 24 pass when no other window with an
+  ambiguous matching title (e.g. another "Notepad") is already open on the
+  machine.
+- **Found and diagnosed, not chased further, a real environment limitation**:
+  with a pre-existing "*students.txt - Notepad" window open, `ui_inspect`'s
+  substring window-title match landed on that window instead of the freshly
+  launched blank one, and `ui_set_text` failed with `SendInput() inserted
+  only 0 out of 2 keyboard events`. Root cause: Windows blocks a background/
+  non-foreground process from injecting keystrokes via `SendInput` into a
+  window that isn't the true OS foreground window -- confirmed reproducible
+  (failed identically on a second run with the same ambiguous window
+  present) and confirmed NOT a code defect (passed cleanly, 24/24, once no
+  ambiguous same-titled window was open, i.e. the target window could
+  actually receive focus). This is a genuine platform constraint on any
+  SendInput-based automation running from an automated/background shell, not
+  something `ui_set_text`'s own logic can work around -- `ui_focus_window`
+  should generally precede text entry for this reason. Documented in
+  `docs/computer-control.md` as a known limitation rather than silently
+  retried away.
+- Wrote `docs/computer-control.md` (concise, per the task's own "not huge
+  unnecessary documentation" instruction): why three modules instead of one,
+  the reference-registry mechanism, risk categorization, exactly which 27
+  functions are registered as tools and which ~18 exist but aren't, how the
+  model picks a tool (description-driven, same as every other JARVIS tool,
+  no separate router), example tool calls, and the limitations above.
+- Checks: full backend suite green except `computer_control_test.py`
+  (environmental, see above -- passes cleanly with a clean window state) and
+  `reminder_lead_test.py` (pre-existing, unrelated -- confirmed in an earlier
+  session via `git stash`, not re-litigated here).
+  `smoke_test.py` extended with wiring probes for `list_processes`,
+  `ui_list_windows`, `clipboard_get`, plus a documented
+  `_NOT_SAFE_TO_PROBE` exclusion list for the remaining new tools (disruptive
+  side effects, or requiring a live element reference the smoke test can't
+  manufacture safely). Backend-only change; the Tauri desktop app spawns this
+  same backend from source (confirmed earlier this session, see the sync-
+  architecture entry below), so no rebuild should be required, but a live
+  desktop-build confirmation was not separately performed this pass.
+- **Not built, out of scope for this pass, listed here so it isn't
+  rediscovered as new work**: the permission-confirmation UI the `risk`
+  field exists for; a macOS/Linux OS-control backend; wiring the remaining
+  ~18 unregistered functions into the tool list when a real use case needs
+  them.
+
 ### 2026-09-12 · Claude Code · Desktop switched to mobile's sync architecture; backend engine removed
 - User: desktop sync 'seems past one', asked to remove it fully and adopt
   mobile's approach instead. Before touching anything, surfaced a real risk

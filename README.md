@@ -151,6 +151,7 @@ flowchart TD
 | Agent | `backend/app/llm/agent.py`, `prompts.py` | History, contextual prompt, model events, tool cycles |
 | Memory intelligence | `services/memory.py`, `frontend/src/lib/memory.ts` | Markdown records, type/validity/provenance, candidate review, ranked retrieval and named action history |
 | Tools | `backend/app/llm/tools.py`, `tools_system.py` | Input validation and actual actions |
+| Computer control | `tools_ui_automation.py`, `tools_browser.py`, `tools_os_control.py` | Windows UI Automation, browser DOM control, OS-level process/clipboard/hotkey control — see [docs/computer-control.md](docs/computer-control.md) |
 | Speech services | `services/speech.py`, `voice_pipeline.py` | Shared pronunciation/pace policy, bounded synthesis and delivery |
 | Provider adapters | `backend/app/providers/` | Separate chat, STT, TTS protocols; Sarvam implementations |
 | Local persistence | `backend/app/db/` | SQLite WAL, serialized writer, read pool, migrations and CRUD |
@@ -218,10 +219,12 @@ depend on a remote embedding request, a native Android vector extension or an
 additional provider, preserving offline operation and voice latency.
 
 There are 19 core tools for tasks, schedules, memories/ideas, brief generation,
-weather, search/fetch, reminders, notification policy and voice/language selection. Six additional
-shell/filesystem tools are offered only when desktop system tools are enabled.
-Tool calls remain sequential; destructive actions are not speculated or moved
-into parallel execution by the voice pipeline.
+weather, search/fetch, reminders, notification policy and voice/language selection.
+Six shell/filesystem tools plus 27 computer-control tools (Windows UI Automation,
+browser DOM control, OS-level process/clipboard/hotkey control — see
+[docs/computer-control.md](docs/computer-control.md)) are offered only when desktop
+system tools are enabled. Tool calls remain sequential; destructive actions are not
+speculated or moved into parallel execution by the voice pipeline.
 
 Task deletion uses actual matching records and confirmation-count checks. UI
 editing resolves stable record UIDs. Voice tool surfaces carry structured
@@ -427,6 +430,57 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Agentic computer control: UI Automation, browser, and OS-level
+  automation.** JARVIS can now act on the machine itself, not just its own
+  records: click and type into real Windows applications, drive a real browser
+  tab, and launch/close processes, read/write the clipboard, and send hotkeys —
+  gated by the same `system_tools_enabled` flag as the existing shell tools
+  (off on Android). Three new modules under `backend/app/llm/`:
+  `tools_ui_automation.py` (pywinauto/Windows UI Automation),
+  `tools_browser.py` (Playwright/Chromium DOM), `tools_os_control.py`
+  (psutil/pywin32 processes, clipboard, hotkeys, launching). A shared
+  `tools_automation_common.py` gives both element-tree modules one reference
+  scheme: `ui_inspect`/`browser_inspect` return short-lived `[e1.3]`-style ids
+  instead of coordinates, which go stale automatically the moment the UI is
+  re-inspected (`StaleReferenceError`) and are rejected outright if never
+  issued (`ReferenceNotFoundError`) — the model is told to re-inspect rather
+  than silently handed whatever now occupies that slot. Screenshots/vision are
+  not the mechanism; every action resolves a real accessibility-tree/DOM
+  element by role, name, text, or automation id first. 27 of the ~45 written
+  functions are registered as LLM tools (the rest — `ui_scroll`,
+  `ui_expand_collapse`, `ui_window_action`, multi-tab browser management, file
+  upload — exist and work but aren't wired into the tool list yet, matching
+  this codebase's existing discipline against per-turn prompt bloat). Every
+  new `ToolSpec` carries a `risk: low|medium|high` field for a future
+  permission-confirmation UI; nothing enforces it yet. Full details, example
+  tool calls, and limitations: [docs/computer-control.md](docs/computer-control.md).
+  New dependencies: `pywinauto`, `pywin32`, `psutil`, `playwright` (run
+  `playwright install chromium` once after installing requirements).
+  Real bugs found and fixed via live testing during this work, not
+  assumed away: `pywinauto`'s `UIAWrapper` has no `.exists()` (fixed liveness
+  check to use `.is_visible()`); the default `type_keys()` pacing corrupted
+  text on modern Notepad's "Document" control (fixed pacing, added
+  post-write verification); Playwright removed `page.accessibility.snapshot()`
+  in the installed version, replaced with `locator.aria_snapshot()` plus a
+  small regex parser; a clipboard `finally: CloseClipboard()` ran even when
+  `OpenClipboard()` itself had failed, producing a masking error — fixed with
+  a retry-then-guard helper.
+  Checks: `tests/computer_control_test.py` (new, 24 checks against a real
+  Notepad, Calculator, and live browser session — launch/inspect/type/verify/
+  close, browser navigate/inspect/click/verify-URL-changed, and both
+  reference-error scenarios) all pass when no ambiguous same-titled window is
+  already open; `smoke_test.py` extended with wiring probes for the new tools.
+  Full backend suite otherwise green (`reminder_lead_test`'s pre-existing,
+  unrelated failure aside — see explanations.md). **Known limitation, found
+  during testing, not fixed**: `SendInput`-based keystroke injection requires
+  the target window to be the true OS foreground window; a background/
+  automated caller or an ambiguous window-title match onto the wrong window
+  can make `ui_set_text`/`ui_click` report a clean, specific failure rather
+  than typing into the wrong place — verified this does not affect correctness
+  when the target window genuinely has focus. Not yet exercised on a live
+  desktop build (backend-only change; the Tauri desktop app spawns this same
+  backend from source, so no rebuild should be required, but that has not
+  been separately confirmed this pass).
 - **2026-09-12 — Desktop is client-owned-data now; the backend sync engine
   is gone:** Desktop's Python backend used to own SQLite directly and sync
   it to Supabase on its own timer (`app/services/sync.py`), with no status

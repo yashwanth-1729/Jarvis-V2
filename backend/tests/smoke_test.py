@@ -649,10 +649,53 @@ async def main() -> int:
         "edit_file": {"path": "no-such-file-probe.txt", "old_text": "a", "new_text": "b"},
         "list_dir": {"path": "."},
         "search_files": {"query": "probe", "path": "storage"},
+        # Computer-control: read-only and fast enough to probe like everything
+        # above -- no visible side effect on the machine running the test.
+        "list_processes": {},
+        "ui_list_windows": {},
+        "clipboard_get": {},
     }
 
-    missing = [s.name for s in TOOL_REGISTRY if s.name not in probes]
-    check("every registered tool has a probe", not missing, missing)
+    #: Computer-control tools NOT probed above, and why. Unlike `run_command`
+    #: (a probe as harmless as `echo`) or `write_file` (a probe file cleaned up
+    #: below), these either visibly disrupt whatever the person running this
+    #: test is doing right now, or need a real target that cannot be
+    #: guaranteed present -- so smoke_test asserts every tool is *accounted
+    #: for*, not that every tool is *exercised*. Real coverage for these lives
+    #: in tests/computer_control_test.py, which drives real Notepad/browser
+    #: instances end to end instead of pretending to with a probe dict.
+    _NOT_SAFE_TO_PROBE = {
+        "launch_app": "would actually open an application on the real desktop",
+        "close_app": "would actually terminate a real process",
+        "open_path": "would actually open a file/folder/URL on the real desktop",
+        "send_hotkey": "would send real input to whatever window has focus right now",
+        "clipboard_set": "would silently overwrite the user's real clipboard content",
+        "ui_focus_window": "needs a real target window; none is guaranteed open",
+        "ui_inspect": "needs a real target window; none is guaranteed open",
+        "ui_find_element": "needs a real target window; none is guaranteed open",
+        "ui_click": "needs a live [eN] reference from a prior ui_inspect",
+        "ui_set_text": "needs a live [eN] reference from a prior ui_inspect",
+        "ui_get_text": "needs a live [eN] reference from a prior ui_inspect",
+        "ui_press_key": "needs a live [eN] reference from a prior ui_inspect",
+        "ui_toggle": "needs a live [eN] reference from a prior ui_inspect",
+        "ui_select": "needs a live [eN] reference from a prior ui_inspect",
+        "browser_open": "launches a real (if isolated) browser window every run -- slow and disruptive for a smoke test",
+        "browser_navigate": "needs a browser_open call first; see browser_open",
+        "browser_inspect": "needs a browser_open call first; see browser_open",
+        "browser_find": "needs a browser_open call first; see browser_open",
+        "browser_click": "needs a live [eN] reference from a prior browser_inspect",
+        "browser_type": "needs a live [eN] reference from a prior browser_inspect",
+        "browser_submit": "needs a live [eN] reference from a prior browser_inspect",
+        "browser_get_text": "needs a live [eN] reference from a prior browser_inspect",
+        "browser_current_url": "needs a browser_open call first; see browser_open",
+        "browser_title": "needs a browser_open call first; see browser_open",
+    }
+
+    missing = [
+        s.name for s in TOOL_REGISTRY
+        if s.name not in probes and s.name not in _NOT_SAFE_TO_PROBE
+    ]
+    check("every registered tool has a probe or a documented exclusion", not missing, missing)
 
     crashes = []
     for spec in TOOL_REGISTRY:

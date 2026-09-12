@@ -59,6 +59,65 @@ from app.llm.tools_system import (
     run_command,
     search_in_files,
 )
+from app.llm.tools_os_control import (
+    CloseAppInput,
+    ClipboardSetInput,
+    LaunchAppInput,
+    ListProcessesInput,
+    OpenPathInput,
+    SendHotkeyInput,
+    is_supported as os_tools_supported,
+    unsupported_outcome as os_tools_unsupported,
+)
+from app.llm.tools_os_control import _clipboard_get as os_clipboard_get
+from app.llm.tools_os_control import _clipboard_set as os_clipboard_set
+from app.llm.tools_os_control import _close_app as os_close_app
+from app.llm.tools_os_control import _launch_app as os_launch_app
+from app.llm.tools_os_control import _list_processes as os_list_processes
+from app.llm.tools_os_control import _send_hotkey as os_send_hotkey
+from app.llm.tools_os_control import _open_path as os_open_path
+from app.llm.tools_ui_automation import (
+    ElementRefInput as UiElementRefInput,
+    ReferenceNotFoundError as UiRefNotFound,
+    StaleReferenceError as UiRefStale,
+    UiFindElementInput,
+    UiFocusWindowInput,
+    UiInspectInput,
+    UiPressKeyInput,
+    UiSelectInput,
+    UiSetTextInput,
+    UiToggleInput,
+    ui_click,
+    ui_find_element,
+    ui_focus_window,
+    ui_get_text,
+    ui_inspect,
+    ui_list_windows,
+    ui_press_key,
+    ui_select,
+    ui_set_text,
+    ui_toggle,
+)
+from app.llm.tools_browser import (
+    BrowserFindInput,
+    BrowserNavigateInput,
+    ElementRefInput as BrowserElementRefInput,
+    BrowserInspectInput,
+    BrowserTypeInput,
+    ReferenceNotFoundError as BrowserRefNotFound,
+    StaleReferenceError as BrowserRefStale,
+    TabIdInput as BrowserTabIdInput,
+    browser_click,
+    browser_current_url,
+    browser_find,
+    browser_get_text,
+    browser_inspect,
+    browser_navigate,
+    browser_open,
+    browser_submit,
+    browser_title,
+    browser_type,
+)
 from app.services import memory as memory_service
 from app.services import notification_policy, proactive, search, weather
 
@@ -2018,6 +2077,17 @@ class ToolSpec:
     model: type[BaseModel]
     handler: Callable[[Any], Awaitable[ToolOutcome]]
     capability: Capability = "core"
+    #: Informational only right now -- no gate reads this. A place to hang a
+    #: real permission system on later (the computer-control tools are the
+    #: first ones that genuinely need one: "read the page" and "submit this
+    #: form" are not the same kind of action) without every tool needing a
+    #: second migration once that lands.
+    #:   low    -- read-only: inspect, list, get_text, current_url, ...
+    #:   medium -- changes local state: type text, launch an app, click a
+    #:             non-destructive control, toggle a setting
+    #:   high   -- hard to reverse or leaves the machine: submit a form,
+    #:             close/kill a process, run an arbitrary command
+    risk: Literal["low", "medium", "high"] = "low"
 
 
 #: Used by five tools. The full convention -- resolve relative words, local
@@ -2025,6 +2095,113 @@ class ToolSpec:
 #: times" section, so repeating it here would be paid for on every request
 #: to say something the model has already been told.
 _DATETIME_HINT = "Absolute datetime, YYYY-MM-DDTHH:MM:SS."
+
+
+# ---------------------------------------------------------------------------
+# Computer-control adapters
+#
+# The domain modules (tools_os_control, tools_ui_automation, tools_browser)
+# return either a plain informational string (an inspection that cannot
+# fail) or an (ok, message) pair (an action that can). These two tiny
+# wrappers are the entire adapter layer -- every handler below is one line
+# because of it, which is the point: the domain modules own all of the real
+# logic, tools.py only owns the wire format.
+# ---------------------------------------------------------------------------
+
+def _computer_action(fn: Callable[[Any], Awaitable[tuple[bool, str]]]) -> Callable[[Any], Awaitable[ToolOutcome]]:
+    async def handler(payload: Any) -> ToolOutcome:
+        ok, message = await fn(payload)
+        return ToolOutcome(content=message, is_error=not ok)
+    return handler
+
+
+def _computer_query(fn: Callable[[Any], Awaitable[str]]) -> Callable[[Any], Awaitable[ToolOutcome]]:
+    async def handler(payload: Any) -> ToolOutcome:
+        return ToolOutcome(content=await fn(payload))
+    return handler
+
+
+def _computer_query_no_input(fn: Callable[[], Awaitable[str]]) -> Callable[[Any], Awaitable[ToolOutcome]]:
+    async def handler(_payload: Any) -> ToolOutcome:
+        return ToolOutcome(content=await fn())
+    return handler
+
+
+class _NoInput(BaseModel):
+    """Zero-parameter tool input."""
+
+
+async def _handle_list_processes(payload: ListProcessesInput) -> ToolOutcome:
+    if not os_tools_supported():
+        return ToolOutcome(content=os_tools_unsupported("list_processes"), is_error=True)
+    return ToolOutcome(content=await os_list_processes(payload))
+
+
+async def _handle_launch_app(payload: LaunchAppInput) -> ToolOutcome:
+    if not os_tools_supported():
+        return ToolOutcome(content=os_tools_unsupported("launch_app"), is_error=True)
+    audit.info("launch_app %s args=%s", payload.app, payload.args)
+    ok, message = await os_launch_app(payload)
+    return ToolOutcome(content=message, is_error=not ok)
+
+
+async def _handle_close_app(payload: CloseAppInput) -> ToolOutcome:
+    if not os_tools_supported():
+        return ToolOutcome(content=os_tools_unsupported("close_app"), is_error=True)
+    audit.info("close_app pid=%s name_contains=%s all=%s", payload.pid, payload.name_contains, payload.all_matches)
+    ok, message = await os_close_app(payload)
+    return ToolOutcome(content=message, is_error=not ok)
+
+
+async def _handle_open_path(payload: OpenPathInput) -> ToolOutcome:
+    ok, message = await os_open_path(payload)
+    return ToolOutcome(content=message, is_error=not ok)
+
+
+async def _handle_send_hotkey(payload: SendHotkeyInput) -> ToolOutcome:
+    if not os_tools_supported():
+        return ToolOutcome(content=os_tools_unsupported("send_hotkey"), is_error=True)
+    audit.info("send_hotkey %s", payload.keys)
+    ok, message = await os_send_hotkey(payload)
+    return ToolOutcome(content=message, is_error=not ok)
+
+
+async def _handle_clipboard_get(_payload: _NoInput) -> ToolOutcome:
+    if not os_tools_supported():
+        return ToolOutcome(content=os_tools_unsupported("clipboard_get"), is_error=True)
+    ok, message = await os_clipboard_get()
+    return ToolOutcome(content=message, is_error=not ok)
+
+
+async def _handle_clipboard_set(payload: ClipboardSetInput) -> ToolOutcome:
+    if not os_tools_supported():
+        return ToolOutcome(content=os_tools_unsupported("clipboard_set"), is_error=True)
+    ok, message = await os_clipboard_set(payload)
+    return ToolOutcome(content=message, is_error=not ok)
+
+
+_handle_ui_list_windows = _computer_query_no_input(ui_list_windows)
+_handle_ui_focus_window = _computer_action(ui_focus_window)
+_handle_ui_inspect = _computer_query(ui_inspect)
+_handle_ui_find_element = _computer_query(ui_find_element)
+_handle_ui_click = _computer_action(ui_click)
+_handle_ui_set_text = _computer_action(ui_set_text)
+_handle_ui_get_text = _computer_action(ui_get_text)
+_handle_ui_press_key = _computer_action(ui_press_key)
+_handle_ui_toggle = _computer_action(ui_toggle)
+_handle_ui_select = _computer_action(ui_select)
+
+_handle_browser_open = _computer_query_no_input(browser_open)
+_handle_browser_navigate = _computer_action(browser_navigate)
+_handle_browser_inspect = _computer_query(browser_inspect)
+_handle_browser_find = _computer_query(browser_find)
+_handle_browser_click = _computer_action(browser_click)
+_handle_browser_type = _computer_action(browser_type)
+_handle_browser_submit = _computer_action(browser_submit)
+_handle_browser_get_text = _computer_action(browser_get_text)
+_handle_browser_current_url = _computer_action(browser_current_url)
+_handle_browser_title = _computer_action(browser_title)
+
 
 TOOL_REGISTRY: tuple[ToolSpec, ...] = (
     ToolSpec(
@@ -2863,6 +3040,429 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         },
         model=SearchFilesInput,
         handler=_handle_search_files,
+    ),
+    # --- computer control: OS-level -----------------------------------------
+    # Prefer these over run_command for anything they cover -- an OS launch
+    # mechanism is more reliable than a shell one-liner for opening an app,
+    # and it works the same regardless of what shell happens to be configured.
+    ToolSpec(
+        name="list_processes",
+        capability="system",
+        risk="low",
+        description="List running processes, optionally filtered by name. Use before close_app to find the right pid when a name matches more than one process.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name_contains": {"type": "string", "description": "Case-insensitive substring of the process name. Omit to list everything."},
+            },
+        },
+        model=ListProcessesInput,
+        handler=_handle_list_processes,
+    ),
+    ToolSpec(
+        name="launch_app",
+        capability="system",
+        risk="medium",
+        description=(
+            "Launch an application by common name ('notepad', 'chrome', 'vs code', ...) "
+            "or an exact command/path. Prefer this over run_command or UI automation for "
+            "opening something -- it uses the OS's own launch mechanism, not a simulated "
+            "click on an icon."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "app": {"type": "string", "description": "Common app name, or the exact executable/command to run."},
+                "args": {"type": "string", "description": "Extra command-line arguments, space-separated as typed."},
+            },
+            "required": ["app"],
+        },
+        model=LaunchAppInput,
+        handler=_handle_launch_app,
+    ),
+    ToolSpec(
+        name="close_app",
+        capability="system",
+        risk="high",
+        description=(
+            "Close a running application by pid or by a name substring. If a name matches "
+            "more than one process, this refuses and lists them -- call list_processes or "
+            "pass a pid, or pass all_matches=true to close every match."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "pid": {"type": "integer", "description": "Exact process id, if known."},
+                "name_contains": {"type": "string", "description": "Case-insensitive substring of the process name."},
+                "all_matches": {"type": "boolean", "description": "Close every process matching name_contains, not just a single unambiguous one."},
+            },
+        },
+        model=CloseAppInput,
+        handler=_handle_close_app,
+    ),
+    ToolSpec(
+        name="open_path",
+        capability="system",
+        risk="medium",
+        description=(
+            "Open a file or folder with its default application, or a URL with the "
+            "default browser. Prefer this over run_command for 'open X' requests -- it is "
+            "what the OS itself does when a user double-clicks something."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "A file path, folder path, or URL."},
+            },
+            "required": ["path"],
+        },
+        model=OpenPathInput,
+        handler=_handle_open_path,
+    ),
+    ToolSpec(
+        name="send_hotkey",
+        capability="system",
+        risk="medium",
+        description=(
+            "Send a keyboard shortcut to whatever currently has focus, e.g. 'ctrl+l', "
+            "'alt+tab', 'ctrl+shift+s', 'f5'. Combine modifiers with '+'; the last part is "
+            "the key."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "keys": {"type": "string", "description": "e.g. 'ctrl+l', 'ctrl+shift+s', 'enter', 'f5'."},
+            },
+            "required": ["keys"],
+        },
+        model=SendHotkeyInput,
+        handler=_handle_send_hotkey,
+    ),
+    ToolSpec(
+        name="clipboard_get",
+        capability="system",
+        risk="low",
+        description="Read the current text on the system clipboard.",
+        input_schema={"type": "object", "properties": {}},
+        model=_NoInput,
+        handler=_handle_clipboard_get,
+    ),
+    ToolSpec(
+        name="clipboard_set",
+        capability="system",
+        risk="medium",
+        description="Set the system clipboard to the given text, replacing whatever was there.",
+        input_schema={
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "Text to place on the clipboard."}},
+            "required": ["text"],
+        },
+        model=ClipboardSetInput,
+        handler=_handle_clipboard_set,
+    ),
+    # --- computer control: structured UI / accessibility --------------------
+    # The whole point: find the semantic element (role + name), then act on
+    # it by reference -- never a raw screen coordinate. ui_inspect and
+    # ui_find_element hand back short-lived "[eN]" ids; every other ui_* tool
+    # takes one. A reference from a superseded inspection is refused with a
+    # clear message telling the model to inspect again, not silently resolved
+    # against whatever now occupies that slot.
+    ToolSpec(
+        name="ui_list_windows",
+        capability="system",
+        risk="low",
+        description="List open application windows (title, process, pid). The first step before inspecting or focusing one.",
+        input_schema={"type": "object", "properties": {}},
+        model=_NoInput,
+        handler=_handle_ui_list_windows,
+    ),
+    ToolSpec(
+        name="ui_focus_window",
+        capability="system",
+        risk="low",
+        description="Bring a window to the foreground and give it focus, by a substring of its title.",
+        input_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string", "description": "Substring of the window's title bar text."}},
+            "required": ["title"],
+        },
+        model=UiFocusWindowInput,
+        handler=_handle_ui_focus_window,
+    ),
+    ToolSpec(
+        name="ui_inspect",
+        capability="system",
+        risk="low",
+        description=(
+            "List the interactive elements (buttons, text fields, checkboxes, menus, ...) "
+            "inside a window, as numbered [e1] [e2] ... references. Use those references "
+            "with ui_click/ui_set_text/etc -- never guess screen coordinates. Returns a "
+            "bounded, progressive listing, not the whole tree; narrow with ui_find_element "
+            "if what you need is not shown."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "window": {"type": "string", "description": "Substring of the window's title."},
+                "max_depth": {"type": "integer", "description": "How many levels deep to walk (default 3)."},
+            },
+            "required": ["window"],
+        },
+        model=UiInspectInput,
+        handler=_handle_ui_inspect,
+    ),
+    ToolSpec(
+        name="ui_find_element",
+        capability="system",
+        risk="low",
+        description=(
+            "Search a window's full element tree for a specific control by role, name, or "
+            "automation id, when ui_inspect's default depth did not show it. Returns "
+            "matches as [eN] references."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "window": {"type": "string", "description": "Substring of the window's title."},
+                "role": {"type": "string", "description": "e.g. 'Button', 'Edit', 'CheckBox'."},
+                "name": {"type": "string", "description": "Substring of the element's accessible name."},
+                "automation_id": {"type": "string", "description": "Exact automation id, if known."},
+            },
+            "required": ["window"],
+        },
+        model=UiFindElementInput,
+        handler=_handle_ui_find_element,
+    ),
+    ToolSpec(
+        name="ui_click",
+        capability="system",
+        risk="medium",
+        description="Click a UI element by its [eN] reference from ui_inspect or ui_find_element.",
+        input_schema={
+            "type": "object",
+            "properties": {"element_id": {"type": "string", "description": "An [eN] reference."}},
+            "required": ["element_id"],
+        },
+        model=UiElementRefInput,
+        handler=_handle_ui_click,
+    ),
+    ToolSpec(
+        name="ui_set_text",
+        capability="system",
+        risk="medium",
+        description="Set the text of an editable field, by its [eN] reference. Clears the existing content first unless clear_first=false.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "element_id": {"type": "string", "description": "An [eN] reference to an editable field."},
+                "text": {"type": "string", "description": "The text to enter."},
+                "clear_first": {"type": "boolean", "description": "Clear the field before typing (default true)."},
+            },
+            "required": ["element_id", "text"],
+        },
+        model=UiSetTextInput,
+        handler=_handle_ui_set_text,
+    ),
+    ToolSpec(
+        name="ui_get_text",
+        capability="system",
+        risk="low",
+        description="Read the visible text or value of a UI element, by its [eN] reference.",
+        input_schema={
+            "type": "object",
+            "properties": {"element_id": {"type": "string", "description": "An [eN] reference."}},
+            "required": ["element_id"],
+        },
+        model=UiElementRefInput,
+        handler=_handle_ui_get_text,
+    ),
+    ToolSpec(
+        name="ui_press_key",
+        capability="system",
+        risk="medium",
+        description="Focus a UI element and send it a keyboard shortcut, e.g. 'enter', 'ctrl+a', 'tab'.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "element_id": {"type": "string", "description": "An [eN] reference."},
+                "keys": {"type": "string", "description": "e.g. 'enter', 'ctrl+a', 'tab'."},
+            },
+            "required": ["element_id", "keys"],
+        },
+        model=UiPressKeyInput,
+        handler=_handle_ui_press_key,
+    ),
+    ToolSpec(
+        name="ui_toggle",
+        capability="system",
+        risk="medium",
+        description="Toggle a checkbox or switch, by its [eN] reference. Pass checked=true/false to force a state, or omit to flip it.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "element_id": {"type": "string", "description": "An [eN] reference to a checkbox or toggle."},
+                "checked": {"type": "boolean", "description": "Force this state; omit to flip the current one."},
+            },
+            "required": ["element_id"],
+        },
+        model=UiToggleInput,
+        handler=_handle_ui_toggle,
+    ),
+    ToolSpec(
+        name="ui_select",
+        capability="system",
+        risk="medium",
+        description="Select an item in a list, combo box, or dropdown, by its [eN] reference and the item's visible text.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "element_id": {"type": "string", "description": "An [eN] reference to a list or combo box."},
+                "item": {"type": "string", "description": "The visible text of the item to select."},
+            },
+            "required": ["element_id", "item"],
+        },
+        model=UiSelectInput,
+        handler=_handle_ui_select,
+    ),
+    # --- computer control: browser / DOM ------------------------------------
+    # Same reference-based shape as the ui_* tools, one layer up: browser_find
+    # resolves elements by role, text, label, placeholder, or a raw selector
+    # as a last resort, and every other browser_* tool acts on the [eN] it
+    # returns. This drives a fresh, isolated Chromium JARVIS owns -- not the
+    # user's actual Chrome window or profile.
+    ToolSpec(
+        name="browser_open",
+        capability="system",
+        risk="low",
+        description="Open JARVIS's own browser (a fresh, isolated Chromium -- not the user's existing Chrome/Edge). Call once before navigating.",
+        input_schema={"type": "object", "properties": {}},
+        model=_NoInput,
+        handler=_handle_browser_open,
+    ),
+    ToolSpec(
+        name="browser_navigate",
+        capability="system",
+        risk="medium",
+        description="Navigate the browser's current tab to a URL, waiting for the page to finish loading.",
+        input_schema={
+            "type": "object",
+            "properties": {"url": {"type": "string", "description": "The URL to load. https:// is assumed if no scheme is given."}},
+            "required": ["url"],
+        },
+        model=BrowserNavigateInput,
+        handler=_handle_browser_navigate,
+    ),
+    ToolSpec(
+        name="browser_inspect",
+        capability="system",
+        risk="low",
+        description=(
+            "List the interactive elements on the current page (buttons, links, text "
+            "fields, ...) as numbered [e1] [e2] ... references, using the page's own "
+            "accessibility tree -- not raw HTML. Bounded and progressive; use browser_find "
+            "to search more specifically if what you need is not shown."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        model=BrowserInspectInput,
+        handler=_handle_browser_inspect,
+    ),
+    ToolSpec(
+        name="browser_find",
+        capability="system",
+        risk="low",
+        description=(
+            "Search the current page for elements matching a role, visible text, label, "
+            "placeholder, test id, or (last resort) a raw CSS selector. Returns matches as "
+            "[eN] references. Give the most specific signal you actually have -- role+text "
+            "together narrows fastest."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "role": {"type": "string", "description": "ARIA role, e.g. 'button', 'textbox', 'link'."},
+                "text": {"type": "string", "description": "Substring of visible text or accessible name."},
+                "label": {"type": "string", "description": "Substring of an associated <label>."},
+                "placeholder": {"type": "string", "description": "Substring of a placeholder attribute."},
+                "test_id": {"type": "string", "description": "Exact data-testid attribute."},
+                "selector": {"type": "string", "description": "Raw CSS selector, only if nothing else matches."},
+            },
+        },
+        model=BrowserFindInput,
+        handler=_handle_browser_find,
+    ),
+    ToolSpec(
+        name="browser_click",
+        capability="system",
+        risk="medium",
+        description="Click an element on the page, by its [eN] reference from browser_inspect or browser_find.",
+        input_schema={
+            "type": "object",
+            "properties": {"element_id": {"type": "string", "description": "An [eN] reference."}},
+            "required": ["element_id"],
+        },
+        model=BrowserElementRefInput,
+        handler=_handle_browser_click,
+    ),
+    ToolSpec(
+        name="browser_type",
+        capability="system",
+        risk="medium",
+        description="Type text into a field on the page, by its [eN] reference. Clears the field first unless clear_first=false.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "element_id": {"type": "string", "description": "An [eN] reference to a text field."},
+                "text": {"type": "string", "description": "The text to enter."},
+                "clear_first": {"type": "boolean", "description": "Clear the field before typing (default true)."},
+            },
+            "required": ["element_id", "text"],
+        },
+        model=BrowserTypeInput,
+        handler=_handle_browser_type,
+    ),
+    ToolSpec(
+        name="browser_submit",
+        capability="system",
+        risk="high",
+        description="Press Enter in a field to submit its form -- the usual way to trigger a search or a login after browser_type.",
+        input_schema={
+            "type": "object",
+            "properties": {"element_id": {"type": "string", "description": "An [eN] reference to the field to submit from."}},
+            "required": ["element_id"],
+        },
+        model=BrowserElementRefInput,
+        handler=_handle_browser_submit,
+    ),
+    ToolSpec(
+        name="browser_get_text",
+        capability="system",
+        risk="low",
+        description="Read the visible text of an element on the page, by its [eN] reference.",
+        input_schema={
+            "type": "object",
+            "properties": {"element_id": {"type": "string", "description": "An [eN] reference."}},
+            "required": ["element_id"],
+        },
+        model=BrowserElementRefInput,
+        handler=_handle_browser_get_text,
+    ),
+    ToolSpec(
+        name="browser_current_url",
+        capability="system",
+        risk="low",
+        description="The current page's URL, to confirm navigation landed where expected.",
+        input_schema={"type": "object", "properties": {}},
+        model=BrowserTabIdInput,
+        handler=_handle_browser_current_url,
+    ),
+    ToolSpec(
+        name="browser_title",
+        capability="system",
+        risk="low",
+        description="The current page's title, to confirm which page is actually loaded.",
+        input_schema={"type": "object", "properties": {}},
+        model=BrowserTabIdInput,
+        handler=_handle_browser_title,
     ),
 )
 

@@ -15,3 +15,14 @@ python-multipart>=0.0.12
 
 # Local English TTS (desktop only; no arm64/Chaquopy wheel)
 piper-tts>=1.8.0
+
+# Computer-control tools (desktop only; gated by settings.system_tools_enabled,
+# which jarvis_android forces off -- these are never imported, let alone
+# installed, on a Chaquopy/Android build). All three are imported lazily
+# inside their handlers in app/llm/tools_{ui_automation,browser,os_control}.py,
+# never at module scope, so merely having them installed cannot affect a
+# platform that doesn't use them.
+pywinauto>=0.6.9      # Windows UI Automation / accessibility tree
+pywin32>=308           # win32gui/win32process/win32clipboard -- window & clipboard control
+psutil>=6.1.0           # process listing/management, cross-platform
+playwright>=1.48.0      # browser DOM control; run `playwright install chromium` once
