@@ -35,7 +35,7 @@ pub fn run() {
             }
 
             #[cfg(desktop)]
-            backend::spawn(app.state::<Backend>().inner());
+            backend::spawn(&app.handle().clone());
 
             Ok(())
         })

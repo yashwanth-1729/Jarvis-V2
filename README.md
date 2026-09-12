@@ -436,6 +436,31 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — Desktop backend now survives its own crashes.** JARVIS's
+  desktop app already auto-started its Python backend on launch
+  (`backend.rs`), but only once — if the backend died mid-session (crash,
+  OOM-kill, anything), the window was stuck showing "Backend unreachable"
+  until the user closed and reopened the app. `backend::watch()` adds a
+  background thread that checks every 3s whether the tracked child process
+  is still alive; if not (and nothing else has taken the port — a developer's
+  own `--reload` server is still left alone), it restarts the backend
+  automatically. Gives up after 5 consecutive failed restarts so a
+  genuinely broken environment degrades to the existing error banner instead
+  of spinning forever; a restart that stays up for 10s resets that counter.
+  The frontend needed no changes — `page.tsx`'s existing self-scheduling
+  retry (1.5s/2.5s/4s/8s/15s backoff, `page.tsx:263`) already picks up a
+  recovered backend on its own. Verified live, not just compiled: launched
+  the actual release `app.exe`, confirmed it auto-started the backend,
+  force-killed the backend process mid-session and watched a new one come up
+  within seconds without touching the window, then confirmed a graceful
+  window close (`CloseMainWindow`, not a hard process kill) still stops the
+  backend cleanly with no orphan and no port conflict for the next launch.
+  Known remaining gap, unchanged from before this fix: a *hard* kill of the
+  whole app itself (Task Manager "End Task", a crash) still orphans the
+  backend, since Windows does not kill child processes when a parent is
+  force-terminated without a Job Object tying their lifetimes together —
+  out of scope for this pass.
+
 - **2026-09-13 — Fixed the multi-second silence after the first sentence in
   Android's on-device English voice.** Root-caused with real on-device
   measurement (not assumption): sherpa-onnx VITS inference on-phone costs

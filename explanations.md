@@ -128,6 +128,54 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · Desktop backend watchdog -- survives a mid-session crash
+- User's desktop app showed "Backend unreachable"; the window had been open
+  since before an unrelated session killed the backend process for testing.
+  `backend.rs` already auto-starts the backend on launch (`spawn`, committed
+  in the 2026-09-11 checkpoint) -- confirmed this still works by running the
+  actual release `app.exe` directly and watching it spawn its own backend.
+  The real gap: `spawn` only ever runs once, at launch, so a backend that
+  dies *after* the window opens had no way back without closing and
+  reopening the app.
+- Fix: `backend::watch()` -- a background thread started alongside the
+  initial spawn, checking every 3s (`WATCHDOG_INTERVAL`) whether the tracked
+  child is still alive (`Child::try_wait()`). If not, and nothing else has
+  taken port 8000 (same `already_running()` check the initial launch uses,
+  so a developer's own `run.ps1 --reload` is never fought), it restarts the
+  backend. Gives up after 5 consecutive failed restarts
+  (`WATCHDOG_MAX_CONSECUTIVE_FAILURES`) so a backend broken in a way
+  restarting can't fix degrades to the existing error banner instead of
+  spinning forever; a restart has to stay up 10s (`WATCHDOG_HEALTHY_AFTER`)
+  before it resets that counter, so a start-then-immediately-die loop still
+  counts toward giving up rather than looking like 5 unrelated one-offs.
+  `Backend` gained a `shutting_down` `AtomicBool`, set *before* `stop()`
+  kills the child, so the watchdog doesn't see its own intentional kill as a
+  crash and "helpfully" resurrect the backend the user is closing.
+- Checked the frontend before touching it: `page.tsx:263`'s existing
+  self-scheduling retry (1.5s/2.5s/4s/8s/15s backoff on a miss, settling to
+  a 60s poll) already re-fetches on its own with no error-state special
+  case, so it picks up a watchdog-restarted backend automatically. No
+  frontend change was needed -- almost added a redundant polling effect
+  before actually reading this file closely enough to see it already existed.
+- Verified against the real release binary, not just `cargo check`: built
+  `--release`, launched it, confirmed auto-start (fresh PID bound to 8000);
+  force-killed that backend PID directly and watched a new one bind the port
+  within seconds without the window itself restarting, then confirmed
+  `/api/health` on the new process; separately confirmed a graceful window
+  close (`Process.CloseMainWindow()`, i.e. what a real close-button click
+  sends -- not `Stop-Process -Force`, which bypasses Tauri's own event
+  handlers entirely and is not a valid test of this) stops the backend
+  cleanly with no orphan.
+- **Left open, out of scope for this pass:** a *hard* kill of the whole app
+  process (Task Manager "End Task", a crash, forced shutdown) still orphans
+  the backend -- confirmed this by testing it first, wrongly, as if it were
+  the graceful-close case, before realizing `Stop-Process -Force` on the
+  parent doesn't run any of the app's own shutdown code and Windows does not
+  kill children with their parent absent a Job Object. Fixable with a
+  Windows Job Object tying the child's lifetime to the parent's at the OS
+  level if this turns out to matter in practice; not done here since it
+  wasn't what was reported and is a bigger change than the actual ask.
+
 ### 2026-09-13 · Claude Code · On-device Piper gap, round 2 -- pool concurrency reversed, chunk size fixed
 - User reported the "parts... parts" gap again after the 2026-09-12 fix
   below (line ~962) had reduced it. **I did not see that entry until after
