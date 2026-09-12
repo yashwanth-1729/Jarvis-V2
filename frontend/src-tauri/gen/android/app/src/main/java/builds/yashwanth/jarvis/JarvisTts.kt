@@ -1,6 +1,7 @@
 package builds.yashwanth.jarvis
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
@@ -172,25 +173,26 @@ class JarvisTtsBridge(
     /**
      * How many phrases synthesize at once.
      *
-     * One worker made every phrase after the first wait for the ENTIRE
-     * previous phrase to finish before its own synthesis could even start.
-     * Measured on-device with a 190-character phrase behind a short opener:
-     * the opener bought 1.9s of playback, but the next phrase's first
-     * sentence alone took ~3s to build with nothing overlapping it -- 1.1s of
-     * dead air at that boundary, the "parts... parts" the user heard on
-     * anything longer than a one-line reply.
+     * Was 3, on the theory that letting phrase N+1 build while phrase N is
+     * still building would close the dead-air gap between phrases. On-device
+     * A/B measurement (2026-09-12) showed the opposite: `speechQueue.ts`
+     * plays phrases in strict arrival order regardless of which finishes
+     * synthesizing first, so a concurrently-synthesizing later phrase is
+     * never heard any sooner for it -- it only steals CPU from whichever
+     * phrase is actually gating playback right now. Measured on this
+     * hardware: a 114-char phrase synthesized at 61ms/char under 3-way
+     * concurrency vs 50ms/char running alone; a 54-char phrase at 69ms/char
+     * concurrent vs 36ms/char alone. Serial synthesis is strictly faster for
+     * the phrase that matters, with no downside once it stopped being able
+     * to help.
      *
-     * Letting phrase N+1 start building while phrase N is still building is
-     * what closes that gap -- `OfflineTts.generate`/`generateWithCallback`
-     * read model state only (verified against the sherpa-onnx VITS source;
-     * ONNX Runtime's own `Session::Run` is documented safe for concurrent
-     * calls on one session), so sharing the one loaded engine across threads
-     * is not a correctness risk, only a CPU-budget one (see `NUM_THREADS`).
-     * Three covers the common case of an opener plus two follow-on phrases
-     * without any of them queueing for a free slot; a longer reply still
-     * pipelines two at a time as slots free up.
+     * The actual fix for the gap is keeping phrases small enough that one
+     * phrase's synthesis time fits inside the previous phrase's playback
+     * time -- see `NATIVE_TTS_MAX_CHUNK_CHARS` in the backend's
+     * `realtime.py`. This just stops concurrency from making the critical
+     * phrase slower than it needs to be.
      */
-    private const val POOL_SIZE = 3
+    private const val POOL_SIZE = 1
   }
 
   private val pool = Executors.newFixedThreadPool(POOL_SIZE)
@@ -226,16 +228,31 @@ class JarvisTtsBridge(
   @JavascriptInterface
   fun synthesizeStream(requestId: String, text: String, pace: Double) {
     val mine = epoch.get()
+    // TEMPORARY diagnostic (2026-09-12, remove after the Piper gap
+    // investigation): reconstruct the real on-device timeline -- when this
+    // phrase was handed to the bridge, how long it waited for a free pool
+    // thread, when each sentence's audio was actually ready, and total
+    // phrase time. Filter with: adb logcat -s JarvisTts
+    val queuedAt = SystemClock.elapsedRealtime()
+    Log.i(TAG, "req=$requestId QUEUED chars=${text.length} pool_active=${(pool as java.util.concurrent.ThreadPoolExecutor).activeCount}")
     pool.execute {
       if (epoch.get() != mine) return@execute
+      val startedAt = SystemClock.elapsedRealtime()
+      Log.i(TAG, "req=$requestId WORKER_START waited_ms=${startedAt - queuedAt} thread=${Thread.currentThread().name}")
+      var sentenceIdx = 0
       try {
         SherpaTts.stream(context, text, pace.toFloat()) { pcm, rate ->
           if (epoch.get() != mine) return@stream false
+          sentenceIdx += 1
+          val now = SystemClock.elapsedRealtime()
+          Log.i(TAG, "req=$requestId SENTENCE#$sentenceIdx ready_at_ms=${now - queuedAt} since_worker_start_ms=${now - startedAt} bytes=${pcm.size}")
           val encoded = Base64.encodeToString(pcm, Base64.NO_WRAP)
           evalJs("window.__jarvisTtsChunk && window.__jarvisTtsChunk('$requestId','$encoded',$rate)")
           true
         }
         if (epoch.get() == mine) {
+          val doneAt = SystemClock.elapsedRealtime()
+          Log.i(TAG, "req=$requestId DONE total_ms=${doneAt - queuedAt} sentences=$sentenceIdx")
           evalJs("window.__jarvisTtsDone && window.__jarvisTtsDone('$requestId')")
         }
       } catch (error: Throwable) {

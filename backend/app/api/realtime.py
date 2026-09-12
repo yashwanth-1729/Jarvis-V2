@@ -110,6 +110,16 @@ FIRST_CHUNK_MERGED_MAX_CHARS = 96
 #: at, where an unbounded chunk would stall every chunk queued behind it.
 MAX_CHUNK_CHARS = 320
 
+#: This cap is tuned against Sarvam's cost curve (see above), not sherpa-onnx.
+#: On-device measurement (2026-09-12, real phone) put sherpa-onnx's VITS
+#: inference at roughly 40-70ms per character. A 320-char chunk at that rate
+#: takes many seconds to synthesize, while the opener chunk before it only
+#: buys a second or two of playback -- guaranteeing the multi-second gap
+#: users heard after the first sentence. Keeping native-TTS chunks close to
+#: opener-sized means each chunk's synthesis time stays under the audio
+#: duration of the chunk playing ahead of it.
+NATIVE_TTS_MAX_CHUNK_CHARS = FIRST_CHUNK_MERGED_MAX_CHARS
+
 #: Where to aim when cutting an over-long chunk, so pieces cluster rather than
 #: leaving a long head and a two-word tail.
 TARGET_CHUNK_CHARS = 120
@@ -226,12 +236,14 @@ def _first_chunk(buffer: str) -> tuple[str, str]:
     return "", buffer
 
 
-def _split_sentences(buffer: str, minimum: int) -> tuple[list[str], str]:
+def _split_sentences(buffer: str, minimum: int, max_chars: int = MAX_CHUNK_CHARS) -> tuple[list[str], str]:
     """Pull complete sentences off the front of ``buffer``.
 
     Returns the sentences ready to speak and whatever remains unterminated.
     A sentence shorter than ``minimum`` is held back and merged with the next
-    one, so the speech is not chopped into unnatural fragments.
+    one, so the speech is not chopped into unnatural fragments. ``max_chars``
+    bounds how large that merge is allowed to grow (see ``queue()`` in
+    ``handle_turn``, which passes a much smaller cap for on-device TTS).
     """
     ready: list[str] = []
     rest = buffer
@@ -252,7 +264,7 @@ def _split_sentences(buffer: str, minimum: int) -> tuple[list[str], str]:
             # Past the cap the cure is worse than the disease: the pair would
             # be spoken noticeably faster than its neighbours and would stall
             # every chunk queued behind it.
-            if len(merged) > MAX_CHUNK_CHARS:
+            if len(merged) > max_chars:
                 rest = rest[match.end() :]
             else:
                 candidate = merged
@@ -541,13 +553,19 @@ class VoiceSession:
 
         pipeline = SpeechPipeline(synthesize, deliver)
 
+        # On-device sherpa-onnx (Android) is far slower per character than
+        # Sarvam or desktop Piper -- see NATIVE_TTS_MAX_CHUNK_CHARS. Every
+        # chunk after the opener needs the tighter cap so its synthesis time
+        # stays under the audio duration of the chunk playing ahead of it.
+        chunk_limit = NATIVE_TTS_MAX_CHUNK_CHARS if self.client_english_tts else MAX_CHUNK_CHARS
+
         async def queue(chunk: str, bound: bool = True) -> None:
             nonlocal seq, spoken_any
             speech_text = _speakable(chunk)
             if not speech_text:
                 return
-            if bound and len(speech_text) > MAX_CHUNK_CHARS:
-                for piece in _bound(speech_text):
+            if bound and len(speech_text) > chunk_limit:
+                for piece in _bound(speech_text, limit=chunk_limit):
                     await queue(piece, bound=False)
                 return
             if seq >= MAX_SPOKEN_CHUNKS:
@@ -613,7 +631,7 @@ class VoiceSession:
 
                     if spoken_any:
                         ready, buffer = _split_sentences(
-                            buffer, settings.jarvis_tts_chunk_chars
+                            buffer, settings.jarvis_tts_chunk_chars, max_chars=chunk_limit
                         )
                         for chunk in ready:
                             await queue(chunk)

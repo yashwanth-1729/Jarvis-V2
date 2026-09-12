@@ -302,4 +302,44 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["stt_ms"], {"count": 100, "p50": 99, "p90": 139, "p99": 148})
 
 
+class NativeTtsChunkSizeTests(unittest.TestCase):
+    """On-device sherpa-onnx (Android) costs 40-70ms/char, measured live
+    2026-09-12 -- far slower than Sarvam or desktop Piper. A 320-char chunk
+    takes many seconds to synthesize while the opener only buys a second or
+    two of playback, which is the multi-second gap users heard after the
+    first sentence. NATIVE_TTS_MAX_CHUNK_CHARS keeps native-TTS chunks near
+    opener-sized so this can't regress silently.
+    """
+
+    def test_native_cap_is_much_smaller_than_the_default(self):
+        self.assertLess(realtime.NATIVE_TTS_MAX_CHUNK_CHARS, realtime.MAX_CHUNK_CHARS)
+        self.assertEqual(realtime.NATIVE_TTS_MAX_CHUNK_CHARS, realtime.FIRST_CHUNK_MERGED_MAX_CHARS)
+
+    def test_split_sentences_honours_a_custom_max_chars(self):
+        # Three ~60-char sentences, each below the minimum=90 merge
+        # threshold on its own, so every one attempts to merge with the
+        # next -- only max_chars decides whether that merge is allowed
+        # through. Under the default 320 cap, sentence 1+2 merge into one
+        # chunk; under the native ~96 cap that merge is too long, so each
+        # sentence must ship on its own instead.
+        buffer = (
+            "This sentence is roughly sixty characters long for the test. "
+            "This second sentence is also about sixty characters for it. "
+            "This third sentence is also about sixty characters for it. "
+        )
+        ready_default, _ = realtime._split_sentences(buffer, 90, max_chars=realtime.MAX_CHUNK_CHARS)
+        ready_native, _ = realtime._split_sentences(buffer, 90, max_chars=realtime.NATIVE_TTS_MAX_CHUNK_CHARS)
+        self.assertEqual(len(ready_default), 1)
+        self.assertEqual(len(ready_native), 2)
+        for chunk in ready_native:
+            self.assertLessEqual(len(chunk), realtime.NATIVE_TTS_MAX_CHUNK_CHARS)
+
+    def test_bound_respects_a_custom_limit(self):
+        long_text = "word " * 100  # 500 chars, well past either cap
+        pieces = realtime._bound(long_text, limit=realtime.NATIVE_TTS_MAX_CHUNK_CHARS)
+        self.assertTrue(pieces)
+        for piece in pieces:
+            self.assertLessEqual(len(piece), realtime.NATIVE_TTS_MAX_CHUNK_CHARS)
+
+
 if __name__ == "__main__": unittest.main(verbosity=2)

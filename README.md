@@ -436,6 +436,37 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — Fixed the multi-second silence after the first sentence in
+  Android's on-device English voice.** Root-caused with real on-device
+  measurement (not assumption): sherpa-onnx VITS inference on-phone costs
+  roughly 40-70ms per character, so a normal ~100+ char follow-on chunk took
+  several seconds to synthesize while the short opener chunk ahead of it only
+  bought a second or two of playback — and `speechQueue.ts` plays chunks in
+  strict arrival order, so a later chunk can never play early even once it
+  finishes synthesizing. Two changes, both confirmed by an on-device A/B
+  before landing: `JarvisTts.kt`'s `POOL_SIZE` dropped from 3 to 1 — 3-way
+  concurrent synthesis measured 30-50% *slower* per character than solo, with
+  no playback benefit, since a concurrently-built later chunk still can't
+  play out of order; and `realtime.py` gained `NATIVE_TTS_MAX_CHUNK_CHARS`
+  (96, same as the opener's merge cap), used in place of the Sarvam-tuned
+  320-char `MAX_CHUNK_CHARS` whenever a session negotiates
+  `english_tts=client` (Android's native bridge), so every chunk's synthesis
+  time stays under the audio duration of the chunk playing ahead of it. Desktop
+  Piper and Sarvam are unaffected — the smaller cap only applies on the
+  client-TTS code path. Also fixed a real bug in the diagnostic tooling
+  itself along the way: `{"type": "turn"}` announces a turn *starting*, not
+  finishing (`{"type": "turn_end"}` is the real completion signal) — a
+  throwaway harness that got this backwards reported zero audio for every
+  turn until corrected. Checks: full backend suite green (`voice_pipeline_test.py`
+  gained 3 new offline checks pinning `NATIVE_TTS_MAX_CHUNK_CHARS` and the
+  `_split_sentences`/`_bound` custom-cap behavior; two unrelated pre-existing
+  failures — `latency_test.py`, a flaky live-network test, and
+  `reminder_lead_test.py`, a date-sensitive edge case — reproduced in
+  isolation and confirmed unrelated to this change). Built and installed to
+  the Android device with both changes; on-device confirmation of the
+  combined fix against a real reproduction is the next step, not yet done as
+  of this entry.
+
 - **2026-09-12 — Gemini answers English chat, with Sarvam as its own
   fallback.** New `app/providers/gemini.py`: `EnglishChatProvider` tries
   Gemini first for any English reply (typed chat's default, or voice mode

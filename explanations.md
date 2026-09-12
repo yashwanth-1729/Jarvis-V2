@@ -128,6 +128,69 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · On-device Piper gap, round 2 -- pool concurrency reversed, chunk size fixed
+- User reported the "parts... parts" gap again after the 2026-09-12 fix
+  below (line ~962) had reduced it. **I did not see that entry until after
+  landing my own fix** -- found it only while writing this one. Read it now;
+  it changes how the pool-size finding here should be understood, noted below.
+- Measured live with real on-device timestamps (`Log.i` in `JarvisTts.kt`,
+  tag `JarvisTts`, read via `adb logcat`; desktop's Chaquopy-embedded backend
+  logs came along for free under `python.stdout`/`python.stderr`). Confirmed
+  by direct measurement, not inference: a chunk's own synthesis time, not the
+  LLM or the chunker, is what stalls -- e.g. a 114-char chunk queued at
+  t=1.6s wasn't ready until t=8.6s, well after the opener's ~1.8s of audio
+  had already finished playing.
+- Fix 1: `NATIVE_TTS_MAX_CHUNK_CHARS=96` in `realtime.py`, used instead of
+  the Sarvam-tuned `MAX_CHUNK_CHARS=320` whenever a session negotiates
+  `english_tts=client`. On-device sherpa-onnx costs ~40-70ms/char; a 320-char
+  chunk cannot possibly finish inside the ~1-2s of audio the chunk ahead of
+  it buys. Threaded through `_split_sentences`'s new `max_chars` param and
+  `_bound`'s existing `limit` param -- both already took the cap as an
+  argument, `handle_turn` just always passed the module constant before.
+- Fix 2: `JarvisTts.kt`'s `POOL_SIZE` dropped 3 -> 1. **This reverses the
+  2026-09-12 entry's own concurrency fix** -- see that entry for why 3 was
+  chosen. On-device A/B this session: a 114-char chunk synthesized at
+  61ms/char under 3-way concurrency vs 50ms/char alone; a 54-char chunk at
+  69ms/char concurrent vs 36ms/char alone. Reasoning for reversing it:
+  `speechQueue.ts`'s `this.chain` plays chunks in strict arrival order
+  regardless of which finishes synthesizing first (confirmed directly: a
+  chunk ready 2.85s before the one ahead of it in the queue still couldn't
+  play until that one ended) -- so a later chunk synthesizing concurrently
+  is never heard any sooner, it only contends with the CPU budget of
+  whichever chunk is actually gating playback. This may be why the prior
+  entry's own last A/B (2-slot/3-thread vs 3-slot/2-thread) already showed
+  higher variance for 3 slots on the same test, and why it flagged the pool
+  size as possibly not settled.
+- **Caveat I did not control for and should have, given the prior entry's
+  explicit warning:** thermal throttling. That entry measured 99.6C on 4 of
+  8 cores after sustained back-to-back on-device synthesis and called out
+  run-to-run variance as a likely symptom. My A/B was two separate
+  build-install-test round trips (pool=3, then pool=1) with real gaps
+  between them (waiting on the user), not a tight back-to-back loop, and the
+  solo-vs-concurrent contrast happened *within* one single turn each time
+  (opener alone, then two chunks together, ~10s apart) rather than across a
+  long hot-device session -- but I never checked device temperature
+  (`adb shell dumpsys thermalservice` or `/sys/class/thermal/thermal_zone*/temp`
+  would have). If POOL_SIZE=1 doesn't hold up on retest, thermal state
+  across the two test sessions is the first thing to rule out before
+  re-litigating the concurrency question.
+- Also fixed, in the diagnostic tooling only (not shipped): a throwaway
+  script treated `{"type":"turn"}` (sent when a turn *starts*) as the
+  completion signal instead of `{"type":"turn_end"}`, reporting zero audio
+  for every turn until corrected.
+- Checks: full backend suite green; two pre-existing failures
+  (`latency_test.py` -- flaky live network; `reminder_lead_test.py` -- a
+  date-sensitive edge case, tripped by the real clock crossing into
+  2026-09-13 mid-session) reproduced in isolation and confirmed unrelated.
+  3 new offline checks in `voice_pipeline_test.py` pin
+  `NATIVE_TTS_MAX_CHUNK_CHARS` and the new `max_chars`/`limit` parameters.
+  Built and installed to the device with both changes together.
+  **Not yet done: on-device confirmation of the combined fix against a real
+  reproduction** -- the user stepped away mid-session; this is the next
+  thing to check when they're back, and worth watching for exactly the
+  "still ~10% has some gap" pattern the prior entry left open, in case the
+  remaining cause is a third thing neither entry has found yet.
+
 ### 2026-09-12 · Claude Code · Gemini for English chat, Sarvam as its own fallback
 - User: for English replies, use Gemini as the LLM (STT stays Sarvam, TTS
   stays Piper), fall back to Sarvam if Gemini fails; non-English keeps
