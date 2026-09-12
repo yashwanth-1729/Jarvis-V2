@@ -128,6 +128,71 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · Bulk delete for schedule entries and memories/ideas
+- User: "why is it still saying i can[']t delete the schedule entrys? it
+  should have ability to do anything... delete every task, or delete
+  certain block for whole week, or find certain block timing or change the
+  certain timing... whether they are tasks or memory or schedules or
+  whatever." Investigated rather than assumed the model was simply being
+  timid -- audited the actual tool registry.
+- **Confirmed a real, structural gap, not a prompting issue**: tasks had
+  `bulk_delete_tasks` (scope/matching/created_on filters, two-step
+  count-verified confirm) since an earlier session. Schedule and
+  memory/idea had NOTHING equivalent -- only `update_schedule_event`/
+  `delete_record`, both single-row. A recurring COLLEGE/ROUTINE block is
+  stored as one row PER WEEKDAY it repeats on, so "delete my Study block
+  for the whole week" was, structurally, N separate confirmations the
+  model had no way to collapse into one -- it wasn't refusing out of
+  caution, the capability genuinely did not exist.
+- Added `bulk_delete_schedule` (`app/llm/tools.py` + new
+  `crud.delete_schedules_where(kind, matching, day_of_week)`, replacing the
+  never-called `delete_schedules_by_kind`) and `bulk_delete_notes`
+  (`app/llm/tools.py` + new `crud.delete_memories_where(matching,
+  category)` / `crud.delete_ideas_where(matching, status)`). Both reuse
+  `bulk_delete_tasks`'s exact two-step shape verbatim: an unconfirmed call
+  resolves and describes the real matching set (with an exact count) and
+  changes nothing; a confirmed call must also pass `expect_count`, and a
+  mismatch is refused outright -- the same fix that closed a real prior
+  incident where a model-relayed count ("3") didn't match the tool's real
+  scope ("19") and the wrong number of tasks went. `bulk_delete_schedule`
+  filters compose freely (kind, name substring, weekday), so "clear my
+  Fridays," "wipe every ROUTINE entry," and "delete this block for the
+  whole week" are each exactly one call. `bulk_delete_notes` takes a
+  required `record_type` (memory or idea, separate tables with different
+  filters -- category for memory, status for idea) and the model is told
+  to call it twice for "forget everything about X" if the user means both.
+- **Found and fixed the other half of the problem while at it**: the
+  system prompt's own deletion section (both the typed `SYSTEM_PROMPT` and
+  `VOICE_SYSTEM_PROMPT`) named ONLY `bulk_delete_tasks` as the worked
+  example for "deleting many things is one question, not one per record."
+  Even after building the new tools, the model had no textual signal that
+  an equivalent existed for schedule/notes -- exactly the kind of gap that
+  produces a confident, wrong "I can't do that" instead of silence. Updated
+  both prompt sections to name all three bulk tools explicitly, and added a
+  second worked voice example ("clear my Study block for the whole week" ->
+  "that's five sessions, Monday through Friday...").
+- Verified with a live offline test against an isolated fixture DB before
+  writing anything into the test suite: seeded a "Study block" ROUTINE
+  entry across 5 weekdays, called `bulk_delete_schedule` unconfirmed
+  (correctly listed all 5, deleted nothing), confirmed with the wrong count
+  (refused, nothing deleted), then confirmed with the right count (deleted
+  exactly those 5, left an unrelated "Java Lab" COLLEGE entry untouched).
+  Same pattern for `bulk_delete_notes` against ideas (3 "Hackathon"-titled
+  ideas deleted, unrelated idea survives) and memories (1 GOAL-category
+  memory deleted, PREFERENCE-category memory survives; a wrong
+  `expect_count` against 2 real matches correctly refused and left both).
+- Added dedicated test blocks to `smoke_test.py` for both tools (mirroring
+  `bulk_delete_tasks`'s own existing block exactly): confirmation gating,
+  missing/wrong `expect_count` refusal, correct deletion count, unrelated
+  fixture rows surviving, unknown kind/category/status rejected. Bumped the
+  pinned `"N core tools registered"` assertion twice (19 -> 20 -> 21, one
+  per new core tool) per its own comment's instruction to do so
+  deliberately when a core tool is added. Added probe entries for both new
+  tools to the general "every tool has a probe" wiring-coverage section.
+- Checks: `smoke_test.py` full pass including all new checks individually
+  confirmed via targeted output inspection (not just the aggregate "ALL
+  CHECKS PASSED"); full backend suite re-run clean afterward.
+
 ### 2026-09-12 · Claude Code · Desktop's own credentials handoff was silently disabling voice on every launch
 - User set a new SARVAM_API_KEY and asked why voice mode had no way to edit
   the schedule anymore. Root-caused rather than assumed: `/api/health`'s

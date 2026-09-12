@@ -218,8 +218,10 @@ Semantic vectors remain an optional future rank signal. Normal recall does not
 depend on a remote embedding request, a native Android vector extension or an
 additional provider, preserving offline operation and voice latency.
 
-There are 19 core tools for tasks, schedules, memories/ideas, brief generation,
-weather, search/fetch, reminders, notification policy and voice/language selection.
+There are 21 core tools for tasks, schedules, memories/ideas, brief generation,
+weather, search/fetch, reminders, notification policy and voice/language selection —
+including bulk deletion for tasks, schedule entries, and memories/ideas alike, each
+gated by a two-step, count-verified confirmation.
 Six shell/filesystem tools plus 27 computer-control tools (Windows UI Automation,
 browser DOM control, OS-level process/clipboard/hotkey control — see
 [docs/computer-control.md](docs/computer-control.md)) are offered only when desktop
@@ -430,6 +432,28 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — Bulk delete for schedule entries and memories/ideas.** User
+  asked why JARVIS still refused bulk operations on the schedule ("delete
+  this block for the whole week") when tasks already had that. It genuinely
+  didn't: `update_schedule_event`/`delete_record` only ever acted on one row,
+  and a recurring COLLEGE/ROUTINE block is one row per weekday it repeats
+  on, so removing it meant a separate confirmation per day. Added
+  `bulk_delete_schedule` (filter by kind, name substring, and/or weekday —
+  "clear my Study block for the whole week" or "wipe every ROUTINE entry"
+  or "clear my Fridays" are each one call) and `bulk_delete_notes` (same
+  shape, for memories and ideas — "forget everything about the old
+  apartment" or "clear my archived ideas"), both reusing `bulk_delete_tasks`'s
+  proven two-step, count-verified confirmation gate exactly (a stated count
+  the user agrees to; a mismatched `expect_count` on the confirmed call
+  refuses rather than deleting an unagreed set). Also updated the system
+  prompt's deletion section, which previously named only `bulk_delete_tasks`
+  as the example — the model had no way to know an equivalent existed for
+  schedule/notes without being told, which is the concrete reason it kept
+  claiming it couldn't. Checks: new dedicated test blocks in `smoke_test.py`
+  for both tools (confirmation gating, wrong-count refusal, correct deletion,
+  unrelated records surviving, unknown kind/category/status rejected) plus
+  offline fixture-DB verification of the exact reported scenario (a 5-day
+  recurring block deleted in one call). Full backend suite green.
 - **2026-09-12 — Fixed desktop's own credentials handoff silently disabling
   voice mode on every launch.** `POST /api/local/credentials` (built for
   Android, where a packaged APK ships no real `.env` and the client must

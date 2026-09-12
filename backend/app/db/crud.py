@@ -798,16 +798,34 @@ async def list_schedule(from_iso: str, to_iso: str, limit: int = 100) -> list[di
     return [d for row in rows if (d := _decorate(row)) is not None]
 
 
-async def delete_schedules_by_kind(kind: str | None = None) -> list[dict[str, Any]]:
-    """Bulk removal. Returns the rows that were deleted so they can be described."""
+async def delete_schedules_where(
+    kind: str | None = None,
+    matching: str | None = None,
+    day_of_week: int | None = None,
+) -> list[dict[str, Any]]:
+    """Bulk removal, filtered by any combination of kind/name/weekday.
+
+    Exists for the same reason `delete_tasks_where` does: a recurring block
+    spans one row per weekday it repeats on, so "delete my Study block for
+    the whole week" is N rows, not one -- and making that N confirmations
+    instead of one is exactly the kind of thing the user should never have
+    to sit through. Passing nothing deletes every schedule entry; callers
+    that mean that should say so explicitly, the same as `bulk_delete_tasks`'s
+    `scope="all"`.
+    """
     doomed = await list_schedules(kind)
+    if matching:
+        needle = matching.strip().lower()
+        doomed = [row for row in doomed if needle in (row.get("event_name") or "").lower()]
+    if day_of_week is not None:
+        doomed = [row for row in doomed if row.get("day_of_week") == day_of_week]
     if not doomed:
         return []
     await _tombstone("schedules", doomed)
-    if kind:
-        await db.execute("DELETE FROM schedules WHERE kind = ?", (kind,))
-    else:
-        await db.execute("DELETE FROM schedules", ())
+    ids = [row["id"] for row in doomed if row.get("id") is not None]
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        await db.execute(f"DELETE FROM schedules WHERE id IN ({placeholders})", ids)
     return doomed
 
 
@@ -887,6 +905,34 @@ async def delete_idea(idea_id: int) -> dict[str, Any] | None:
     return existing
 
 
+async def delete_ideas_where(
+    matching: str | None = None, status: str | None = None
+) -> list[dict[str, Any]]:
+    """Bulk removal, filtered by title/description text and/or status.
+
+    Same reasoning as `delete_tasks_where`/`delete_schedules_where`: "clear
+    every archived idea" or "delete all my ideas about X" is inherently more
+    than one row, and making that one confirmation per row is the thing the
+    two-step gate should never do.
+    """
+    doomed = await list_ideas(statuses=(status,) if status else None, limit=10_000)
+    if matching:
+        needle = matching.strip().lower()
+        doomed = [
+            row for row in doomed
+            if needle in (row.get("title") or "").lower()
+            or needle in (row.get("description") or "").lower()
+        ]
+    if not doomed:
+        return []
+    await _tombstone("ideas", doomed)
+    ids = [row["id"] for row in doomed if row.get("id") is not None]
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        await db.execute(f"DELETE FROM ideas WHERE id IN ({placeholders})", ids)
+    return doomed
+
+
 async def get_memory(memory_id: int) -> dict[str, Any] | None:
     row = await db.fetch_one("SELECT * FROM memories WHERE id = ?", (memory_id,))
     return memory_service.decorate_row(row) if row else None
@@ -956,6 +1002,35 @@ async def delete_memory(memory_id: int) -> dict[str, Any] | None:
     await db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
     await memory_service.refresh_markdown_vault()
     return existing
+
+
+async def delete_memories_where(
+    matching: str | None = None, category: str | None = None
+) -> list[dict[str, Any]]:
+    """Bulk removal, filtered by concept/content text and/or category.
+
+    Same reasoning as the other `delete_*_where` helpers: "forget everything
+    about X" or "clear all my GOAL memories" is inherently more than one row.
+    """
+    doomed = await list_memories(limit=10_000)
+    if category:
+        doomed = [row for row in doomed if row.get("category") == category]
+    if matching:
+        needle = matching.strip().lower()
+        doomed = [
+            row for row in doomed
+            if needle in (row.get("key_concept") or "").lower()
+            or needle in (row.get("content") or "").lower()
+        ]
+    if not doomed:
+        return []
+    await _tombstone("memories", doomed)
+    ids = [row["id"] for row in doomed if row.get("id") is not None]
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        await db.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
+    await memory_service.refresh_markdown_vault()
+    return doomed
 
 
 async def list_ideas(

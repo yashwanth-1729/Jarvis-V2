@@ -285,6 +285,45 @@ class UpdateTaskInput(BaseModel):
     clear_due_date: bool = False
 
 
+class BulkDeleteScheduleInput(BaseModel):
+    """Deleting many schedule entries at once, with the count the user agreed to.
+
+    Same shape as `BulkDeleteTasksInput`, for the same reason: a recurring
+    block is one row per weekday it repeats on, so "delete my Study block for
+    the whole week" or "clear every ROUTINE entry" is inherently a multi-row
+    operation. Without this, the model's only option was `delete_record`
+    looped once per weekday -- a separate confirmation for each day of a
+    single block the user asked to remove once.
+    """
+
+    #: Restrict to one kind. Omit, with matching/day_of_week also omitted, to
+    #: mean "every schedule entry" -- as destructive as it sounds, so it still
+    #: goes through the same count-and-confirm gate as everything else here.
+    kind: str | None = Field(default=None)
+    #: Only entries whose name contains this, case-insensitively -- e.g.
+    #: "Study block" to remove that recurring block across every day it
+    #: repeats on in one call.
+    matching: str | None = None
+    #: Restrict to one weekday (0=Monday … 6=Sunday) -- e.g. "clear my
+    #: Fridays" without touching the same entries on other days.
+    day_of_week: int | None = Field(default=None, ge=0, le=6)
+    confirmed: bool = False
+    #: The number quoted in the confirmation. Required to actually delete.
+    expect_count: int | None = Field(default=None, ge=0)
+
+    @field_validator("kind")
+    @classmethod
+    def _clean_kind(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip().upper()
+        return cleaned or None
+
+    @field_validator("matching")
+    @classmethod
+    def _clean_bulk_matching(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip()
+        return cleaned or None
+
+
 class UpdateScheduleEventInput(BaseModel):
     # `matching` is deliberately required even when an id is supplied. A
     # previous model guessed ids 1..4, then later reused real ids belonging to
@@ -324,6 +363,43 @@ class UpdateIdeaInput(BaseModel):
 
 class SetLanguageInput(BaseModel):
     language: str = Field(min_length=2, max_length=40)
+
+
+class BulkDeleteNotesInput(BaseModel):
+    """Deleting many memories or ideas at once, with the count the user agreed to.
+
+    Same shape as `BulkDeleteTasksInput`/`BulkDeleteScheduleInput`: "forget
+    everything about the old apartment" or "clear my archived ideas" is
+    inherently more than one row, and `delete_record` only ever takes one.
+    Memories and ideas are separate tables with different filters (a memory
+    has a category, an idea has a status), so `record_type` picks which one
+    this call targets -- call it twice, once per type, for "delete
+    everything you remember about X" if the user means both.
+    """
+
+    record_type: Literal["memory", "idea"]
+    #: Only rows whose title/concept or body/description contains this,
+    #: case-insensitively.
+    matching: str | None = None
+    #: Memory only: LONG_TERM / GOAL / PREFERENCE. Ignored for idea.
+    category: str | None = None
+    #: Idea only: DRAFT / ACTIVE / ARCHIVED. Ignored for memory.
+    status: str | None = None
+    confirmed: bool = False
+    #: The number quoted in the confirmation. Required to actually delete.
+    expect_count: int | None = Field(default=None, ge=0)
+
+    @field_validator("matching")
+    @classmethod
+    def _clean_notes_matching(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip()
+        return cleaned or None
+
+    @field_validator("category", "status")
+    @classmethod
+    def _clean_notes_filter(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip().upper()
+        return cleaned or None
 
 
 RecordType = Literal["task", "event", "idea", "memory"]
@@ -686,6 +762,107 @@ async def _handle_bulk_delete_tasks(payload: BulkDeleteTasksInput) -> ToolOutcom
             removed,
             count=len(removed),
             scope=scope,
+            matching=payload.matching,
+            removed=[int(row["id"]) for row in removed if row.get("id") is not None],
+            remaining=remaining,
+        ),
+    )
+
+
+async def _handle_bulk_delete_schedule(payload: BulkDeleteScheduleInput) -> ToolOutcome:
+    if payload.kind is not None and payload.kind not in crud.SCHEDULE_KINDS:
+        options = ", ".join(crud.SCHEDULE_KINDS)
+        return ToolOutcome(
+            content=f"'{payload.kind}' is not a schedule kind. Use one of: {options}.",
+            is_error=True,
+        )
+
+    matching = await crud.list_schedules(payload.kind)
+    if payload.matching:
+        needle = payload.matching.lower()
+        matching = [row for row in matching if needle in (row.get("event_name") or "").lower()]
+    if payload.day_of_week is not None:
+        matching = [row for row in matching if row.get("day_of_week") == payload.day_of_week]
+
+    parts = []
+    if payload.kind:
+        parts.append(f"kind {payload.kind}")
+    if payload.matching:
+        parts.append(f"matching '{payload.matching}'")
+    if payload.day_of_week is not None:
+        parts.append(f"on {crud.weekday_name(payload.day_of_week)}s")
+    described = "schedule entries" + (f" ({', '.join(parts)})" if parts else " (every entry)")
+
+    if not matching:
+        return ToolOutcome(
+            content=f"No {described} to delete.",
+            display={"kind": payload.kind, "matching": payload.matching, "day_of_week": payload.day_of_week, "count": 0},
+        )
+
+    listed = "; ".join(
+        f"#{row['id']} {row.get('event_name')} ({row.get('day_name') or row.get('kind')})"
+        for row in matching[:12]
+    )
+    more = f" (and {len(matching) - 12} more)" if len(matching) > 12 else ""
+    count = len(matching)
+
+    if not payload.confirmed:
+        return ToolOutcome(
+            content=(
+                f"CONFIRMATION REQUIRED. This would delete {count} {described}: "
+                f"{listed}{more}. Nothing has been deleted yet.\n"
+                f"Tell the user the number {count} — that exact number. Get ONE "
+                "confirmation covering the whole set; do not ask about them one "
+                f"by one. Then call again with confirmed=true and "
+                f"expect_count={count}."
+            ),
+            display=_confirm_display(
+                "pending",
+                "event",
+                matching,
+                count=count,
+                scope=payload.kind,
+                matching=payload.matching,
+            ),
+        )
+
+    if payload.expect_count is None:
+        return ToolOutcome(
+            content=(
+                f"Refusing to delete: expect_count is required when confirmed=true. "
+                f"This would remove {count} {described}. Call again with "
+                f"expect_count={count} once the user has agreed to that number."
+            ),
+            is_error=True,
+        )
+    if payload.expect_count != count:
+        return ToolOutcome(
+            content=(
+                f"Refusing to delete: you confirmed {payload.expect_count} "
+                f"entr{'y' if payload.expect_count == 1 else 'ies'} but this matches "
+                f"{count}. Nothing was deleted. Tell the user the real number "
+                f"({count}) and ask again — do not delete a set they have not "
+                "agreed to."
+            ),
+            is_error=True,
+        )
+
+    removed = await crud.delete_schedules_where(
+        kind=payload.kind, matching=payload.matching, day_of_week=payload.day_of_week
+    )
+    remaining = len(await crud.list_schedules())
+    return ToolOutcome(
+        content=(
+            f"Deleted {len(removed)} {described}. "
+            + (f"{remaining} schedule entr{'y' if remaining == 1 else 'ies'} left." if remaining else "The schedule is clear.")
+        ),
+        refresh={"schedule"},
+        display=_confirm_display(
+            "done",
+            "event",
+            removed,
+            count=len(removed),
+            scope=payload.kind,
             matching=payload.matching,
             removed=[int(row["id"]) for row in removed if row.get("id") is not None],
             remaining=remaining,
@@ -1429,6 +1606,132 @@ async def _handle_update_idea(payload: UpdateIdeaInput) -> ToolOutcome:
         content=f"Updated idea #{idea['id']}: '{idea['title']}' [{idea['status']}].",
         refresh={"ideas"},
         display={"id": idea["id"], "title": idea["title"], "changed": sorted(fields)},
+    )
+
+
+async def _handle_bulk_delete_notes(payload: BulkDeleteNotesInput) -> ToolOutcome:
+    is_memory = payload.record_type == "memory"
+
+    if is_memory:
+        if payload.category is not None and payload.category not in crud.MEMORY_CATEGORIES:
+            options = ", ".join(crud.MEMORY_CATEGORIES)
+            return ToolOutcome(
+                content=f"'{payload.category}' is not a memory category. Use one of: {options}.",
+                is_error=True,
+            )
+        matching = await crud.list_memories(limit=10_000)
+        if payload.category:
+            matching = [row for row in matching if row.get("category") == payload.category]
+    else:
+        if payload.status is not None and payload.status not in crud.IDEA_STATUSES:
+            options = ", ".join(crud.IDEA_STATUSES)
+            return ToolOutcome(
+                content=f"'{payload.status}' is not an idea status. Use one of: {options}.",
+                is_error=True,
+            )
+        matching = await crud.list_ideas(
+            statuses=(payload.status,) if payload.status else None, limit=10_000
+        )
+
+    if payload.matching:
+        needle = payload.matching.lower()
+        if is_memory:
+            matching = [
+                row for row in matching
+                if needle in (row.get("key_concept") or "").lower()
+                or needle in (row.get("content") or "").lower()
+            ]
+        else:
+            matching = [
+                row for row in matching
+                if needle in (row.get("title") or "").lower()
+                or needle in (row.get("description") or "").lower()
+            ]
+
+    label = "memory/memories" if is_memory else "idea(s)"
+    parts = []
+    if payload.category:
+        parts.append(f"category {payload.category}")
+    if payload.status:
+        parts.append(f"status {payload.status}")
+    if payload.matching:
+        parts.append(f"matching '{payload.matching}'")
+    described = f"{label}" + (f" ({', '.join(parts)})" if parts else " (every one)")
+
+    if not matching:
+        return ToolOutcome(
+            content=f"No {described} to delete.",
+            display={"record_type": payload.record_type, "matching": payload.matching, "count": 0},
+        )
+
+    name_field = "key_concept" if is_memory else "title"
+    listed = "; ".join(f"#{row['id']} {row.get(name_field)}" for row in matching[:12])
+    more = f" (and {len(matching) - 12} more)" if len(matching) > 12 else ""
+    count = len(matching)
+
+    if not payload.confirmed:
+        return ToolOutcome(
+            content=(
+                f"CONFIRMATION REQUIRED. This would delete {count} {described}: "
+                f"{listed}{more}. Nothing has been deleted yet.\n"
+                f"Tell the user the number {count} — that exact number. Get ONE "
+                "confirmation covering the whole set; do not ask about them one "
+                f"by one. Then call again with confirmed=true and "
+                f"expect_count={count}."
+            ),
+            display=_confirm_display(
+                "pending",
+                payload.record_type,
+                matching,
+                count=count,
+                matching=payload.matching,
+            ),
+        )
+
+    if payload.expect_count is None:
+        return ToolOutcome(
+            content=(
+                f"Refusing to delete: expect_count is required when confirmed=true. "
+                f"This would remove {count} {described}. Call again with "
+                f"expect_count={count} once the user has agreed to that number."
+            ),
+            is_error=True,
+        )
+    if payload.expect_count != count:
+        return ToolOutcome(
+            content=(
+                f"Refusing to delete: you confirmed {payload.expect_count} but this "
+                f"matches {count}. Nothing was deleted. Tell the user the real "
+                f"number ({count}) and ask again — do not delete a set they have "
+                "not agreed to."
+            ),
+            is_error=True,
+        )
+
+    if is_memory:
+        removed = await crud.delete_memories_where(matching=payload.matching, category=payload.category)
+        remaining = len(await crud.list_memories(limit=10_000))
+        refresh = {"memories"}
+    else:
+        removed = await crud.delete_ideas_where(matching=payload.matching, status=payload.status)
+        remaining = len(await crud.list_ideas(limit=10_000))
+        refresh = {"ideas"}
+
+    return ToolOutcome(
+        content=(
+            f"Deleted {len(removed)} {described}. "
+            + (f"{remaining} left." if remaining else "Nothing left in that set.")
+        ),
+        refresh=refresh,
+        display=_confirm_display(
+            "done",
+            payload.record_type,
+            removed,
+            count=len(removed),
+            matching=payload.matching,
+            removed=[int(row["id"]) for row in removed if row.get("id") is not None],
+            remaining=remaining,
+        ),
     )
 
 
@@ -2622,6 +2925,57 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         handler=_handle_update_schedule_event,
     ),
     ToolSpec(
+        name="bulk_delete_schedule",
+        description=(
+            "Delete MANY schedule entries at once. Never loop delete_record "
+            "instead, and never ask about them one by one.\n"
+            "A recurring COLLEGE/ROUTINE block is stored as one row PER WEEKDAY "
+            "it repeats on — 'delete my Study block' or 'clear that block for "
+            "the whole week' means every one of those rows, in this ONE call, "
+            "not a separate confirmation per day. Pass `matching` with the "
+            "block's name.\n"
+            "'Clear my Fridays' or 'wipe everything on Mondays' — pass "
+            "day_of_week alone. 'Delete all my ROUTINE entries' — pass kind "
+            "alone. Combine filters freely; omitting all three means literally "
+            "every schedule entry, which is exactly as destructive as it "
+            "sounds and still goes through the same gate.\n"
+            "Two-step. Call without confirmed; you get an exact count. Tell the "
+            "user THAT number. Get one confirmation, then call again with "
+            "confirmed=true AND expect_count set to the number you were given. "
+            "A mismatch is refused."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["COLLEGE", "ROUTINE", "SESSION"],
+                    "description": "Only entries of this kind. Omit to include every kind.",
+                },
+                "matching": {
+                    "type": "string",
+                    "description": "Only entries whose name contains this, e.g. 'Study block' to remove it across every day it repeats on.",
+                },
+                "day_of_week": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 6,
+                    "description": "Only entries on this weekday. 0=Monday … 6=Sunday.",
+                },
+                "confirmed": {
+                    "type": "boolean",
+                    "description": "Leave false on the first call. Set true once the user has agreed to the whole set going.",
+                },
+                "expect_count": {
+                    "type": "integer",
+                    "description": "The count you were given and told the user. Required with confirmed=true; a mismatch refuses the delete.",
+                },
+            },
+        },
+        model=BulkDeleteScheduleInput,
+        handler=_handle_bulk_delete_schedule,
+    ),
+    ToolSpec(
         name="set_voice",
         description=(
             "Change the voice JARVIS speaks in. Call this when the user asks for "
@@ -2665,6 +3019,59 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         },
         model=UpdateIdeaInput,
         handler=_handle_update_idea,
+    ),
+    ToolSpec(
+        name="bulk_delete_notes",
+        description=(
+            "Delete MANY memories or ideas at once. Never loop delete_record "
+            "instead, and never ask about them one by one.\n"
+            "'Forget everything about the old apartment' or 'delete all my "
+            "ideas about the hackathon' — pass record_type and matching. "
+            "'Clear my archived ideas' — record_type=idea, status=ARCHIVED. "
+            "'Wipe my GOAL memories' — record_type=memory, "
+            "category=GOAL. Memories and ideas are separate stores; call this "
+            "twice, once per record_type, if the user means both ('delete "
+            "everything you remember about X').\n"
+            "Two-step. Call without confirmed; you get an exact count. Tell "
+            "the user THAT number. Get one confirmation, then call again with "
+            "confirmed=true AND expect_count set to the number you were given. "
+            "A mismatch is refused."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "record_type": {
+                    "type": "string",
+                    "enum": ["memory", "idea"],
+                    "description": "Which store to delete from.",
+                },
+                "matching": {
+                    "type": "string",
+                    "description": "Only rows whose title/concept or body/description contains this.",
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["LONG_TERM", "GOAL", "PREFERENCE"],
+                    "description": "Memory only: restrict to this category. Ignored for idea.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["DRAFT", "ACTIVE", "ARCHIVED"],
+                    "description": "Idea only: restrict to this status. Ignored for memory.",
+                },
+                "confirmed": {
+                    "type": "boolean",
+                    "description": "Leave false on the first call. Set true once the user has agreed to the whole set going.",
+                },
+                "expect_count": {
+                    "type": "integer",
+                    "description": "The count you were given and told the user. Required with confirmed=true; a mismatch refuses the delete.",
+                },
+            },
+            "required": ["record_type"],
+        },
+        model=BulkDeleteNotesInput,
+        handler=_handle_bulk_delete_notes,
     ),
     ToolSpec(
         name="delete_record",

@@ -93,7 +93,7 @@ async def main() -> int:
     core = [s for s in TOOL_REGISTRY if s.capability == "core"]
     # Bump deliberately when a core tool is added — the point of pinning it is
     # to notice, since every tool costs ~230 tokens on every single request.
-    check("19 core tools registered", len(core) == 19, str(len(core)))
+    check("21 core tools registered", len(core) == 21, str(len(core)))
     check("set_reminder is one of them", any(s.name == "set_reminder" for s in core))
     check(
         "configure_notifications is one of them",
@@ -226,6 +226,60 @@ async def main() -> int:
     check(
         "no results handled cleanly",
         "No stored memories" in (await execute_tool("search_memory", {"query": "zzzz-nothing"})).content,
+    )
+
+    # ------------------------------------------------------ bulk notes deletion
+    # "Forget everything about the hackathon" or "clear my archived ideas" is
+    # inherently more than one row -- same guarantee bulk_delete_tasks/
+    # bulk_delete_schedule already give tasks and schedule entries.
+    print("\n== bulk notes deletion (memory/idea) ==")
+    for i in range(3):
+        await crud.create_idea(f"Hackathon idea {i}", "notes", status="DRAFT")
+
+    idea_gate = await execute_tool("bulk_delete_notes", {"record_type": "idea", "matching": "Hackathon"})
+    check("bulk idea delete asks once", "CONFIRMATION REQUIRED" in idea_gate.content)
+    check("bulk idea delete states the count", "3" in idea_gate.content)
+    check("nothing removed before confirming", len(await crud.list_ideas()) >= 3)
+
+    naked_idea = await execute_tool("bulk_delete_notes", {"record_type": "idea", "matching": "Hackathon", "confirmed": True})
+    check("confirming without a count is refused", naked_idea.is_error, naked_idea.content[:80])
+
+    wrong_idea = await execute_tool(
+        "bulk_delete_notes", {"record_type": "idea", "matching": "Hackathon", "confirmed": True, "expect_count": 1}
+    )
+    check("a wrong count is refused", wrong_idea.is_error, wrong_idea.content[:80])
+
+    idea_done = await execute_tool(
+        "bulk_delete_notes", {"record_type": "idea", "matching": "Hackathon", "confirmed": True, "expect_count": 3}
+    )
+    check("bulk idea delete reports the count", "Deleted 3" in idea_done.content, idea_done.content[:80])
+    check(
+        "the unrelated idea survives",
+        any(row["title"] == "CLI reading tracker" for row in await crud.list_ideas()),
+    )
+    check(
+        "empty match handled cleanly",
+        "No " in (await execute_tool("bulk_delete_notes", {"record_type": "idea", "matching": "Hackathon"})).content,
+    )
+
+    await crud.upsert_memory("Wants to learn Rust", "a goal", category="GOAL")
+    memory_gate = await execute_tool("bulk_delete_notes", {"record_type": "memory", "category": "GOAL"})
+    check("bulk memory delete asks once", "CONFIRMATION REQUIRED" in memory_gate.content)
+    memory_done = await execute_tool(
+        "bulk_delete_notes", {"record_type": "memory", "category": "GOAL", "confirmed": True, "expect_count": 1}
+    )
+    check("bulk memory delete reports the count", "Deleted 1" in memory_done.content, memory_done.content[:80])
+    check(
+        "the unrelated memory survives",
+        any(row["key_concept"] == "Meeting preference" for row in await crud.list_memories()),
+    )
+    check(
+        "unknown category rejected",
+        (await execute_tool("bulk_delete_notes", {"record_type": "memory", "category": "NOT_A_CATEGORY"})).is_error,
+    )
+    check(
+        "unknown status rejected",
+        (await execute_tool("bulk_delete_notes", {"record_type": "idea", "status": "NOT_A_STATUS"})).is_error,
     )
 
     # --------------------------------------------------- update_task_status
@@ -464,6 +518,54 @@ async def main() -> int:
         ).content,
     )
 
+    # ------------------------------------------------ bulk schedule deletion
+    # "Delete my Study block for the whole week" is N rows, one per weekday it
+    # repeats on -- this must be one confirmation for the whole set, the same
+    # guarantee bulk_delete_tasks already gives tasks.
+    print("\n== bulk schedule deletion ==")
+    for day in range(5):
+        await crud.create_schedule_event(
+            event_name="Bulk Study", kind="ROUTINE", day_of_week=day,
+            start_time="20:00", end_time="21:00",
+        )
+    before_schedule_count = len(await crud.list_schedules())
+
+    schedule_gate = await execute_tool("bulk_delete_schedule", {"matching": "Bulk Study"})
+    check("bulk schedule delete asks once", "CONFIRMATION REQUIRED" in schedule_gate.content)
+    check("bulk schedule delete states the count", "5" in schedule_gate.content)
+    check("nothing removed before confirming", len(await crud.list_schedules()) == before_schedule_count)
+
+    naked_schedule = await execute_tool("bulk_delete_schedule", {"matching": "Bulk Study", "confirmed": True})
+    check("confirming without a count is refused", naked_schedule.is_error, naked_schedule.content[:80])
+
+    wrong_schedule = await execute_tool(
+        "bulk_delete_schedule", {"matching": "Bulk Study", "confirmed": True, "expect_count": 1}
+    )
+    check("a wrong count is refused", wrong_schedule.is_error, wrong_schedule.content[:80])
+    check("  ...and nothing was deleted", len(await crud.list_schedules()) == before_schedule_count)
+
+    schedule_done = await execute_tool(
+        "bulk_delete_schedule", {"matching": "Bulk Study", "confirmed": True, "expect_count": 5}
+    )
+    check(
+        "confirmed bulk delete removes every weekday of the block",
+        len(await crud.list_schedules()) == before_schedule_count - 5,
+    )
+    check("bulk schedule delete reports the count", "Deleted 5" in schedule_done.content, schedule_done.content[:80])
+    check(
+        "empty match handled cleanly",
+        "No " in (await execute_tool("bulk_delete_schedule", {"matching": "Bulk Study"})).content,
+    )
+    check(
+        "unknown kind rejected",
+        (await execute_tool("bulk_delete_schedule", {"kind": "HOLIDAY"})).is_error,
+    )
+    check(
+        "day_of_week filter narrows correctly",
+        "No " in (await execute_tool("bulk_delete_schedule", {"day_of_week": 3})).content,
+        "expected nothing stored on Thursday at this point",
+    )
+
     # ------------------------------------------------------ speech numbers
     # Telugu TTS reads a bare numeral in Telugu, so digits are rewritten as
     # English words before synthesis.
@@ -620,6 +722,8 @@ async def main() -> int:
         "generate_proactive_brief": {},
         "add_schedule_event": {"event_name": "probe", "day_of_week": 0, "start_time": "09:00"},
         "bulk_delete_tasks": {"scope": "completed"},
+        "bulk_delete_schedule": {"matching": "zzz-nonexistent-zzz"},
+        "bulk_delete_notes": {"record_type": "idea", "matching": "zzz-nonexistent-zzz"},
         "update_task": {"task_id": 999_999, "title": "probe"},
         "update_schedule_event": {
             "event_id": 999_999,
