@@ -187,8 +187,12 @@ Medium, worth doing:
   back -- both times all 5 checks passed AND the process count returned to
   baseline within 2 seconds of exit (no orphan), confirmed via `tasklist`
   after each run.
-- Full backend suite re-run after the fix; see this entry's own checks line
-  once the run this session started finishes.
+- Full backend suite re-run clean after the fix: **26/26 pass**, including
+  `segment_test.py` itself and, notably, `reminder_lead_test.py` -- the one
+  failure this session had been treating as pre-existing and unrelated.
+  With the stuck processes and locked temp-db state gone, it now passes too;
+  worth noting in case it resurfaces; it may have been a second symptom of
+  the same resource contention rather than a genuine, separate bug.
 
 ### 2026-09-12 · Claude Code · Confirm-then-act gate on close_app/browser_submit
 - Follow-up to the computer-control work below: user asked to build the
