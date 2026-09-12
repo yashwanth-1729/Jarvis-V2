@@ -3,6 +3,7 @@ import type {
   ChatStreamEvent,
   DashboardState,
   HistoryMessage,
+  Reminder,
   TaskStatus,
   ToggleTaskResponse,
 } from "@/types";
@@ -188,6 +189,19 @@ export function fetchDashboard(): Promise<DashboardState> {
 
 export function regenerateBrief(): Promise<Brief> {
   return request<Brief>("/api/briefs/generate", { method: "POST" });
+}
+
+/**
+ * Pending reminders, direct from the backend's own SQLite.
+ *
+ * Unlike tasks/schedule/ideas/memories, reminders are never mirrored into
+ * IndexedDB or Supabase — each device fires its own alarms off its own local
+ * copy (see the native alarm plan in `nativeNotifications.ts`, which already
+ * reads this same endpoint). So there is no `RecordsMode`/local branch here:
+ * this call is the same on desktop and mobile alike.
+ */
+export function fetchReminders(): Promise<Reminder[]> {
+  return request<Reminder[]>("/api/reminders");
 }
 
 export function toggleTask(

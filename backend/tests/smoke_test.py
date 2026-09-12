@@ -885,6 +885,57 @@ async def main() -> int:
         )
         check("DELETE /api/chat/history -> 204", client.delete("/api/chat/history").status_code == 204)
 
+        # ------------------------------------------------ /api/reminders CRUD
+        # The manual UI (ScheduleBoard's "Reminders" segment) talks to these
+        # directly — no agent involved — so they need their own coverage
+        # independent of the set_reminder tool's own tests.
+        from datetime import timedelta
+
+        far_future = (now() + timedelta(days=2)).isoformat()
+        created = client.post("/api/reminders", json={"text": "Call the bank", "due_at": far_future})
+        check("POST /api/reminders -> 201", created.status_code == 201, str(created.status_code))
+        reminder_id = created.json()["id"]
+        check("created reminder has no target_at", created.json()["target_at"] is None)
+
+        past_due = client.post("/api/reminders", json={"text": "Too late", "due_at": "2020-01-01T00:00:00"})
+        check("creating a reminder in the past -> 422", past_due.status_code == 422)
+
+        listed = client.get("/api/reminders")
+        check("GET /api/reminders -> 200", listed.status_code == 200)
+        check(
+            "the new reminder is listed",
+            any(r["id"] == reminder_id for r in listed.json()),
+        )
+
+        later = (now() + timedelta(days=3)).isoformat()
+        updated = client.patch(f"/api/reminders/{reminder_id}", json={"due_at": later})
+        check("PATCH /api/reminders/{id} -> 200", updated.status_code == 200, str(updated.status_code))
+        check("update changed due_at", updated.json()["due_at"] == later)
+
+        renamed = client.patch(f"/api/reminders/{reminder_id}", json={"text": "Call the bank about the loan"})
+        check(
+            "text-only update leaves due_at alone",
+            renamed.json()["due_at"] == later,
+            renamed.json()["due_at"],
+        )
+
+        bad_update = client.patch(f"/api/reminders/{reminder_id}", json={"due_at": "2020-01-01T00:00:00"})
+        check("updating to a past time -> 422", bad_update.status_code == 422)
+
+        missing_update = client.patch("/api/reminders/987654", json={"text": "nope"})
+        check("updating a missing reminder -> 404", missing_update.status_code == 404)
+
+        deleted = client.delete(f"/api/reminders/{reminder_id}")
+        check("DELETE /api/reminders/{id} -> 204", deleted.status_code == 204)
+        check(
+            "deleted reminder is gone",
+            not any(r["id"] == reminder_id for r in client.get("/api/reminders").json()),
+        )
+        check(
+            "deleting a missing reminder -> 404",
+            client.delete(f"/api/reminders/{reminder_id}").status_code == 404,
+        )
+
 
     print("\n" + "=" * 60)
     if failures:

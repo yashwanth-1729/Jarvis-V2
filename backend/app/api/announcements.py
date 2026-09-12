@@ -15,6 +15,7 @@ having been shouted into an empty room.
     POST   /api/announcements/ack      mark them delivered
     POST   /api/reminders              set one directly (the UI, not the agent)
     GET    /api/reminders              what is still pending
+    PATCH  /api/reminders/{id}         change its text and/or time
     DELETE /api/reminders/{id}         cancel one
 """
 
@@ -30,6 +31,7 @@ from app.api.schemas import (
     AnnouncementsResponse,
     ReminderCreate,
     ReminderOut,
+    ReminderUpdate,
 )
 from app.core.timeutil import normalize_datetime, now, parse_datetime
 from app.db import crud
@@ -83,6 +85,22 @@ async def create_reminder(payload: ReminderCreate) -> ReminderOut:
 async def list_reminders(include_fired: bool = False) -> list[ReminderOut]:
     rows = await crud.list_reminders(include_fired=include_fired)
     return [ReminderOut(**row) for row in rows]
+
+
+@router.patch("/api/reminders/{reminder_id}", response_model=ReminderOut)
+async def update_reminder(reminder_id: int, payload: ReminderUpdate) -> ReminderOut:
+    due_at = None
+    if payload.due_at is not None:
+        due_at = normalize_datetime(payload.due_at)
+        if due_at is None:
+            raise HTTPException(422, f"Could not read '{payload.due_at}' as a datetime.")
+        moment = parse_datetime(due_at)
+        if moment is not None and moment <= now():
+            raise HTTPException(422, "That time has already passed.")
+    reminder = await crud.update_reminder(reminder_id, text=payload.text, due_at=due_at)
+    if reminder is None:
+        raise HTTPException(404, f"No reminder with id {reminder_id}.")
+    return ReminderOut(**reminder)
 
 
 @router.delete("/api/reminders/{reminder_id}", status_code=204)

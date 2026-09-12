@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarRange, GraduationCap, MapPin, Pencil, Plus, Repeat, StickyNote, TriangleAlert } from "lucide-react";
+import { Bell, CalendarRange, GraduationCap, MapPin, Pencil, Plus, Repeat, StickyNote, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { RecordEditor, type RecordValues } from "@/components/RecordEditor";
@@ -9,9 +9,18 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
-import { createEvent, deleteEvent, updateEvent, type RecordsMode } from "@/lib/records";
-import { cn } from "@/lib/utils";
-import type { GroupedSchedule, ScheduleEvent } from "@/types";
+import { fetchReminders } from "@/lib/api";
+import {
+  createEvent,
+  createReminder,
+  deleteEvent,
+  deleteReminder,
+  updateEvent,
+  updateReminder,
+  type RecordsMode,
+} from "@/lib/records";
+import { cn, formatDateTime, parseLocal, relativeLabel } from "@/lib/utils";
+import type { GroupedSchedule, Reminder, ScheduleEvent } from "@/types";
 import { transitionUi } from "@/lib/uiMotion";
 
 const DAYS = [
@@ -32,7 +41,7 @@ const DAYS = [
  * things is not like the others, and the row read as filters rather than
  * as structure because of it.
  */
-type Section = "routine" | "college" | "session";
+type Section = "routine" | "college" | "session" | "reminders";
 
 /** JS `getDay()` is Sunday-first; the backend is Monday-first. */
 function todayIndex(): number {
@@ -61,6 +70,18 @@ const EVENT_FIELDS = [
   { kind: "textarea", name: "notes", label: "Notes", rows: 2 },
 ] as const;
 
+const REMINDER_FIELDS = [
+  { kind: "text", name: "text", label: "Remind me to…", required: true,
+    placeholder: "Call the bank about the loan" },
+  { kind: "datetime", name: "due_at", label: "When", required: true },
+] as const;
+
+/** Which record the editor modal is open for, and what to do with it. */
+type Editing =
+  | { kind: "event"; record: ScheduleEvent | "new" }
+  | { kind: "reminder"; record: Reminder | "new" }
+  | null;
+
 export function ScheduleBoard({
   schedule,
   today,
@@ -73,13 +94,33 @@ export function ScheduleBoard({
   onChanged: () => void;
 }) {
   const [section, setSection] = React.useState<Section>("routine");
-  const [editing, setEditing] = React.useState<ScheduleEvent | "new" | null>(null);
+  const [editing, setEditing] = React.useState<Editing>(null);
   const current = todayIndex();
+
+  // Reminders are never part of `schedule` — they are not mirrored into
+  // IndexedDB/Supabase like the four synced stores, so this board loads them
+  // itself rather than waiting on the dashboard's own state. Loaded once up
+  // front (not lazily on first visiting the tab) so the segmented count next
+  // to "Reminders" is never a placeholder zero the first time this renders.
+  const [reminders, setReminders] = React.useState<Reminder[]>([]);
+  const loadReminders = React.useCallback(async () => {
+    try {
+      const rows = await fetchReminders();
+      setReminders(rows);
+    } catch {
+      // Transient fetch failure: keep whatever was last loaded rather than
+      // flashing the list to empty.
+    }
+  }, []);
+  React.useEffect(() => {
+    void loadReminders();
+  }, [loadReminders]);
 
   const options = [
     { value: "routine" as const, label: "My routine", count: schedule.routine.length },
     { value: "college" as const, label: "College", count: schedule.college.length },
     { value: "session" as const, label: "Blocks", count: schedule.session.length },
+    { value: "reminders" as const, label: "Reminders", count: reminders.length },
   ];
 
   return (
@@ -105,18 +146,24 @@ export function ScheduleBoard({
           variant="primary"
           size="sm"
           className="ml-auto"
-          onClick={() => setEditing("new")}
-          aria-label="Add a schedule entry"
+          onClick={() =>
+            setEditing(
+              section === "reminders"
+                ? { kind: "reminder", record: "new" }
+                : { kind: "event", record: "new" },
+            )
+          }
+          aria-label={section === "reminders" ? "Add a reminder" : "Add a schedule entry"}
         >
           <Plus className="h-3.5 w-3.5" />
-          <span>New entry</span>
+          <span>{section === "reminders" ? "New reminder" : "New entry"}</span>
         </Button>
       </div>
 
       <div key={section} className="agenda-view">
         {section === "college" && (
           <WeekdayList
-            onEdit={setEditing}
+            onEdit={(entry) => setEditing({ kind: "event", record: entry })}
             entries={schedule.college}
             highlightDay={current}
             emptyTitle="No class timings saved"
@@ -126,7 +173,7 @@ export function ScheduleBoard({
         )}
         {section === "routine" && (
           <WeekdayList
-            onEdit={setEditing}
+            onEdit={(entry) => setEditing({ kind: "event", record: entry })}
             entries={schedule.routine}
             highlightDay={current}
             conflicts={schedule.conflicts}
@@ -136,33 +183,67 @@ export function ScheduleBoard({
           />
         )}
         {section === "session" && (
-          <ScheduleTimeline events={schedule.session} onEdit={setEditing} />
+          <ScheduleTimeline
+            events={schedule.session}
+            onEdit={(entry) => setEditing({ kind: "event", record: entry })}
+          />
+        )}
+        {section === "reminders" && (
+          <ReminderList
+            reminders={reminders}
+            onEdit={(reminder) => setEditing({ kind: "reminder", record: reminder })}
+          />
         )}
       </div>
 
       <RecordEditor
         open={editing !== null}
-        title={editing === "new" ? "New schedule entry" : "Edit schedule entry"}
+        title={
+          editing?.kind === "reminder"
+            ? editing.record === "new" ? "New reminder" : "Edit reminder"
+            : editing?.record === "new" ? "New schedule entry" : "Edit schedule entry"
+        }
         fields={
-          EVENT_FIELDS as unknown as React.ComponentProps<typeof RecordEditor>["fields"]
+          (editing?.kind === "reminder" ? REMINDER_FIELDS : EVENT_FIELDS) as unknown as
+            React.ComponentProps<typeof RecordEditor>["fields"]
         }
         initial={
-          editing && editing !== "new"
-            ? {
-                event_name: editing.event_name,
-                kind: editing.kind,
-                day_of_week: editing.day_of_week ?? "",
-                start_time: editing.start_time ?? "",
-                end_time: editing.end_time ?? "",
-                time_start: editing.time_start ?? "",
-                time_end: editing.time_end ?? "",
-                location: editing.location ?? "",
-                notes: editing.notes ?? "",
-              }
-            : { kind: section.toUpperCase() }
+          editing?.kind === "reminder"
+            ? editing.record !== "new"
+              ? { text: editing.record.text, due_at: editing.record.due_at }
+              : {}
+            : editing?.record && editing.record !== "new"
+              ? {
+                  event_name: editing.record.event_name,
+                  kind: editing.record.kind,
+                  day_of_week: editing.record.day_of_week ?? "",
+                  start_time: editing.record.start_time ?? "",
+                  end_time: editing.record.end_time ?? "",
+                  time_start: editing.record.time_start ?? "",
+                  time_end: editing.record.time_end ?? "",
+                  location: editing.record.location ?? "",
+                  notes: editing.record.notes ?? "",
+                }
+              : { kind: section.toUpperCase() }
         }
         onClose={() => setEditing(null)}
         onSave={async (values: RecordValues) => {
+          if (editing?.kind === "reminder") {
+            const draft = {
+              text: String(values.text ?? "").trim(),
+              due_at: String(values.due_at ?? "").trim(),
+            };
+            if (!draft.text) throw new Error("Say what to remind you about.");
+            if (!draft.due_at) throw new Error("Choose when.");
+            if (editing.record === "new") {
+              await createReminder(draft);
+            } else {
+              await updateReminder(editing.record.id, draft);
+            }
+            await loadReminders();
+            onChanged();
+            return;
+          }
           const text = (key: string) => String(values[key] ?? "").trim() || null;
           const day = String(values.day_of_week ?? "").trim();
           const draft = {
@@ -185,17 +266,22 @@ export function ScheduleBoard({
           } else {
             draft.time_start = draft.time_end = null;
           }
-          if (editing === "new") {
+          if (editing?.record === "new") {
             await createEvent(mode, draft);
-          } else if (editing) {
-            await updateEvent(mode, editing.uid ?? editing.id, draft);
+          } else if (editing?.kind === "event") {
+            await updateEvent(mode, editing.record.uid ?? editing.record.id, draft);
           }
           onChanged();
         }}
         onDelete={
-          editing && editing !== "new"
+          editing && editing.record !== "new"
             ? async () => {
-                await deleteEvent(mode, editing.uid ?? editing.id);
+                if (editing.kind === "reminder" && editing.record !== "new") {
+                  await deleteReminder(editing.record.id);
+                  await loadReminders();
+                } else if (editing.kind === "event" && editing.record !== "new") {
+                  await deleteEvent(mode, editing.record.uid ?? editing.record.id);
+                }
                 onChanged();
               }
             : undefined
@@ -502,5 +588,90 @@ function EntryRow({
         )}
       </div>
     </li>
+  );
+}
+
+/**
+ * Reminders, soonest first.
+ *
+ * A flat chronological list rather than `WeekdayList`'s weekday grouping —
+ * reminders have no recurrence, and a handful of one-off nudges scattered
+ * across the next few days reads better as "what's coming up next" than
+ * sorted into seven mostly-empty weekday buckets.
+ */
+function ReminderList({
+  reminders,
+  onEdit,
+}: {
+  reminders: Reminder[];
+  onEdit: (reminder: Reminder) => void;
+}) {
+  const sorted = React.useMemo(
+    () =>
+      [...reminders].sort(
+        (a, b) => (parseLocal(a.due_at)?.getTime() ?? 0) - (parseLocal(b.due_at)?.getTime() ?? 0),
+      ),
+    [reminders],
+  );
+
+  if (!sorted.length) {
+    return (
+      <div className="p-5">
+        <EmptyState
+          icon={<Bell className="h-4 w-4" />}
+          title="No reminders set"
+          hint='Try: "Remind me to call the bank at 5pm" — or add one directly.'
+        />
+      </div>
+    );
+  }
+
+  const now = Date.now();
+
+  return (
+    <div className="px-4 py-4">
+      <ol className="space-y-px">
+        {sorted.map((reminder) => {
+          const due = parseLocal(reminder.due_at);
+          const overdue = Boolean(due && due.getTime() < now && !reminder.fired_at);
+          return (
+            <li key={reminder.id}>
+              <button
+                type="button"
+                onClick={() => onEdit(reminder)}
+                className={cn(
+                  "schedule-card group flex w-full items-baseline gap-3 rounded-sm py-2.5 pl-3 pr-2 text-left",
+                  "transition-colors duration-150 hover:bg-surface-2/50",
+                )}
+              >
+                <span className="w-28 shrink-0 pt-0.5 text-right font-mono text-2xs text-ink-faint">
+                  {formatDateTime(reminder.due_at)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm leading-snug text-ink">
+                    {reminder.text}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-0.5 flex items-center gap-1.5 text-2xs",
+                      overdue ? "text-accent" : "text-ink-faint",
+                    )}
+                  >
+                    {overdue && <TriangleAlert className="h-3 w-3 shrink-0" strokeWidth={1.75} />}
+                    {relativeLabel(reminder.due_at)}
+                    {reminder.fired_at && " · already spoken"}
+                  </span>
+                </span>
+                <Pencil
+                  aria-hidden
+                  className="h-3.5 w-3.5 shrink-0 self-center text-ink-faint opacity-0 transition-opacity group-hover:opacity-100"
+                  strokeWidth={1.75}
+                />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }

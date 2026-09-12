@@ -86,7 +86,9 @@ The daily brief remains expandable. Weekly schedules have a weekday selector on
 mobile and a timeline-style agenda; desktop keeps the full week. COLLEGE and
 ROUTINE entries repeat weekly. BLOCK entries are concrete sessions with required
 start and end times, appear nearest-first, temporarily replace overlapping
-ROUTINE time, and expire with a durable deletion when their end passes.
+ROUTINE time, and expire with a durable deletion when their end passes. A fourth
+segment, Reminders, lists every pending one-off reminder with add/edit/delete —
+the same manual controls as the other three segments, on both platforms.
 
 Notes is a page workspace rather than a mixed record feed. Long-term memory,
 Temporary memory and Other are always present; every page can be renamed, and
@@ -432,6 +434,27 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-12 — A real Reminders section: view, add, edit, delete, on both
+  platforms.** `POST`/`GET`/`DELETE /api/reminders` already existed but were
+  never wired to any UI; added the missing `PATCH /api/reminders/{id}` and
+  built the actual section. Reminders are intentionally not one of the five
+  synced record types (each device fires its own alarms off its own local
+  backend), so this needed no `RecordsMode` local/backend branching — one
+  REST path, identical on desktop and mobile. Placed as a fourth segment
+  ("Reminders") inside the existing Schedule view's segmented control rather
+  than a new mobile bottom-nav item, since `ScheduleBoard.tsx` is a single
+  shared component already rendered on both platforms and mobile's nav is
+  already at its documented 5-item cap. Editing the time on a reminder
+  un-fires it and clears its `target_at` (the field only means something as
+  the real moment an early-notice row stands in for; a manual time edit
+  replaces that with a plain exact-time reminder). Checks: 12 new
+  `smoke_test.py` checks for the full CRUD cycle plus both validation paths;
+  full backend suite green; frontend typecheck and production build clean;
+  verified live in the browser end to end (create, edit, delete, empty
+  state) — caught and fixed one real issue this way (a stale running backend
+  process needed a restart to serve the new route; not a code bug). Ships to
+  Android automatically on the next `npm run android:install` — not yet
+  installed on-device this pass.
 - **2026-09-12 — Bulk delete for schedule entries and memories/ideas.** User
   asked why JARVIS still refused bulk operations on the schedule ("delete
   this block for the whole week") when tasks already had that. It genuinely

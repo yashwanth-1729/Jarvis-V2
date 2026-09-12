@@ -359,6 +359,11 @@ class ReminderCreate(BaseModel):
     due_at: str
 
 
+class ReminderUpdate(BaseModel):
+    text: str | None = Field(default=None, min_length=1, max_length=500)
+    due_at: str | None = None
+
+
 class ReminderOut(BaseModel):
     id: int
     text: str

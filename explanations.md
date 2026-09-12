@@ -128,6 +128,86 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-12 · Claude Code · A real "Reminders" section, view/edit/add/delete, both platforms
+- User: add a separate section to view/edit/add/delete reminders on both
+  desktop and mobile. Investigated before building: `POST`/`GET`/`DELETE
+  /api/reminders` already existed in `announcements.py`, explicitly
+  commented "the UI, not the agent" -- built at some point for a UI that
+  was never actually made. Only `PATCH` (edit) was missing, and no
+  frontend page anywhere called any of these routes.
+- **Architecture check before writing any UI code**: confirmed reminders
+  are deliberately NOT one of the five synced record types
+  (`SYNCED_TABLES` in `localdb.ts` = tasks/schedules/memories/ideas/
+  note_pages) -- each device fires its own alarms off its own local
+  backend, matching the README's own note that "reminders and
+  announcement delivery have separate storage paths." This meant the new
+  UI needed none of the `RecordsMode`/local-vs-backend branching every
+  other editable record goes through (`records.ts`'s big comment about
+  "two authoritative stores") -- a single, platform-agnostic REST call
+  path, simpler than every other record type in the app.
+- **Placement decided without asking**: this codebase's own documented UX
+  guideline caps mobile bottom nav at 5 items, already fully used
+  (Tasks/Schedule/Voice/Notes/Chat). Rather than violate that or ask the
+  user to pick, found that `ScheduleBoard.tsx` is a SINGLE component
+  rendered on both desktop and mobile (`product.css` handles the
+  responsive split, not separate implementations) with an existing
+  segmented control (My routine / College / Blocks). Added "Reminders" as
+  a fourth segment there -- a genuinely separate section, visible
+  identically on both platforms the instant this shipped, with no nav
+  changes, no mobile-specific work, and no deviation from the 5-item
+  guideline.
+- Backend: `crud.update_reminder(id, text=, due_at=)` (editing the time
+  un-fires the row and clears `target_at` -- a manual edit turns a
+  possibly-early-notice row back into a plain exact-time reminder, so the
+  old target can't misquote "in N minutes" against a time that is no
+  longer what changed). `ReminderUpdate` schema. `PATCH /api/reminders/
+  {id}`, validated exactly like `POST` (rejects unparseable text, rejects
+  a time already in the past).
+- Frontend: `Reminder` type; `fetchReminders()` in `api.ts` (no
+  `RecordsMode` — see above); `createReminder`/`updateReminder`/
+  `deleteReminder` in `records.ts`, same reasoning. `ScheduleBoard.tsx`:
+  `Editing` became a discriminated union (`{kind:"event"|"reminder",
+  record}`) instead of a bare `ScheduleEvent | "new"`, since the same
+  modal now edits two different record shapes; a new `ReminderList`
+  (flat, soonest-first, using the existing `formatDateTime`/
+  `relativeLabel` helpers `ScheduleTimeline` already uses for one-off
+  sessions) plus `REMINDER_FIELDS` for the shared `RecordEditor`. Reminders
+  are fetched once on mount (not lazily on first opening that segment) so
+  the segmented control's count is never a placeholder zero.
+- **Real bug caught by actually testing the built UI, not just
+  typechecking**: after building the feature, edit and delete worked but
+  every `PATCH` came back "Method Not Allowed" in the live browser check.
+  Root cause: the desktop app instance being tested was still the process
+  from BEFORE the backend edit landed -- Python code, so needs a restart
+  to pick up new routes, and this one hadn't had one. Not a bug in the
+  code at all; restarted the running app and re-tested clean. Recorded
+  here because it is exactly the kind of thing "I typechecked it" would
+  have missed -- only driving the real running app through create → edit
+  → delete in the browser caught it.
+- Verified live in the browser end to end, not just via curl: opened
+  Schedule, clicked the new "Reminders" segment (count starts at 0, empty
+  state with a bell icon and a usage hint), created "Water the office
+  plants" for the next day (appeared immediately, correct relative "in
+  1d" label, segment count updated to 1), edited its text in place
+  (updated instantly), deleted it with the same confirm-inside-the-editor
+  flow every other record type uses (back to the empty state, count back
+  to 0).
+- Checks: 12 new dedicated checks in `smoke_test.py`'s HTTP-routes section
+  covering the full `POST`/`GET`/`PATCH`/`DELETE` cycle including both
+  validation paths (past-time rejected on create AND on update) and both
+  404 paths (update/delete a nonexistent id) -- all pass. Full backend
+  suite re-run clean. Frontend: `tsc --noEmit` clean, `next build`
+  (production) compiles with only the two pre-existing, already-documented
+  hook-dependency warnings. No new frontend test file added -- this
+  codebase has no existing precedent for component-level UI tests (its
+  frontend tests cover speech/sync/endpointing logic, not rendered
+  components), so live browser verification stood in for that instead of
+  inventing a new test harness for one feature.
+- **Not yet built on the packaged Android app** -- this ships automatically
+  to Android on the next `npm run android:install` (backend-only + shared
+  `ScheduleBoard.tsx`, no native Kotlin changes needed), but has not been
+  installed/confirmed on the physical device this pass.
+
 ### 2026-09-12 · Claude Code · Bulk delete for schedule entries and memories/ideas
 - User: "why is it still saying i can[']t delete the schedule entrys? it
   should have ability to do anything... delete every task, or delete

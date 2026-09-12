@@ -29,7 +29,7 @@ import { type SyncedTable, listRows, putRows } from "@/lib/localdb";
 import { numericId } from "@/lib/localDashboard";
 import { decodeMemoryContent, encodeMemoryContent, reviseMemoryContent } from "@/lib/memory";
 import { nowIso } from "@/lib/syncClient";
-import type { Idea, Memory, NotePage, ScheduleEvent, Task } from "@/types";
+import type { Idea, Memory, NotePage, Reminder, ScheduleEvent, Task } from "@/types";
 
 /** A fresh uid for a locally-created row, matching the backend's format. */
 function newUid(): string {
@@ -323,4 +323,34 @@ export async function deleteNotePage({local}: RecordsMode, page: NotePage): Prom
     return;
   }
   await apiDelete(`/api/note-pages/${page.uid}`);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Reminders                                                                   */
+/*                                                                              */
+/* No `RecordsMode` here, on purpose. Unlike the five stores above, reminders  */
+/* are never mirrored into IndexedDB or Supabase — each device fires its own  */
+/* alarms off its own local backend (see `fetchReminders` in `lib/api.ts`),   */
+/* so there is only ever one way to reach them, on desktop or mobile alike.   */
+/* -------------------------------------------------------------------------- */
+
+export interface ReminderDraft {
+  text: string;
+  /** Absolute datetime, ISO 8601 local. */
+  due_at: string;
+}
+
+export async function createReminder(draft: ReminderDraft): Promise<Reminder> {
+  return apiPost<Reminder>("/api/reminders", draft);
+}
+
+export async function updateReminder(
+  id: number,
+  changes: Partial<ReminderDraft>,
+): Promise<Reminder> {
+  return apiPatch<Reminder>(`/api/reminders/${id}`, changes);
+}
+
+export async function deleteReminder(id: number): Promise<void> {
+  await apiDelete(`/api/reminders/${id}`);
 }

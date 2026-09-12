@@ -94,6 +94,21 @@ export interface GroupedSchedule {
   conflicts: ScheduleConflict[];
 }
 
+export interface Reminder {
+  id: number;
+  text: string;
+  due_at: string;
+  /**
+   * The real moment an early-notice row stands in for (e.g. a 5pm class when
+   * `due_at` is 4:45pm) — set only on that row, by the voice/chat tool's
+   * default two-row reminder. Null for an instant reminder, the exact-time
+   * row of a default one, and anything created or edited from this UI.
+   */
+  target_at: string | null;
+  created_at: string;
+  fired_at: string | null;
+}
+
 export interface Idea {
   page_uid?: string | null;
   id: number;

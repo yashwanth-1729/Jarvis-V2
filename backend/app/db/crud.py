@@ -1336,6 +1336,40 @@ async def mark_reminder_fired(reminder_id: int) -> None:
     )
 
 
+async def update_reminder(
+    reminder_id: int, *, text: str | None = None, due_at: str | None = None
+) -> dict[str, Any] | None:
+    """Edit a reminder's text and/or firing time in place.
+
+    Editing the time un-fires it -- a reminder someone moved forward clearly
+    has not happened yet, and the old `fired_at` would otherwise make the
+    scheduler skip it silently. It also clears `target_at`: that field only
+    means something as the real moment an *early-notice* row (from the
+    two-row default reminder) stands in for, and a manual edit to `due_at`
+    replaces that relationship with a plain, exact-time reminder -- leaving
+    the old target in place would misquote "in N minutes" against a time
+    that is no longer what changed. Editing only the text leaves both alone.
+    """
+    existing = await get_reminder(reminder_id)
+    if existing is None:
+        return None
+    fields: list[str] = []
+    params: list[Any] = []
+    if text is not None:
+        fields.append("text = ?")
+        params.append(text.strip())
+    if due_at is not None:
+        fields.append("due_at = ?")
+        params.append(due_at)
+        fields.append("fired_at = NULL")
+        fields.append("target_at = NULL")
+    if not fields:
+        return existing
+    params.append(reminder_id)
+    await db.execute(f"UPDATE reminders SET {', '.join(fields)} WHERE id = ?", params)
+    return await get_reminder(reminder_id)
+
+
 async def delete_reminder(reminder_id: int) -> dict[str, Any] | None:
     existing = await get_reminder(reminder_id)
     if existing is None:
