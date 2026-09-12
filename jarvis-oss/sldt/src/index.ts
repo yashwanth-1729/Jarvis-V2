@@ -7,3 +7,5 @@ export * from "./conflict.js";
 export * from "./objects.js";
 export * from "./store.js";
 export * from "./sync.js";
+export * from "./browserStore.js";
+export * from "./githubClient.js";

@@ -128,6 +128,45 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 2: persistence + write proxy
+- Continuation of the stage-1 entry directly below this one -- same user,
+  same feature, same session's scope agreement (staged build, no UI yet).
+- Added `jarvis-oss/sldt/src/browserStore.ts`: IndexedDB persistence for the
+  sync engine's `LocalObjectSet` and `SyncState`, plus non-secret identity
+  (`datasetId`, `deviceId`) -- deliberately never the account `secret`,
+  matching the SLDT design's "re-derive, never persist" rule. Follows
+  `frontend/src/lib/localdb.ts`'s exact transaction idiom (resolve on
+  `transaction.oncomplete`, not the individual request, to avoid the classic
+  IndexedDB bug where a write looks committed but the transaction later
+  aborts).
+- Added `jarvis-oss/sldt/src/githubClient.ts`: wires the `Store` abstraction
+  from stage 1 to reality. Reads hit GitHub's public Contents API directly
+  (no credential needed for a public repo); writes route through a new
+  proxy. Deliberately does *not* send `repo`/`branch` in the write request body
+  -- the proxy is single-tenant with its own fixed target, so a compromised
+  client can't redirect writes to a different repo the credential reaches.
+- Built `jarvis-oss/proxy/`: the one stateless server-side component the
+  SLDT design calls for. `POST /write` only; holds the GitHub PAT from an
+  env var; rejects any request body that isn't exactly
+  `{path, content, sha, message}` (`handler.ts::validateShape`); restricts
+  writes to a configured path prefix and rejects `..` traversal even inside
+  it; logs only field shapes and content byte length, never values; passes
+  through a GitHub 409/422 CAS conflict as a bare status code rather than
+  echoing GitHub's raw error text. Plain `node:http` entrypoint
+  (`server.ts`) around a framework-agnostic `handler.ts` so it's portable to
+  a serverless function later without touching the logic.
+- Verified: `npm test` in both `jarvis-oss/sldt/` (18 new assertions across
+  `browserStore.test.ts`, run under `fake-indexeddb`) and `jarvis-oss/proxy/`
+  (15 assertions in `handler.test.ts`, GitHub's API mocked with a fake
+  `fetch`) -- all passing, zero live network calls, zero credits spent.
+  `npx tsc --noEmit` clean in both packages.
+- **Not done, stated in both READMEs:** the proxy has not been deployed
+  anywhere and nothing in this repo has made a real request to
+  api.github.com yet -- that's the next verification step before any device
+  relies on this path. Still no `SldtClient` façade composing
+  persistence+network+sync into the one call an app would actually make,
+  and still no desktop/Android/frontend UI wiring or BYOK work.
+
 ### 2026-09-13 · Claude Code · jarvis-oss scaffold: SLDT sync core (stage 1)
 - User is building an open-source edition of JARVIS (desktop + Android) that
   swaps the paid app's Supabase mirror for **SLDT** (server-independent

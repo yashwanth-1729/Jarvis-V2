@@ -442,6 +442,27 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — SLDT stage 2: persistence and the write proxy.** Follows
+  directly on the stage-1 entry below. Added
+  `jarvis-oss/sldt/src/browserStore.ts` (IndexedDB persistence for the local
+  object set, sync cursor, and non-secret identity — never the account
+  secret — tested under `fake-indexeddb`, same technique
+  `frontend/tests/sync.test.ts` uses for `localdb.ts`) and
+  `jarvis-oss/sldt/src/githubClient.ts` (wires the `GitHubStore` abstraction
+  to reality: direct unauthenticated reads from GitHub's public Contents
+  API, writes routed through a proxy). Built that proxy at
+  `jarvis-oss/proxy/` — the one stateless server-side component SLDT's
+  design calls for: holds the GitHub PAT, accepts only an allowlisted
+  `{path, content, sha, message}` request shape, restricts writes to a
+  configured path prefix, rejects path traversal, and logs only field
+  shapes/byte lengths, never values. Verified with `npm test` in both
+  packages (12 + 15 new assertions, all mocked — no live network calls
+  anywhere, no credits spent) and `npx tsc --noEmit` clean in both. **Not
+  yet done:** the proxy has not been deployed anywhere and no code has made
+  a real request to api.github.com; there is still no UI/app wiring and no
+  façade composing persistence + network + sync into one call an app would
+  make. See `jarvis-oss/sldt/README.md` and `jarvis-oss/proxy/README.md`.
+
 - **2026-09-13 — Open-source variant scaffolded: SLDT sync core.** Started
   `jarvis-oss/`, a parallel open-source edition of the desktop/Android apps
   that swaps the paid app's Supabase mirror for SLDT — an encrypted sync

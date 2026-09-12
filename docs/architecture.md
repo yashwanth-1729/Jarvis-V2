@@ -131,9 +131,13 @@ This mirror is specific to the paid app. The open-source variant under
 manifest plus per-object AES-256-GCM envelopes on a publicly addressable
 object store (a GitHub repo in this stage) instead of Supabase, with
 deterministic revision+deviceId conflict resolution in place of the
-`updated_at` comparison above. As of this note only the sync engine itself
-exists (unit-tested, no network calls); no proxy, UI, or app wiring is built
-yet, and neither this app's boundaries nor its Supabase path are affected.
+`updated_at` comparison above. As of this note the sync engine has IndexedDB
+persistence (`jarvis-oss/sldt/src/browserStore.ts`) and its network path
+exists end to end -- direct reads from GitHub's Contents API, writes through
+the one stateless proxy at `jarvis-oss/proxy/` that holds the write
+credential -- but nothing has made a live call to api.github.com, the proxy
+is not deployed anywhere, and there is still no UI or app wiring. Neither
+this app's boundaries nor its Supabase path are affected.
 
 ## Systematic memory boundary
 

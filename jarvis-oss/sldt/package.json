@@ -7,13 +7,14 @@
   "main": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx tests/identity.test.ts && npx tsx tests/crypto.test.ts && npx tsx tests/manifest.test.ts && npx tsx tests/conflict.test.ts && npx tsx tests/sync.test.ts"
+    "test": "npx tsx tests/identity.test.ts && npx tsx tests/crypto.test.ts && npx tsx tests/manifest.test.ts && npx tsx tests/conflict.test.ts && npx tsx tests/sync.test.ts && npx tsx tests/browserStore.test.ts"
   },
   "dependencies": {
     "hash-wasm": "^4.11.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
+    "fake-indexeddb": "^6.2.5",
     "tsx": "^4.23.12",
     "typescript": "^5.6.3"
   }
