@@ -442,6 +442,37 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — The installed desktop app needs `JARVIS_BACKEND_DIR` set; it
+  cannot reliably find `backend/` on its own.** `backend.rs`'s auto-discovery
+  (`find_backend_dir`) walks up from the executable's own path and from the
+  process's working directory looking for `backend/main.py`. That only
+  succeeds when the exe lives inside (or is launched with its cwd inside)
+  the repo checkout. An installed copy under
+  `%LOCALAPPDATA%\Jarvis Desktop\` has no such relationship to
+  `D:\Jarvis-2.0\backend` — a real double-click launch (cwd near the exe,
+  not the repo) silently fails discovery and the UI just shows "Backend
+  unreachable" with nothing in the log to explain why (the release build
+  has no logging plugin at all — `tauri_plugin_log` is gated on
+  `debug_assertions` in `lib.rs`). This had been masked in prior testing
+  purely because the exe was being launched from a shell whose working
+  directory happened to already be inside the repo. Fixed by setting
+  `JARVIS_BACKEND_DIR=D:\Jarvis-2.0\backend` as a persistent **User**
+  environment variable (`find_backend_dir` already checked this env var
+  first — it just had never been set). A currently-running Explorer does
+  not pick up a newly-set env var for processes it spawns until it restarts,
+  so this also needed an Explorer restart to take effect immediately rather
+  than at next login. **If the repo ever moves or the desktop app is
+  reinstalled from a fresh machine, this env var needs to be set again** —
+  it is not part of any installer here, just a manually-set User variable.
+  Consolidated to a single install while at it: removed the older
+  `%LOCALAPPDATA%\JARVIS\` copy (a stale pre-watchdog build) and its Start
+  Menu shortcut/registry entry, replaced with one copy at
+  `%LOCALAPPDATA%\Jarvis Desktop\Jarvis Desktop.exe` and a matching Start
+  Menu shortcut. Verified by launching from `C:\Windows\System32` (a
+  working directory with no possible coincidental relationship to the repo)
+  and confirming `/api/health` still responded — isolates the env var, not
+  path-walking luck, as what actually fixed it.
+
 - **2026-09-13 — SLDT stage 3: a Remote adapter for the paid frontend, not
   activated.** Follows the stage-2 entry below. Added `SldtClient`
   (`jarvis-oss/sldt/src/client.ts`), composing identity, IndexedDB

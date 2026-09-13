@@ -128,6 +128,52 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · Desktop app couldn't find its backend when launched normally -- root cause was never actually fixed, only worked around by accident
+- User kept seeing "Backend unreachable" even after the watchdog fix
+  (previous entry) and after I'd replaced the installed exe with a fresh
+  build. Root cause, found by actually testing from a clean working
+  directory instead of trusting that my own manual tests meant anything:
+  `find_backend_dir()` in `backend.rs` only succeeds when launched from
+  inside the repo checkout (walks up from the exe path and the process cwd
+  looking for `backend/main.py`). Every one of my own "it works" tests this
+  whole session had been run from a shell whose cwd was already
+  `D:\Jarvis-2.0` -- I was accidentally supplying the one condition that
+  makes discovery succeed, and never noticed because I never varied it.
+  A real double-click launch from `%LOCALAPPDATA%\...\app.exe` has a cwd
+  near the exe, with no relationship to the repo on a different drive, so
+  discovery silently fails every time for actual normal use. The release
+  build has no logging plugin at all (`tauri_plugin_log` is
+  `debug_assertions`-gated in `lib.rs`), so this failure is completely
+  invisible -- nothing to grep, nothing to see, just the generic
+  "unreachable" banner.
+- Fix: `JARVIS_BACKEND_DIR` (a User env var `find_backend_dir` already
+  checked first, just never set) -> `D:\Jarvis-2.0\backend`. Also had to
+  restart Explorer for it to take effect immediately, since a running
+  Explorer doesn't refresh its own environment block for a newly-set User
+  variable until it restarts or the user logs out/in.
+- Also consolidated per the user's request: found exactly one real install
+  (`%LOCALAPPDATA%\JARVIS\`, from before the watchdog fix -- not multiple
+  stray copies, contrary to what "still same" suggested), removed it plus
+  its Start Menu shortcut and registry uninstall entry, and replaced it with
+  a single copy at `%LOCALAPPDATA%\Jarvis Desktop\Jarvis Desktop.exe` with
+  a matching Start Menu shortcut. Left the old taskbar-pin `.lnk` file
+  removed too, but modern Windows taskbar pinning isn't just that file
+  existing -- **user still needs to manually unpin the old icon and pin the
+  new shortcut if one is stuck on their taskbar**, this could not be
+  scripted reliably.
+- Verified properly this time: launched from `C:\Windows\System32` (zero
+  possible coincidental relationship to the repo) and confirmed
+  `/api/health` still responded, isolating the env var -- not path-walking
+  luck -- as the actual fix.
+- **Not fixed, flagged instead:** the underlying fragility is still there
+  for anyone else who ever installs this app, or if the repo moves drives.
+  `find_backend_dir()`'s heuristic silently fails with zero diagnostics in
+  a release build. Worth considering later: either write a startup log even
+  in release builds specifically for this failure path, or make first-run
+  setup prompt for/persist `JARVIS_BACKEND_DIR` instead of relying on a
+  developer to set it by hand. Not done here since the user's actual ask
+  (single named copy, working now) is satisfied without it.
+
 ### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 3: Remote adapter, not activated
 - Continuation of the stage-2 entry directly below -- same feature, same
   session's scope agreement. User asked to (a) build the `SldtClient`
