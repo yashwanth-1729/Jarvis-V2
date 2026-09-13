@@ -442,6 +442,34 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — The actual cause of "Backend unreachable" / "localhost
+  refused to connect" was neither of the two fixes below it — it was every
+  manual build this whole investigation being a dev-mode binary mislabeled
+  as production.** Tauri decides devUrl (`http://localhost:3000`) vs the
+  bundled `frontendDist` at **compile time**, via a specific Cargo feature
+  named `custom-protocol` on the `tauri` crate (`tauri-build`'s build
+  script: `dev = !custom_protocol`) — this is completely independent of
+  cargo's own `--release`/`--debug` profile, which only affects
+  optimization, not this. `npm run desktop:build` (`tauri build`) passes
+  `--features custom-protocol` automatically; a bare
+  `cargo build --release`, which is what every manual rebuild in this
+  investigation used, gets neither dev nor prod mode signaled and defaults
+  to **dev** — producing a fully optimized release binary that still tries
+  to load a Next.js dev server that was never running, failing instantly
+  with a browser-level connection-refused page that looks exactly like a
+  backend problem and is not one. `src-tauri/Cargo.toml` had no
+  `[features]` section at all for this, unlike the standard Tauri
+  scaffold. Added `custom-protocol = ["tauri/custom-protocol"]`
+  (deliberately not `default = [...]` — that would also enable it for
+  `tauri dev`, which needs devUrl for hot reload). **Always build a real
+  release via `npm run desktop:build`; if you must use bare cargo for any
+  reason, it is `cargo build --release --features tauri/custom-protocol`
+  or the binary silently regresses to this exact failure.** Also explains
+  why earlier fixes in this same investigation (the watchdog, then
+  `JARVIS_BACKEND_DIR`) kept testing as "working" — every verification in
+  this file so far tested the *backend* half of the app (curling
+  `/api/health` directly), never actually loaded the webview's own UI, so a
+  broken frontend load was invisible to every check that had been run.
 - **2026-09-13 — The installed desktop app needs `JARVIS_BACKEND_DIR` set; it
   cannot reliably find `backend/` on its own.** `backend.rs`'s auto-discovery
   (`find_backend_dir`) walks up from the executable's own path and from the

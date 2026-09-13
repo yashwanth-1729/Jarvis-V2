@@ -17,6 +17,22 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
+[features]
+# Tauri decides devUrl vs frontendDist at compile time via this exact feature
+# name (tauri-build's build.rs: `dev = !custom_protocol`) -- NOT via cargo's
+# debug/release profile, which is not the same thing. `tauri build` (i.e.
+# `npm run desktop:build`) passes --features custom-protocol automatically;
+# `tauri dev` does not. A bare `cargo build --release` gets NEITHER unless
+# you pass `--features tauri/custom-protocol` explicitly -- without it, the
+# binary is `--release` in every profiling sense but still tries to load
+# devUrl (http://localhost:3000) and fails with "can't reach this page" the
+# instant no dev server is running, which looks exactly like a backend
+# problem but is not one. Deliberately NOT `default = [...]` here, matching
+# upstream's own template: making it a default would also turn it on for
+# `tauri dev`, which needs devUrl for hot reload. Always build a real
+# production binary via `npm run desktop:build`, not bare cargo.
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }

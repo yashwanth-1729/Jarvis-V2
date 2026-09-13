@@ -128,6 +128,67 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · The actual root cause, three fixes deep: every manual build was dev-mode mislabeled as production
+- After the watchdog fix and the `JARVIS_BACKEND_DIR` fix (both real, both
+  necessary, neither sufficient), the user sent a screenshot: "Hmmm... can't
+  reach this page / localhost refused to connect / ERR_CONNECTION_REFUSED".
+  That is a **browser-level failed navigation**, not a React-level fetch
+  error rendered inside a loaded page -- meaning the webview's main frame
+  request itself was refused, before any of my own app code ever ran. I had
+  been testing exclusively via `curl http://127.0.0.1:8000/api/health`,
+  which only checks the backend half -- it can't see a webview that never
+  loaded its own UI at all. Every "verified working" claim in the two
+  entries above this one was true for the backend and silently blind to the
+  frontend, which is a real process gap: I should have loaded the actual
+  page, not just curled the API, before declaring any of it fixed.
+- Root cause, checked against Tauri's own source rather than memory
+  (`tauri-2.11.5/src/manager/mod.rs::get_app_url`, `tauri-build-2.6.3/src/
+  lib.rs::is_dev`, `tauri-2.11.5/build.rs`): whether a compiled binary loads
+  `devUrl` or the bundled `frontendDist` is decided at **compile time** by a
+  specific Cargo feature, `custom-protocol`, on the `tauri` crate --
+  completely unrelated to `--release` vs `--debug`, which only changes
+  optimization level. `tauri build` (`npm run desktop:build`) passes
+  `--features custom-protocol` automatically; `tauri dev` does not (by
+  design, so hot reload still works). Every manual rebuild I did this
+  session used bare `cargo build --release`, which triggers *neither* path
+  explicitly and defaults to **dev** -- producing a binary that is a real,
+  optimized release build in every profiling sense, but still tries to load
+  `http://localhost:3000` (Next's dev server) and fails instantly with
+  exactly the screenshot the user sent, since nothing was serving that
+  port. `src-tauri/Cargo.toml` had no `[features]` section for this at all
+  -- not an oversight in the fix, an oversight in the original scaffold,
+  unlike the standard `create-tauri-app` template which declares it.
+- Also found while chasing this: the Start Menu shortcut's actual target
+  had moved to `C:\JarvisApp\Jarvis Desktop.exe` since I last checked it --
+  a location I hadn't touched and don't have a session record of changing.
+  Every exe I'd copied into `%LOCALAPPDATA%\Jarvis Desktop\` up to this
+  point was never actually being launched by the real shortcut at all,
+  independent of the custom-protocol bug -- two compounding failures, not
+  one. No idea why the shortcut's target moved; flagging in case whoever
+  reads this next knows something I don't (a Windows Defender action, a
+  manual move, something else). Replaced `C:\JarvisApp\Jarvis Desktop.exe`
+  directly this time and removed the now-redundant AppData copy so there is
+  exactly one exe and the shortcut actually points at it.
+- Fix: `cargo build --release --features tauri/custom-protocol` for the
+  install now in place, plus `custom-protocol = ["tauri/custom-protocol"]`
+  added to `Cargo.toml` (not as `default`, matching upstream's own
+  reasoning -- a default would also turn it on for `tauri dev`) so the
+  feature name is at least discoverable for the next person who reaches for
+  bare cargo instead of `npm run desktop:build`.
+- Verified properly this time, the whole chain: launched via the real
+  Start Menu shortcut (not a manual exe invocation), confirmed the process
+  path is `C:\JarvisApp\Jarvis Desktop.exe`, and confirmed `/api/health`
+  responds -- **still have not visually confirmed the webview itself
+  renders the dashboard**, since I have no screenshot capability in this
+  environment. Asked the user to check and report back rather than
+  declaring this fixed from the API check alone, the same mistake as the
+  last two entries.
+- **Left open:** why the shortcut's target moved to `C:\JarvisApp\` between
+  sessions is unexplained. If backend-unreachable-style reports keep
+  recurring after this, check the shortcut's actual current target before
+  assuming the code is wrong again -- that alone cost two full fix cycles
+  this session.
+
 ### 2026-09-13 · Claude Code · Desktop app couldn't find its backend when launched normally -- root cause was never actually fixed, only worked around by accident
 - User kept seeing "Backend unreachable" even after the watchdog fix
   (previous entry) and after I'd replaced the installed exe with a fresh
