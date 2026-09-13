@@ -128,6 +128,97 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 4: live round trip against real GitHub, two real bugs fixed
+- Continuation of the stage-3 entry further below -- same feature. User
+  asked to actually deploy-and-test the proxy against a real GitHub repo
+  rather than build more unactivated pieces. This requires a real repo and
+  PAT only the user can create; I can't generate those.
+- **Credential handling note, for the record:** asked the user to save the
+  PAT to a local, gitignored `jarvis-oss/proxy/.env.local` rather than
+  paste it in chat. They pasted it directly in a message anyway. I used it
+  (writing it into that same gitignored file, never echoing it back in any
+  response) to get unblocked, but flagged clearly that anything pasted in
+  chat should be treated as burned and told them to revoke/regenerate the
+  token once done testing. Worth remembering for next time this comes up.
+- Diagnosed three real, sequential GitHub-side blockers by testing with
+  direct `curl` calls (not guessing) before touching any code:
+  1. Fine-grained PATs cannot create the very first commit in a genuinely
+     empty repository via the Contents API -- confirmed via GitHub's own
+     `"Resource not accessible by personal access token"` error even with
+     `Contents: Read and write` granted. Fixed by seeding the repo with one
+     file through the GitHub web UI (not the API) before the first PUT.
+  2. Even after that, writes still 403'd. Checked the `x-accepted-github-permissions`
+     response header directly (`contents=write`) and confirmed the active
+     token genuinely didn't carry that permission -- a real gap in what the
+     user had configured, not a code bug. Fixed once they actually
+     saved/updated the token's Contents permission to Read and write.
+  3. Partway through this debugging (many manual `curl` checks), hit
+     GitHub's unauthenticated rate limit (60/hour) on the *read* side --
+     `directRead()` in `githubClient.ts` deliberately sends no credential,
+     matching the design ("no credential needed for a public repo"), but
+     that budget is small and this session's own repeated manual checks
+     ate all of it. Worked around it in the live TEST script only (not the
+     library) by authenticating its reads with the same token, via the
+     `fetchImpl` override `createGitHubStore` already supported for
+     exactly this kind of case. `githubClient.ts` itself is unchanged.
+- Two real protocol bugs in `jarvis-oss/sldt/src/sync.ts`, found only by
+  the live round trip (a mocked `InMemoryStore` can't reproduce read
+  propagation lag):
+  1. `publishFirstManifest`'s own manifest CAS write could lose a race
+     (two devices bootstrapping at once, or -- what actually happened
+     live -- a `store.get()` falsely reporting "doesn't exist yet" because
+     GitHub's read path lagged its own write path for a freshly created
+     nested directory). The normal pull/push path already treats a lost
+     CAS race as "retry the whole cycle"; the bootstrap path let the raw
+     `ConcurrentWriteConflict` crash `syncOnce` instead. Fixed by wrapping
+     it the same way. Added a regression test in `tests/sync.test.ts`
+     (a `Store` wrapper that serves one deliberately stale "manifest not
+     found" read against an `InMemoryStore` that already has one) so this
+     is covered without needing live network going forward.
+  2. The retry loop had zero backoff between attempts and a budget of 5 --
+     fine for detecting normal contention, nowhere near enough real
+     wall-clock time for GitHub's actual propagation delay on a brand-new
+     nested directory tree (confirmed: 5 instant retries still weren't
+     enough). Added exponential backoff (250ms&hellip;8s cap) and raised
+     the budget to 8; this is a one-time cost per dataset, so spending
+     real seconds on it is worth it rather than failing outright.
+- One thing found but deliberately *not* "fixed" because it structurally
+  can't be: a manifest **read** that's stale but not obviously wrong (as
+  opposed to a lost **write** race, which is detectable) completes
+  `attemptSync` normally with `pulled: []` -- there's no error signal for
+  the protocol to retry on. This bit the delete/tombstone step of the live
+  test specifically (push succeeded, but device B's very next pull didn't
+  see it yet). The correct mitigation is exactly what any real
+  deployment's periodic background sync already does: poll again after a
+  delay. Adjusted the live test (`syncUntilPulled()`) to do that instead of
+  asserting a single `sync()` call always sees the newest state -- this is
+  a documented characteristic of the design now (see
+  `jarvis-oss/sldt/README.md`), not a bug to chase further.
+- Verified: `jarvis-oss/sldt/live-tests/githubRoundTrip.ts` (not part of
+  `npm test` -- real network calls, requires env vars documented in its own
+  header) -- 8/8 assertions passing against a real repo
+  (`yashwanth-1729/sldt-storage`) through a locally-run proxy: push,
+  cross-device pull, delete, tombstone pull. Re-ran the full existing
+  suite after the `sync.ts` fixes: `jarvis-oss/sldt` 76 assertions/7 files,
+  `jarvis-oss/proxy` 15, and confirmed the paid app's own
+  `frontend/tests/sync.test.ts` (43 assertions) still passes untouched.
+  `npx tsc --noEmit` clean in all three packages.
+- Cleanup: killed the locally-running proxy process (and its actual
+  `tsx`/`node` children -- the first `Stop-Process` only killed the parent
+  `cmd.exe` wrapper and left orphaned children holding log file handles,
+  worth remembering next time a background dev process needs killing on
+  Windows) and removed its local log/pid files. The test repo itself
+  (`yashwanth-1729/sldt-storage`) is a disposable fixture with test
+  ciphertext and tombstones under `sldt/` -- nothing sensitive, user can
+  delete the whole repo whenever, no row-level cleanup needed or possible
+  (tombstones are supposed to persist per the design).
+- Updated `README.md`, `docs/architecture.md`, `jarvis-oss/sldt/README.md`,
+  and `jarvis-oss/proxy/README.md`. Nothing under `backend/` or `native/`
+  touched.
+- **Left for next:** still no settings UI for a user to actually choose
+  SLDT over Supabase; the proxy is not deployed anywhere persistent (only
+  run locally for this test, then stopped); BYOK for LLM/STT/TTS untouched.
+
 ### 2026-09-13 · Claude Code · The actual root cause, three fixes deep: every manual build was dev-mode mislabeled as production
 - After the watchdog fix and the `JARVIS_BACKEND_DIR` fix (both real, both
   necessary, neither sufficient), the user sent a screenshot: "Hmmm... can't

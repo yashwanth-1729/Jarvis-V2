@@ -1,15 +1,14 @@
 # SLDT -- server-independent encrypted data synchronization
 
-Status: **a tested, importable `Remote` adapter now exists for the paid
-frontend -- not activated for any user.** Stage 3 of the JARVIS open-source
-variant's sync layer. The engine (stage 1) has persistence and a real
-(unit-tested, not-yet-deployed) path to GitHub via
-[`jarvis-oss/proxy/`](../proxy/README.md) (stage 2), and now a `SldtClient`
-façade composing all of it, plus `frontend/src/lib/sldtRemote.ts` -- an
-`SldtClient`-backed implementation of `syncClient.ts`'s own `Remote`
-interface. No existing file imports it; the shipping app's behavior,
-verified with a real `next build`, is unchanged. Still no settings UI to
-actually choose SLDT over Supabase.
+Status: **verified end-to-end against the real GitHub API and a real
+locally-run proxy -- still not activated for any user.** Stage 4. Stages
+1-3 built the engine, persistence, network wiring, a proxy, and an
+unactivated `Remote` adapter for the paid frontend; this stage ran the
+whole chain for real (own throwaway public repo, own fine-grained PAT, the
+actual proxy process, no mocks) and fixed two real protocol bugs that only
+a live network round trip surfaced -- see "What the live round trip found"
+below. No existing file imports the frontend adapter; still no settings UI
+to actually choose SLDT over Supabase.
 
 ## What this is
 
@@ -156,6 +155,65 @@ Neither change alters resolution for any of the app's own existing
 imports -- both are scoped to resolving paths that already reach outside
 `frontend/` or specifically end in `.js`.
 
+## What the live round trip found
+
+Ran the full chain for real: a throwaway public GitHub repo, a fine-grained
+PAT (`Contents: Read and write`, scoped to that one repo), the actual
+`jarvis-oss/proxy` server running locally, and `live-tests/githubRoundTrip.ts`
+(not part of `npm test` -- makes real network calls, requires the env vars
+documented in that file's header). Two devices, sharing one identity and
+the one real repo: push, cross-device pull, delete, tombstone pull. All 8
+assertions pass now, but getting there surfaced three real issues, none of
+them things a mocked test could have caught:
+
+1. **Fine-grained PATs can't create the first commit in a truly empty
+   repository** via the Contents API (a documented GitHub limitation,
+   confirmed by GitHub's own error: `"Resource not accessible by personal
+   access token"` even with `Contents: Read and write` granted). Not a
+   library bug -- fixed by seeding the test repo with one file through the
+   GitHub web UI before the very first API write. Worth knowing before
+   anyone else stands up a fresh repo for this.
+2. **A lost manifest-CAS race during first-ever publish wasn't retried --
+   it crashed.** `publishFirstManifest`'s own manifest write could lose to
+   a manifest that was already there (a genuine two-devices-bootstrap race,
+   *or* -- what actually happened live -- a `store.get()` returning a false
+   "doesn't exist yet" because GitHub's Contents API read path can lag its
+   own write path for a freshly created nested directory tree). The normal
+   pull/push path already treated a lost CAS race as "retry the whole
+   cycle"; the bootstrap path didn't. Fixed in `sync.ts`: a
+   `ConcurrentWriteConflict` from `publishFirstManifest` now triggers the
+   same retry. Added a regression test (`tests/sync.test.ts`) simulating
+   exactly this stale-read shape against `InMemoryStore` -- no live network
+   required to keep it covered.
+3. **The retry loop had no backoff, and the default budget was too small
+   for a real deployment's first sync.** Five retries with zero delay burn
+   through in milliseconds; GitHub's real propagation lag for a brand-new
+   nested directory needed several seconds. `syncOnce` now sleeps with
+   exponential backoff (250ms&hellip;8s, capped) between attempts, and the
+   default retry budget went from 5 to 8 -- this is a one-time cost per
+   dataset (every sync after the first only ever touches paths that
+   already exist), so it's worth spending real wall-clock time on rather
+   than failing outright.
+4. **A stale-but-not-missing read is invisible to the protocol, not just
+   slow.** Unlike a lost CAS *write*, a manifest *read* that hasn't caught
+   up yet doesn't error -- `attemptSync` just sees nothing new and
+   completes normally with `pulled: []`. No amount of write-retry backoff
+   fixes this, because nothing about that response looks wrong. This is a
+   genuine, inherent characteristic of a storage substrate without strict
+   read-after-write consistency, not something the protocol can detect or
+   patch around. The live test's own mitigation --
+   `syncUntilPulled()`, polling `sync()` again after a delay until the
+   expected object shows up -- is exactly what any real deployment's
+   periodic background pull already does; this just makes that pattern
+   explicit instead of asserting on a single sync() call.
+5. Also hit GitHub's unauthenticated rate limit (60 requests/hour) partway
+   through debugging, purely from repeated manual `curl` checks -- not a
+   library issue, just a reminder that iterating against the real API
+   burns a real, small budget. The live test script authenticates its own
+   reads with the same token used for writes to avoid this during
+   development; production `githubClient.ts` is unchanged and still reads
+   with no credential at all, matching the design.
+
 ## What's explicitly deferred (not this stage)
 
 - **Any UI to actually choose SLDT.** No settings screen for pairing a
@@ -167,15 +225,14 @@ imports -- both are scoped to resolving paths that already reach outside
   deliberately not made here.
 - **BYOK for LLM/STT/TTS providers.** A separate piece of the
   open-source variant, not part of the sync layer.
-- **Deploying the proxy, and any live round trip against real GitHub.**
-  The proxy runs and is unit-tested locally (GitHub's API mocked); it has
-  not been deployed anywhere, and no code in this repo has made a real
-  request to api.github.com. That is the next verification step before
-  any device relies on this path.
+- **Deploying the proxy anywhere persistent.** It was run locally for the
+  live test above and stopped afterward; there is no hosted, always-on
+  deployment yet.
 - **Android/desktop-specific wiring.** The frontend adapter runs in
   whatever webview loads `frontend/`, so it should work unchanged on
   Tauri desktop and the Android build once activated -- but that has not
-  been exercised on-device, only in the web build.
+  been exercised on-device, only in the web build and this Node-based live
+  test.
 
 ## Threat model notes worth keeping visible
 
@@ -190,6 +247,16 @@ imports -- both are scoped to resolving paths that already reach outside
 - The store operator still sees access patterns (write timing, rough
   object counts, size buckets even with padding). That's an accepted
   metadata side-channel, not something this design eliminates.
+- **The protocol assumes the store's reads eventually catch up to its own
+  writes, but not instantly.** Confirmed live against GitHub's Contents
+  API: a read can serve stale-but-not-obviously-wrong state for several
+  seconds after a write completes elsewhere. A lost CAS *write* race is
+  detectable and retried automatically; a stale *read* is not detectable
+  by the protocol at all (nothing about the response looks wrong), so
+  catching up to a very recent remote change can require calling `sync()`
+  again after a short delay rather than expecting one call to always see
+  the latest state. Any deployment's periodic background sync already
+  covers this in practice.
 
 ## Running the tests
 
@@ -210,8 +277,36 @@ npm run typecheck
 npm run build      # proves the app still builds with the adapter present but unimported
 ```
 
+**Live test (real network, not part of the above):** requires your own
+throwaway public GitHub repo (seeded with one commit -- see "What the live
+round trip found" above) and a fine-grained PAT with `Contents: Read and
+write`. See the header of `jarvis-oss/sldt/live-tests/githubRoundTrip.ts`
+for the exact env vars and how to run the proxy locally first.
+
 ## Maintenance and latest changes
 
+- 2026-09-13: Stage 4. Ran the full chain live: a real throwaway GitHub
+  repo, a real fine-grained PAT, the actual proxy running locally, two
+  simulated devices, no mocks. `live-tests/githubRoundTrip.ts` (not part of
+  `npm test`) now passes all 8 assertions -- push, cross-device pull,
+  delete, tombstone pull. Getting there fixed two real protocol bugs
+  (`sync.ts`): `publishFirstManifest` losing its manifest CAS race used to
+  crash instead of retrying like the normal path already does, and the
+  retry loop had no backoff at all, with too small a budget for a real
+  deployment's first sync against a store with any read-after-write lag.
+  Added a regression test (`tests/sync.test.ts`, now 16 assertions)
+  covering the crash scenario without needing live network. Also
+  discovered and documented a *stale read* failure mode (distinct from a
+  lost write race) that the protocol genuinely cannot detect -- see "What
+  the live round trip found" above -- and adjusted the live test to poll
+  like a real deployment's periodic sync would, rather than asserting a
+  single `sync()` call always sees the latest state. `npm test` still
+  green after the fixes across all packages (sldt: 76 assertions across 7
+  files, proxy: 15, frontend's `sldtRemote.test.ts`: 13; the paid app's own
+  pre-existing `sync.test.ts`, 43 assertions, untouched and still passing).
+  Full diagnostic trail (empty-repo API limitation, a fine-grained
+  PAT permission that needed re-saving, GitHub's unauthenticated rate
+  limit) is in `explanations.md`'s log for this date.
 - 2026-09-13: Stage 3. Added `SldtClient` (`src/client.ts`), composing
   identity/persistence/engine into the API an app calls, plus
   `frontend/src/lib/sldtRemote.ts` -- an unactivated, additive `Remote`

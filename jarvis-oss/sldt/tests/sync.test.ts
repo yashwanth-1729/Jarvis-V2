@@ -10,7 +10,7 @@
 import { resolveConflict } from "../src/conflict.js";
 import { importAesKey } from "../src/crypto.js";
 import { deriveKeys, generateDatasetId, generateSecret, type Identity } from "../src/identity.js";
-import { InMemoryStore } from "../src/store.js";
+import { InMemoryStore, type Store, type StoredObject } from "../src/store.js";
 import {
   initialSyncState,
   remove,
@@ -145,6 +145,48 @@ async function main() {
   const dSync = await sync(d);
   check("a corrupted object is reported, not silently accepted", dSync.corrupted.includes("task-2"));
   check("a corrupted object does not end up in local state as valid data", !d.local.get("task-2")?.pending);
+
+  // --- bootstrap race: a manifest read that stales-out as "doesn't exist yet" ---
+  //
+  // Caught live against the real GitHub API: the Contents API's read path can
+  // lag its own write path, so a device's very first `store.get(manifest)`
+  // can come back null even though another device already published --
+  // indistinguishable, from this device's point of view, from a genuine
+  // two-devices-bootstrap-at-once race. Either way `publishFirstManifest`'s
+  // own manifest CAS write then loses to the manifest that's already there,
+  // and that loss has to be a "retry the whole cycle" signal like any other
+  // lost CAS race -- not an unhandled throw.
+  const freshStore = new InMemoryStore();
+  const e = await makeDevice("device-e", identity, freshStore);
+  upsert(e.local, e.id, "task-3", "task", { title: "first device" });
+  await sync(e); // establishes the manifest for real
+
+  let staleReadServed = false;
+  const staleOnceStore: Store = {
+    async get(path: string): Promise<StoredObject | null> {
+      if (path === "manifest.json" && !staleReadServed) {
+        staleReadServed = true;
+        return null; // exactly the false "not found" a lagging read would produce
+      }
+      return freshStore.get(path);
+    },
+    put: (path: string, content: Uint8Array, expectedVersion: string | null) =>
+      freshStore.put(path, content, expectedVersion),
+  };
+
+  const f = await makeDevice("device-f", identity, freshStore);
+  const fResult = await syncOnce({
+    store: staleOnceStore,
+    encryptionKey: f.encryptionKey,
+    authKey: f.authKey,
+    deviceId: f.id,
+    local: f.local,
+    state: f.state,
+    retryBackoffMs: () => 0, // no reason for a unit test to wait on real backoff timing
+  });
+  check("a stale 'no manifest yet' read does not crash the sync cycle", fResult !== undefined);
+  check("the device recovers and pulls the manifest that was actually there", fResult.pulled.includes("task-3"));
+  check("the stale read was actually exercised by this test", staleReadServed);
 
   summarize("sync.test.ts");
 }

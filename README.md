@@ -501,6 +501,36 @@ there is no background process automatically rewriting documentation.
   and confirming `/api/health` still responded — isolates the env var, not
   path-walking luck, as what actually fixed it.
 
+- **2026-09-13 — SLDT stage 4: verified live against the real GitHub API,
+  two real bugs fixed.** Follows the stage-3 entry below. Ran the whole
+  chain for real — a throwaway public GitHub repo, a fine-grained PAT
+  (`Contents: Read and write`, scoped to just that repo), the actual
+  `jarvis-oss/proxy` running locally, two simulated devices — via
+  `jarvis-oss/sldt/live-tests/githubRoundTrip.ts` (not part of `npm test`;
+  makes real network calls). All 8 assertions pass: push, cross-device
+  pull, delete, tombstone pull. Getting there fixed two real protocol bugs
+  in `jarvis-oss/sldt/src/sync.ts`, neither catchable by a mocked test:
+  (1) `publishFirstManifest` losing its manifest CAS write used to crash
+  instead of retrying the way the normal pull/push path already does — a
+  real risk any time two devices bootstrap at once, or (as actually
+  happened live) when a storage read lags its own write; (2) the retry
+  loop had no backoff and too small a budget, so five instant retries
+  couldn't outlast GitHub's real propagation delay for a brand-new nested
+  directory tree — now exponential backoff (250ms–8s) with an 8-attempt
+  budget. Also documented, not fixed (because it can't be): a *stale read*
+  that isn't detectably wrong is invisible to the protocol — the live
+  test's mitigation is polling `sync()` again after a delay, exactly what
+  any real deployment's periodic background pull already does. Added a
+  regression test (`jarvis-oss/sldt/tests/sync.test.ts`) covering the
+  crash scenario without needing live network — suite now 76 assertions
+  across 7 files, all still green, alongside `jarvis-oss/proxy` (15) and
+  the paid app's own untouched `frontend/tests/sync.test.ts` (43). Also
+  hit (and worked around, test-side only) GitHub's unauthenticated rate
+  limit from repeated manual `curl` debugging — production
+  `githubClient.ts` is unchanged and still reads with no credential.
+  Full diagnostic trail in `explanations.md`. See
+  `jarvis-oss/sldt/README.md`'s "What the live round trip found".
+
 - **2026-09-13 — SLDT stage 3: a Remote adapter for the paid frontend, not
   activated.** Follows the stage-2 entry below. Added `SldtClient`
   (`jarvis-oss/sldt/src/client.ts`), composing identity, IndexedDB

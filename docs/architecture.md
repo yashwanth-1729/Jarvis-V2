@@ -132,21 +132,33 @@ manifest plus per-object AES-256-GCM envelopes on a publicly addressable
 object store (a GitHub repo in this stage) instead of Supabase, with
 deterministic revision+deviceId conflict resolution in place of the
 `updated_at` comparison above. As of this note the sync engine has IndexedDB
-persistence (`jarvis-oss/sldt/src/browserStore.ts`) and its network path
-exists end to end -- direct reads from GitHub's Contents API, writes through
-the one stateless proxy at `jarvis-oss/proxy/` that holds the write
-credential -- but nothing has made a live call to api.github.com and the
-proxy is not deployed anywhere. An `SldtClient` façade
-(`jarvis-oss/sldt/src/client.ts`) now composes all of that, and
-`frontend/src/lib/sldtRemote.ts` implements this app's own `Remote`
-interface (the same one `SupabaseRemote` implements above) against it --
-but no existing file imports it, so it changes nothing about what ships;
-proving it could even build required two additive `next.config.mjs`
-changes (`experimental.externalDir`, a webpack extension alias for the
-sldt package's `.js`-suffixed imports), neither of which touches
-resolution of this app's own code. There is still no settings UI letting a
-user actually choose SLDT over Supabase. Neither this app's boundaries nor
-its Supabase path are affected.
+persistence (`jarvis-oss/sldt/src/browserStore.ts`), an `SldtClient` façade
+(`jarvis-oss/sldt/src/client.ts`) composing identity/persistence/engine into
+one call, and `frontend/src/lib/sldtRemote.ts` implementing this app's own
+`Remote` interface (the same one `SupabaseRemote` implements above) against
+it -- but no existing file imports that adapter, so it changes nothing
+about what ships; proving it could even build required two additive
+`next.config.mjs` changes (`experimental.externalDir`, a webpack extension
+alias for the sldt package's `.js`-suffixed imports), neither of which
+touches resolution of this app's own code.
+
+The network path has now been run for real against api.github.com through
+a locally-run instance of the proxy at `jarvis-oss/proxy/` -- push,
+cross-device pull, delete, and tombstone propagation all confirmed against
+a real repo, not just mocks. That live round trip found two real protocol
+bugs (both fixed): a lost manifest-write race during first-ever publish
+used to crash instead of retrying, and the retry loop had no backoff and
+too small a budget to outlast GitHub's real read-after-write propagation
+delay for a brand-new directory tree. It also surfaced something the
+protocol genuinely cannot fix: a *stale read* that isn't detectably wrong
+(as opposed to a lost *write* race, which is detectable) is invisible to
+`sync()` -- catching up requires calling it again after a delay, same as
+any deployment's periodic background pull already does. See
+`jarvis-oss/sldt/README.md`'s "What the live round trip found" for the
+full account. The proxy itself is still not deployed anywhere persistent
+(it was run locally for that test and stopped), and there is still no
+settings UI letting a user actually choose SLDT over Supabase. Neither this
+app's boundaries nor its Supabase path are affected.
 
 ## Systematic memory boundary
 

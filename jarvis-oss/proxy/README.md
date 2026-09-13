@@ -73,7 +73,13 @@ new thin entrypoint that calls `handleWrite`, not touching this file.
 
 ## Status
 
-Implemented and unit-tested (`tests/handler.test.ts`, GitHub's API mocked).
-**Not yet deployed anywhere or exercised against the real GitHub API** — no
-live network calls have been made from this code. That's the next
-verification step before any device relies on it.
+Implemented, unit-tested (`tests/handler.test.ts`, GitHub's API mocked),
+and verified live: run locally with a real fine-grained PAT against a real
+throwaway repo, it forwarded writes from both a push and a delete/tombstone
+correctly (see `../sldt/live-tests/githubRoundTrip.ts` and
+`../sldt/README.md`'s "What the live round trip found" for the two real
+protocol bugs that surfaced along the way — none of them in this proxy
+itself). **Still not deployed anywhere persistent** — it was run locally
+for that test and stopped afterward. A real deployment (Vercel/Cloudflare/a
+small VPS) is the remaining step before any device relies on it standing
+ready.

@@ -28,7 +28,37 @@ import {
 import type { Store } from "./store.js";
 
 const MANIFEST_PATH = "manifest.json";
-const MAX_SYNC_RETRIES = 5;
+
+/**
+ * Default retry budget for a sync cycle that keeps losing the manifest CAS
+ * race. Higher than it looks like it needs to be: a *brand new* dataset's
+ * very first manifest write against GitHub's Contents API can take several
+ * seconds to become visible to a read of the freshly created nested
+ * directory tree (`sldt/<prefix>/manifest.json` and `.../objects/` both
+ * newly created in the same commit) -- confirmed by a live round trip where
+ * 5 retries with exponential backoff still weren't enough. This is a
+ * one-time cost per dataset (every sync after the first only ever touches
+ * paths that already exist), but if the budget is too small, first-ever
+ * bootstrap against a real deployment fails outright rather than just
+ * being slow.
+ */
+const MAX_SYNC_RETRIES = 8;
+
+/**
+ * Delay before retry `attempt` (0-indexed) after a lost CAS race. Exponential
+ * with a cap: an in-memory store or a strongly-consistent one resolves a
+ * retry instantly regardless, but a storage substrate with any real
+ * read-after-write lag -- GitHub's Contents API among them -- needs real
+ * wall-clock time between attempts, not several retries that all fire
+ * within the same millisecond.
+ */
+function defaultRetryBackoffMs(attempt: number): number {
+  return Math.min(300 * 2 ** attempt, 8000);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Durable per-device sync cursor. Must be persisted by the host app across
@@ -123,13 +153,21 @@ export interface SyncOptions {
   deviceId: string;
   local: LocalObjectSet;
   state: SyncState;
+  /** Override for tests only -- production callers should rely on the default exponential backoff. */
+  retryBackoffMs?: (attempt: number) => number;
 }
 
 export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
+  const backoff = options.retryBackoffMs ?? defaultRetryBackoffMs;
   for (let attempt = 0; attempt < MAX_SYNC_RETRIES; attempt++) {
     const result = await attemptSync(options);
     if (result) return result;
-    // A concurrent writer won the manifest CAS race; re-fetch and retry from scratch.
+    // A concurrent writer won the manifest CAS race, or the store's read
+    // path hasn't caught up with its own write path yet -- either way,
+    // re-fetch and retry from scratch after giving it real time to settle.
+    if (attempt < MAX_SYNC_RETRIES - 1) {
+      await sleep(backoff(attempt));
+    }
   }
   throw new SyncRetriesExhausted(MAX_SYNC_RETRIES);
 }
@@ -142,8 +180,23 @@ async function attemptSync(options: SyncOptions): Promise<SyncResult | null> {
   let manifestVersion: string | null;
 
   if (remoteManifestObject === null) {
-    // First device: nothing to pull, publish everything pending and stop.
-    return publishFirstManifest(options);
+    // Nothing exists yet as far as this read can tell -- publish everything
+    // pending as the first manifest. But "doesn't exist yet" can be wrong:
+    // another device may have just published (a true bootstrap race), or a
+    // storage substrate with any read-after-write lag (GitHub's Contents API
+    // among them) can serve a stale "not found" microseconds after a write
+    // that already landed. Either way the fix is the same as the normal
+    // path's: treat a lost manifest-write race as "retry from scratch," not
+    // an unhandled crash -- the retry will re-fetch, see the manifest now
+    // exists, and correctly fall through to the ordinary pull/merge/push path.
+    try {
+      return await publishFirstManifest(options);
+    } catch (error) {
+      if (error instanceof ConcurrentWriteConflict) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   remoteManifest = deserializeManifest(remoteManifestObject.content);
