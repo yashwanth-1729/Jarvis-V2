@@ -135,9 +135,18 @@ deterministic revision+deviceId conflict resolution in place of the
 persistence (`jarvis-oss/sldt/src/browserStore.ts`) and its network path
 exists end to end -- direct reads from GitHub's Contents API, writes through
 the one stateless proxy at `jarvis-oss/proxy/` that holds the write
-credential -- but nothing has made a live call to api.github.com, the proxy
-is not deployed anywhere, and there is still no UI or app wiring. Neither
-this app's boundaries nor its Supabase path are affected.
+credential -- but nothing has made a live call to api.github.com and the
+proxy is not deployed anywhere. An `SldtClient` façade
+(`jarvis-oss/sldt/src/client.ts`) now composes all of that, and
+`frontend/src/lib/sldtRemote.ts` implements this app's own `Remote`
+interface (the same one `SupabaseRemote` implements above) against it --
+but no existing file imports it, so it changes nothing about what ships;
+proving it could even build required two additive `next.config.mjs`
+changes (`experimental.externalDir`, a webpack extension alias for the
+sldt package's `.js`-suffixed imports), neither of which touches
+resolution of this app's own code. There is still no settings UI letting a
+user actually choose SLDT over Supabase. Neither this app's boundaries nor
+its Supabase path are affected.
 
 ## Systematic memory boundary
 

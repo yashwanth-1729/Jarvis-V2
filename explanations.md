@@ -128,6 +128,77 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 3: Remote adapter, not activated
+- Continuation of the stage-2 entry directly below -- same feature, same
+  session's scope agreement. User asked to (a) build the `SldtClient`
+  façade and (b) wire it into `frontend/` as a drop-in `Remote`; explicitly
+  declined the alternative (a live GitHub round trip), since that needs a
+  real repo + PAT only the user can create.
+- Added `jarvis-oss/sldt/src/client.ts` (`SldtClient`): composes
+  identity/key derivation, `browserStore.ts` persistence, and the sync
+  engine into the API an app actually calls (`upsert`/`delete`/`get`/
+  `listByType`/`listAll`/`sync`). `sync()` persists local state even if
+  the network cycle throws, so queued edits survive a crash mid-cycle.
+- Found the real integration point on the paid side:
+  `frontend/src/lib/syncClient.ts` already isolates its network dependency
+  behind a `Remote` interface (`fetchRows`/`pushRows`/`fetchTombstones`/
+  `pushTombstones`) — `SupabaseRemote` is just one implementation of it.
+  So rather than build a parallel façade, the real move was implementing
+  that same interface: `frontend/src/lib/sldtRemote.ts` (`SldtRemote`).
+- The one real design wrinkle: `syncClient.ts`'s `push()` calls
+  `pushRows`/`pushTombstones` once per table expecting each to be an
+  independent, cheap network round trip (true for Supabase's REST API).
+  SLDT's actual unit of work is one atomic manifest cycle covering every
+  pending change at once. Resolved by buffering pushes into the
+  `SldtClient` (no network) and running exactly one real `sync()` cycle on
+  the first subsequent `fetchRows`/`fetchTombstones` call, reusing that
+  result for the rest of the round.
+- Real bug caught by `frontend/tests/sldtRemote.test.ts` (not by
+  inspection): the cached cycle was only invalidated inside
+  `pushRows`/`pushTombstones`, which `push()` skips entirely when nothing
+  is locally pending — so a pure "pull, nothing to push" round (the
+  common case: periodic background pull, or open-the-app pull) would have
+  silently replayed the first round's stale result forever and never
+  actually pulled new data from a peer. Fixed by also invalidating in
+  `fetchTombstones`, since `pull()`'s own code comment ("Tombstones apply
+  *after* rows") establishes it's reliably the last call of a round.
+- Getting the frontend import to work at all took two `next.config.mjs`
+  changes, found by actually trying to build rather than guessing:
+  `experimental.externalDir: true` (Next refuses by default to resolve an
+  import that reaches outside the project directory — confirmed by first
+  building *without* it and watching it fail exactly that way), and a
+  `webpack(config)` hook adding `resolve.extensionAlias: {".js": [".ts",
+  ".tsx", ".js"]}` (jarvis-oss/sldt's own files use `.js`-suffixed
+  relative imports pointing at `.ts` source, the standard convention for
+  a package meant to run under Node's ESM loader / `tsx` without a build
+  step — webpack doesn't do that remap on its own). Verified for real:
+  temporarily added a throwaway route (`app/sldtprobetest/`) importing the
+  adapter, ran `next build`, confirmed the route actually appeared in the
+  build's route table (a leading-underscore folder name I tried first
+  silently opts out of Next's routing and would have proven nothing),
+  then deleted the probe route once the build was clean.
+- Verified: `frontend/tests/sldtRemote.test.ts` (13 assertions, 0 network
+  calls) exercises the adapter through the real `syncOnce(remote)` path
+  against real `localdb.ts` rows (fake-indexeddb), with a raw SLDT peer
+  (bare `sync.ts` primitives, no IndexedDB) standing in for a second
+  device — push, pull, and delete confirmed in both directions. Existing
+  `frontend/tests/sync.test.ts` (43 assertions), `npm run typecheck`, and
+  `npm run build` all still pass/succeed unchanged after these edits.
+  `jarvis-oss/sldt`'s own suite (`npm test`, now 73 assertions across 7
+  files including `client.test.ts`) and `jarvis-oss/proxy`'s (15
+  assertions) still pass.
+- Updated `README.md`, `docs/architecture.md`, and
+  `jarvis-oss/sldt/README.md`; nothing under `backend/` or `native/`
+  touched, and `frontend/`'s only changes are the two additive
+  `next.config.mjs` entries plus two new files
+  (`src/lib/sldtRemote.ts`, `tests/sldtRemote.test.ts`) that nothing else
+  imports.
+- **Left for next:** no settings UI exists anywhere for a user to actually
+  choose SLDT over Supabase (a real product decision — build-time flag vs.
+  runtime toggle — deliberately not made here); the proxy is still not
+  deployed and no code has made a real call to api.github.com; BYOK for
+  LLM/STT/TTS is untouched.
+
 ### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 2: persistence + write proxy
 - Continuation of the stage-1 entry directly below this one -- same user,
   same feature, same session's scope agreement (staged build, no UI yet).

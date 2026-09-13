@@ -9,3 +9,4 @@ export * from "./store.js";
 export * from "./sync.js";
 export * from "./browserStore.js";
 export * from "./githubClient.js";
+export * from "./client.js";

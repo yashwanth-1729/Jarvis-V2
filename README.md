@@ -442,6 +442,36 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — SLDT stage 3: a Remote adapter for the paid frontend, not
+  activated.** Follows the stage-2 entry below. Added `SldtClient`
+  (`jarvis-oss/sldt/src/client.ts`), composing identity, IndexedDB
+  persistence, and the sync engine into one façade, and
+  `frontend/src/lib/sldtRemote.ts` — an implementation of `syncClient.ts`'s
+  own `Remote` interface backed by that façade. **This is additive only:**
+  no existing file imports `sldtRemote.ts`, so this app's shipping
+  behavior is unchanged — confirmed by running the actual `next build`
+  (via a temporary probe route, removed after proving the build, so no
+  route shipped) and the existing `frontend/tests/sync.test.ts` (43
+  assertions, still passing). Two changes were needed in
+  `frontend/next.config.mjs` to make the cross-directory import work at
+  all: `experimental.externalDir: true` (Next refuses by default to
+  resolve modules outside the project directory) and a `webpack()` hook
+  adding `resolve.extensionAlias` for `.js`-suffixed imports (this
+  package's own convention, needed for it to run under Node/`tsx` without
+  a build step) — both scoped narrowly and verified not to touch
+  resolution of any of the app's own existing imports. New test:
+  `frontend/tests/sldtRemote.test.ts` runs the adapter through the real
+  `syncOnce(remote)` path against real `localdb.ts` rows, with a raw SLDT
+  peer standing in for a second device — push, pull, and delete in both
+  directions, 13 assertions, 0 network calls. Building it surfaced a real
+  bug (fixed): a pull-only round with nothing locally pending never
+  invalidated the adapter's cached sync result, so it would have silently
+  kept reusing stale data and never actually pulled anything new — cache
+  invalidation had only been wired to the push side, which such a round
+  never touches. **Still no way for a user to actually pick SLDT** — no
+  settings screen, no toggle; that remains open. See
+  `jarvis-oss/sldt/README.md`.
+
 - **2026-09-13 — SLDT stage 2: persistence and the write proxy.** Follows
   directly on the stage-1 entry below. Added
   `jarvis-oss/sldt/src/browserStore.ts` (IndexedDB persistence for the local

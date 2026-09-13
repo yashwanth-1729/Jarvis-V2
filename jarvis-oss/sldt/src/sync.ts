@@ -84,8 +84,17 @@ export function upsert(
   });
 }
 
-/** Deletes write a tombstone record through the same path as any other edit -- see module doc in manifest.ts and the design note in the README about why entries are never actually removed. */
-export function remove(local: LocalObjectSet, deviceId: string, objectId: string): void {
+/**
+ * Deletes write a tombstone record through the same path as any other edit
+ * -- see module doc in manifest.ts and the design note in the README about
+ * why entries are never actually removed.
+ *
+ * `payload` is optional metadata a caller may want to keep alongside the
+ * tombstone (e.g. a deletion timestamp some other layer's own delete
+ * semantics require) -- the `deleted` flag, not this field, is what the
+ * protocol itself acts on.
+ */
+export function remove(local: LocalObjectSet, deviceId: string, objectId: string, payload: unknown = null): void {
   const previous = local.get(objectId);
   local.set(objectId, {
     objectId,
@@ -93,7 +102,7 @@ export function remove(local: LocalObjectSet, deviceId: string, objectId: string
     deviceId,
     type: previous?.type ?? "unknown",
     deleted: true,
-    payload: null,
+    payload,
     pending: true,
     storeVersion: previous?.storeVersion ?? null,
     knownHash: previous?.knownHash ?? null,

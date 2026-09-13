@@ -7,7 +7,7 @@
   "main": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx tests/identity.test.ts && npx tsx tests/crypto.test.ts && npx tsx tests/manifest.test.ts && npx tsx tests/conflict.test.ts && npx tsx tests/sync.test.ts && npx tsx tests/browserStore.test.ts"
+    "test": "npx tsx tests/identity.test.ts && npx tsx tests/crypto.test.ts && npx tsx tests/manifest.test.ts && npx tsx tests/conflict.test.ts && npx tsx tests/sync.test.ts && npx tsx tests/browserStore.test.ts && npx tsx tests/client.test.ts"
   },
   "dependencies": {
     "hash-wasm": "^4.11.0"

@@ -182,3 +182,17 @@ export async function clearAllForTests(): Promise<void> {
     t.objectStore(META_STORE).clear();
   });
 }
+
+/**
+ * Test-only: forget the cached database connection.
+ *
+ * `open()` memoizes its connection in `dbPromise` for the lifetime of the
+ * module -- correct in a real app (one IndexedDB per origin, for the whole
+ * session) but wrong the moment a test swaps `globalThis.indexedDB` for a
+ * fresh `IDBFactory` to simulate a second device: without this, every
+ * "device" after the first would silently keep talking to the first
+ * device's fake database.
+ */
+export function resetConnectionForTests(): void {
+  dbPromise = null;
+}
