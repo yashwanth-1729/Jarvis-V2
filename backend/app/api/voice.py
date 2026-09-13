@@ -18,8 +18,10 @@ from app.api.schemas import (
     LanguageOut,
     LanguageStateOut,
     SetLanguageRequest,
+    SetTeluguTtsEngineRequest,
     SetVoiceRequest,
     SpeakRequest,
+    TeluguTtsEngineOut,
     TranscriptOut,
     VoiceConfigOut,
     VoiceOut,
@@ -74,6 +76,7 @@ async def voice_config() -> VoiceConfigOut:
     """Lets the UI hide the mic and speaker controls when voice is unavailable."""
     current = await crud.get_preference(crud.PREF_VOICE_LANGUAGE, DEFAULT_LANGUAGE)
     chosen_voice = await speech.current_voice()
+    telugu_engine = await speech.current_telugu_engine()
     return VoiceConfigOut(
         enabled=settings.jarvis_voice_enabled and settings.has_api_key,
         stt_provider=settings.jarvis_stt_provider,
@@ -89,6 +92,7 @@ async def voice_config() -> VoiceConfigOut:
             VoiceOut(id=v.id, label=v.label, gender=v.gender, note=v.note)
             for v in VOICES
         ],
+        telugu_tts_engine=telugu_engine,
     )
 
 
@@ -122,6 +126,21 @@ async def set_language(payload: SetLanguageRequest) -> LanguageStateOut:
     await crud.set_preference(crud.PREF_VOICE_LANGUAGE, payload.language)
     chosen = resolve(payload.language)
     return LanguageStateOut(code=chosen.code, label=chosen.label, native=chosen.native)
+
+
+@router.put("/telugu-tts-engine", response_model=TeluguTtsEngineOut)
+async def set_telugu_tts_engine(payload: SetTeluguTtsEngineRequest) -> TeluguTtsEngineOut:
+    """Switch Telugu speech between Sarvam (cloud, default) and Piper (local).
+
+    Only Telugu has this switch today — see `PREF_TELUGU_TTS_ENGINE` and
+    `app.services.speech._provider_for`. English's local/cloud choice is a
+    server setting (`JARVIS_ENGLISH_TTS`), not a per-user preference, because
+    Piper was already the default there before this existed; Telugu keeps
+    Sarvam as the default and this is what lets a user opt into the local
+    voice instead.
+    """
+    await crud.set_preference(crud.PREF_TELUGU_TTS_ENGINE, payload.engine)
+    return TeluguTtsEngineOut(engine=payload.engine)
 
 
 @router.post("/transcribe", response_model=TranscriptOut)

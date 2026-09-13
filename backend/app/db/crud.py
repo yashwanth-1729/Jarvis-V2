@@ -1246,6 +1246,9 @@ async def prune_briefs(keep: int = 50) -> None:
 PREF_VOICE_LANGUAGE = "voice_language"
 PREF_VOICE_SPEAKER = "voice_speaker"
 PREF_NOTIFICATION_POLICY = "notification_policy"
+#: "sarvam" (default) or "piper" — whether Telugu speech comes from the cloud
+#: or the local Piper voice. See `app.services.speech._provider_for`.
+PREF_TELUGU_TTS_ENGINE = "telugu_tts_engine"
 
 
 async def get_preference(key: str, default: str = "") -> str:

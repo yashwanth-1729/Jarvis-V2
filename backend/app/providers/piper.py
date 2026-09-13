@@ -45,29 +45,43 @@ _FALLBACK_RATE = 22050
 _PACKET_SECONDS = 0.1
 
 
-def _model_path() -> Path:
+def _model_path(model_setting: str, language_label: str, fallback_hint: str) -> Path:
     """Absolute path to the configured .onnx voice, or raise if it is absent."""
-    raw = Path(settings.jarvis_piper_model)
+    raw = Path(model_setting)
     path = raw if raw.is_absolute() else (BACKEND_ROOT / raw)
     if not path.exists():
         raise ProviderNotConfigured(
-            f"Piper model not found at {path}. Download an English voice into "
-            "backend/models/piper/ (see explanations.md) or set "
-            "JARVIS_ENGLISH_TTS=sarvam to speak English through Sarvam instead."
+            f"Piper model not found at {path}. Download a {language_label} voice "
+            f"into backend/models/piper/ (see explanations.md) or {fallback_hint}."
         )
     return path
 
 
 class PiperTTS:
-    """A `TTSProvider` and `StreamingTTSProvider` backed by a local ONNX voice."""
+    """A `TTSProvider` and `StreamingTTSProvider` backed by a local ONNX voice.
+
+    One instance speaks one language with one fixed voice — English and
+    Telugu each get their own instance (see `get_english_tts_provider` and
+    `get_telugu_tts_provider` in `app.providers`), configured independently
+    so neither's model path or fallback behaviour depends on the other.
+    """
 
     name = "piper"
     #: Piper phonemizes the whole string in memory; there is no vendor limit.
     #: The cap only stops a runaway generation, and sits well above one sentence.
     max_chars = 4000
 
-    def __init__(self) -> None:
-        self.model = Path(settings.jarvis_piper_model).name
+    def __init__(
+        self,
+        model_setting: str | None = None,
+        *,
+        language_label: str = "English",
+        fallback_hint: str = "set JARVIS_ENGLISH_TTS=sarvam to speak English through Sarvam instead",
+    ) -> None:
+        self._model_setting = model_setting or settings.jarvis_piper_model
+        self._language_label = language_label
+        self._fallback_hint = fallback_hint
+        self.model = Path(self._model_setting).name
         self._voice: Any | None = None
         self._rate: int = _FALLBACK_RATE
         self._load_lock = asyncio.Lock()
@@ -75,11 +89,11 @@ class PiperTTS:
     # -- loading -----------------------------------------------------------
     def _load_sync(self) -> Any:
         # Imported lazily so a machine without piper-tts installed can still run
-        # the rest of the backend; the import only happens when English speech
-        # is actually requested through Piper.
+        # the rest of the backend; the import only happens when speech through
+        # this voice is actually requested.
         from piper import PiperVoice  # type: ignore
 
-        path = _model_path()
+        path = _model_path(self._model_setting, self._language_label, self._fallback_hint)
         voice = PiperVoice.load(str(path))
         rate = getattr(getattr(voice, "config", None), "sample_rate", None)
         self._rate = int(rate) if rate else _FALLBACK_RATE
@@ -97,7 +111,7 @@ class PiperTTS:
                 except ImportError as exc:
                     raise ProviderNotConfigured(
                         "piper-tts is not installed. `pip install piper-tts` in "
-                        "the backend venv, or set JARVIS_ENGLISH_TTS=sarvam."
+                        f"the backend venv, or {self._fallback_hint}."
                     ) from exc
                 except Exception as exc:  # noqa: BLE001
                     raise ProviderError(f"Piper failed to load its voice: {exc}") from exc

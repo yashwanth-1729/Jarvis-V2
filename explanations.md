@@ -128,6 +128,49 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · Telugu speech gets an opt-in local voice (Piper), Sarvam stays the default
+- User: "install piper telugu audio ... but unlike before dont remove sarvam
+  tts fully... keep it as a button like switch to sarvam and when it is in
+  sarvam, switch to local..." -- explicit ask for an opt-in toggle, not a
+  replacement, unlike the earlier English change where Piper became the
+  default outright.
+- Downloaded `te_IN-padmavathi-medium` into `backend/models/piper/` (gitignored,
+  same as the English voices). Generalized `PiperTTS` (`app/providers/piper.py`)
+  to take `model_setting`/`language_label`/`fallback_hint` constructor params
+  instead of hardcoding the English globals, so one class now backs both
+  `get_english_tts_provider()` and the new `get_telugu_tts_provider()`
+  (`app/providers/__init__.py`).
+- New preference `telugu_tts_engine` (`PREF_TELUGU_TTS_ENGINE` in
+  `app/db/crud.py`), default `"sarvam"`. `speech._provider_for` (`app/services/
+  speech.py:139`) now resolves Telugu to Piper only when that preference is
+  `"piper"`, re-reading it on every call -- no session state cached -- so a
+  toggle flipped mid-conversation applies to the very next reply. Falls back
+  to Sarvam automatically if the local model/engine is unavailable, same as
+  English's existing fallback path.
+- API: `GET /api/voice/config` now returns `telugu_tts_engine`; new
+  `PUT /api/voice/telugu-tts-engine` sets it (`app/api/voice.py`), mirroring
+  the existing `/language` and `/voice` endpoints.
+- Frontend: `frontend/src/lib/voice.ts` gets `setTeluguTtsEngine()`;
+  `VoiceMode.tsx` shows a HUD toggle chip (Sarvam / Local voice) next to the
+  language picker, visible only while Telugu is the selected reply language.
+  No realtime-socket message needed for it -- the backend re-reads the DB
+  preference per utterance, so a plain REST PUT is enough for the toggle to
+  take effect immediately.
+- Verified: backend imports cleanly; `PiperTTS.synthesize` produced a real WAV
+  for Telugu text end-to-end (94 KB, `audio/wav`); `_provider_for('te-IN')`
+  returns `SarvamTTS` by default and `PiperTTS` after setting the preference,
+  checked against an isolated SQLite file (not the real database, never
+  touched); `npx tsc --noEmit` clean on the frontend. Not run: an actual voice
+  session in the browser exercising the new HUD toggle, or anything on
+  Android -- this Python provider is desktop-only, same constraint as
+  English's Piper voice (Android's on-device English voice goes through a
+  separate Kotlin/sherpa-onnx bridge, `JarvisTts.kt`, which Telugu has no
+  equivalent of yet; the preference has no effect there and Telugu stays on
+  Sarvam on Android for now).
+- Left untouched, not mine: `.artifact_staging/`, `JARVIS_OVERVIEW_FOR_GEMINI.md`,
+  `android_tts_capture_final.log`, `backend/backend_live.log` (all untracked
+  at the start of this session).
+
 ### 2026-09-13 · Claude Code · Computer-control: filename search, RAM usage, disk usage, browser new-window -- four real gaps, found and fixed
 - User: "agentic features sucks... it is not able to do a single job
   perfectly" -- then four concrete failures on request: "find some exe

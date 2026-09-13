@@ -97,6 +97,25 @@ def get_english_tts_provider() -> TTSProvider:
     return get_tts_provider()
 
 
+@lru_cache(maxsize=1)
+def get_telugu_tts_provider() -> TTSProvider:
+    """The local voice used for Telugu when the user has switched to it.
+
+    Unlike English, Telugu does not default here — Sarvam already covers
+    Telugu, so this is an opt-in per-user preference
+    (`PREF_TELUGU_TTS_ENGINE`, checked in `app.services.speech`), not a
+    server-wide setting. This getter just builds the Piper instance; callers
+    decide whether to use it.
+    """
+    from app.providers.piper import PiperTTS
+
+    return PiperTTS(
+        settings.jarvis_piper_telugu_model,
+        language_label="Telugu",
+        fallback_hint="switch the Telugu voice back to Sarvam in the language picker",
+    )
+
+
 async def close_providers() -> None:
     """Close pooled HTTP clients at shutdown."""
     for getter in (
@@ -105,6 +124,7 @@ async def close_providers() -> None:
         get_tts_provider,
         get_english_chat_provider,
         get_english_tts_provider,
+        get_telugu_tts_provider,
     ):
         try:
             provider = getter()
@@ -121,6 +141,7 @@ async def close_providers() -> None:
     get_tts_provider.cache_clear()
     get_english_chat_provider.cache_clear()
     get_english_tts_provider.cache_clear()
+    get_telugu_tts_provider.cache_clear()
 
 
 __all__ = [
@@ -133,5 +154,6 @@ __all__ = [
     "get_tts_provider",
     "get_english_chat_provider",
     "get_english_tts_provider",
+    "get_telugu_tts_provider",
     "close_providers",
 ]

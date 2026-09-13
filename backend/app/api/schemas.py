@@ -241,6 +241,15 @@ class SetVoiceRequest(BaseModel):
     voice: str = Field(min_length=2, max_length=40)
 
 
+class SetTeluguTtsEngineRequest(BaseModel):
+    #: "sarvam" (cloud, default) or "piper" (local, on-device).
+    engine: Literal["sarvam", "piper"]
+
+
+class TeluguTtsEngineOut(BaseModel):
+    engine: Literal["sarvam", "piper"]
+
+
 class VoiceConfigOut(BaseModel):
     enabled: bool
     stt_provider: str
@@ -253,6 +262,10 @@ class VoiceConfigOut(BaseModel):
     #: Currently selected speaking voice.
     voice: str = ""
     voices: list[VoiceOut] = Field(default_factory=list)
+    #: "sarvam" (default) or "piper" — which engine speaks Telugu. Only
+    #: meaningful when `language` is "te-IN"; the picker shows the switch
+    #: only then.
+    telugu_tts_engine: Literal["sarvam", "piper"] = "sarvam"
 
 
 # --- Direct editing ---------------------------------------------------------

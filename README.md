@@ -143,7 +143,7 @@ flowchart TD
     Tools --> DB[SQLite working data]
     Tools --> External[Weather / search / filesystem where enabled]
     Agent --> Speech[Phrase chunker + bounded speech pipeline]
-    Speech --> TTS[Piper local English TTS / Sarvam for other languages]
+    Speech --> TTS[Piper local English TTS / Sarvam for other languages, Telugu opt-in to local Piper]
     TTS --> Playback[Ordered Web Audio playback]
     Tools --> Panels[Voice-only tool surfaces]
     Playback --> Panels
@@ -347,8 +347,9 @@ do not put them in this README or commit them.
 | `SARVAM_STT_MODEL`, `SARVAM_TTS_MODEL` | Existing recognition/synthesis models |
 | `JARVIS_STREAMING_TTS` | Enable negotiated incremental speech; default true |
 | `SARVAM_TTS_PACE`, `SARVAM_TTS_TEMPERATURE` | Existing voice controls |
-| `JARVIS_ENGLISH_TTS` | Engine for English speech: `piper` (local, default) or `sarvam` (cloud). Non-English is always Sarvam. |
+| `JARVIS_ENGLISH_TTS` | Engine for English speech: `piper` (local, default) or `sarvam` (cloud). Non-English besides Telugu is always Sarvam. |
 | `JARVIS_PIPER_MODEL`, `JARVIS_PIPER_PACE` | Piper voice path (default `models/piper/en_US-ryan-high.onnx`) and global speed nudge |
+| `JARVIS_PIPER_TELUGU_MODEL` | Telugu Piper voice path (default `models/piper/te_IN-padmavathi-medium.onnx`), used only when the Telugu engine is switched to `piper` |
 | `JARVIS_ENGLISH_LLM` | Model for English REPLY TEXT: `gemini` (default, falls back to Sarvam per turn on failure) or `sarvam`. Non-English is always Sarvam's whole stack. |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini auth and model id (default `gemini-3.5-flash-lite` — see [docs/gemini-chat.md](docs/gemini-chat.md)) |
 | `JARVIS_CLIENT_OWNED_DATA` | Android IndexedDB/SQLite bridge mode |
@@ -441,6 +442,28 @@ a boundary, protocol, dependency, provider, storage policy or platform behavior
 changes. Record checks actually run and distinguish source changes from installed
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
+
+- **2026-09-13 — Telugu gets an opt-in local voice (Piper), Sarvam stays the
+  default.** Adds `te_IN-padmavathi-medium` alongside the existing English
+  Piper voice, so Telugu speech can run offline like English already does —
+  but unlike English, Sarvam remains the default here since it already spoke
+  Telugu before this existed; the user switches per-session with a HUD toggle
+  next to the language picker (only shown while Telugu is selected). New
+  preference `telugu_tts_engine` (`sarvam` | `piper`), read fresh on every
+  synthesis call in `app.services.speech._provider_for` so a mid-session
+  switch takes effect on the next reply with no reconnect. `GET /api/voice/config`
+  now reports the current choice and `PUT /api/voice/telugu-tts-engine` sets
+  it, mirroring the existing `/language` and `/voice` endpoints. `PiperTTS`
+  (`app/providers/piper.py`) is now parametrized by model setting/language/
+  fallback hint instead of only ever reading the English globals, so the same
+  class serves both voices.
+  Checked: backend imports cleanly; `PiperTTS.synthesize` produces a valid WAV
+  for Telugu text end-to-end; `_provider_for('te-IN')` returns `SarvamTTS` by
+  default and `PiperTTS` after the preference is set, verified against an
+  isolated SQLite file, not the real database; frontend type-checks clean.
+  Not run: a live voice-mode session in the browser exercising the new HUD
+  toggle end-to-end, or the Android build (desktop-only, like English's Piper
+  voice before Android got its own on-device bridge).
 
 - **2026-09-13 — Filled real gaps in computer-control: filename search, RAM
   usage, disk usage, and a browser new-window fix.** User reported four

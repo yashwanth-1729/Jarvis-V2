@@ -15,13 +15,17 @@ from typing import AsyncIterator
 
 from app.core.config import settings
 
-from app.core.languages import DEFAULT_LANGUAGE, is_supported
+from app.core.languages import DEFAULT_LANGUAGE, TELUGU_LANGUAGE, is_supported
 from app.core.languages import resolve as resolve_language
 from app.core.speechtext import spell_numbers_in_english
 from app.core.voices import Voice
 from app.core.voices import resolve as resolve_voice
 from app.db import crud
-from app.providers import get_english_tts_provider, get_tts_provider
+from app.providers import (
+    get_english_tts_provider,
+    get_telugu_tts_provider,
+    get_tts_provider,
+)
 from app.providers.base import (
     AudioPacket,
     ProviderAuthError,
@@ -126,16 +130,29 @@ async def current_voice() -> Voice:
     return resolve_voice(await crud.get_preference(crud.PREF_VOICE_SPEAKER, ""))
 
 
-def _provider_for(language_code: str | None) -> TTSProvider:
+async def current_telugu_engine() -> str:
+    """"sarvam" (default) or "piper" — the user's per-language Telugu choice."""
+    value = await crud.get_preference(crud.PREF_TELUGU_TTS_ENGINE, "sarvam")
+    return value if value in ("sarvam", "piper") else "sarvam"
+
+
+async def _provider_for(language_code: str | None) -> TTSProvider:
     """Which engine speaks this language.
 
     English is spoken by the local engine (Piper) when one is configured;
-    everything else goes to Sarvam, which covers the Indic set Piper's English
-    voices do not. `get_english_tts_provider` returns the Sarvam TTS itself when
-    English is set to stay on the cloud, so this stays a single line either way.
+    Telugu is spoken by the local Piper voice only when the user has opted in
+    via the language picker (`PREF_TELUGU_TTS_ENGINE`) — Sarvam is the default
+    for Telugu, unlike English, since Sarvam's Telugu already worked before
+    this existed. Every other language always goes to Sarvam, which covers the
+    rest of the Indic set no local voice does. `get_english_tts_provider`
+    returns the Sarvam TTS itself when English is set to stay on the cloud, so
+    this stays simple either way.
     """
-    if resolve_language(language_code).code == DEFAULT_LANGUAGE:
+    code = resolve_language(language_code).code
+    if code == DEFAULT_LANGUAGE:
         return get_english_tts_provider()
+    if code == TELUGU_LANGUAGE and await current_telugu_engine() == "piper":
+        return get_telugu_tts_provider()
     return get_tts_provider()
 
 
@@ -156,7 +173,7 @@ async def speak(
 ) -> Speech:
     language = resolve_language(language_code)
     voice = resolve_voice(speaker) if speaker else await current_voice()
-    provider = _provider_for(language.code)
+    provider = await _provider_for(language.code)
     try:
         return await provider.synthesize(
             prepare(text, language.code),
@@ -165,12 +182,14 @@ async def speak(
             pace=language.pace,
         )
     except ProviderNotConfigured as exc:
-        # The local English engine is not installed or its model is missing.
-        # English must still be spoken, so fall back to Sarvam once rather than
-        # failing the reply. (Non-English never reaches this branch.)
+        # A local engine (English's Piper, or Telugu's once opted in) is not
+        # installed or its model is missing. Speech must still happen, so
+        # fall back to Sarvam once rather than failing the reply. Sarvam
+        # itself never raises this, so `provider is get_tts_provider()` means
+        # there is nothing left to fall back to.
         if provider is get_tts_provider():
             raise
-        logger.warning("Local English TTS unavailable (%s); using Sarvam", exc)
+        logger.warning("Local %s TTS unavailable (%s); using Sarvam", language.label, exc)
         return await get_tts_provider().synthesize(
             prepare(text, language.code),
             language_code=language.code,
@@ -185,7 +204,7 @@ async def stream(
 ) -> AsyncIterator[AudioPacket | Speech]:
     """Share pronunciation/pace/voice rules with REST; fallback before audio only."""
     language = resolve_language(language_code)
-    provider = _provider_for(language.code)
+    provider = await _provider_for(language.code)
     voice = resolve_voice(speaker) if speaker else await current_voice()
     emitted = False
     if incremental and settings.jarvis_streaming_tts and isinstance(provider, StreamingTTSProvider):

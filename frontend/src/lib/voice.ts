@@ -40,6 +40,16 @@ export async function setVoiceLanguage(language: string): Promise<void> {
   if (!response.ok) throw new ApiError("Could not change language", response.status);
 }
 
+/** Switch Telugu speech between Sarvam (cloud, default) and Piper (local). */
+export async function setTeluguTtsEngine(engine: "sarvam" | "piper"): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/voice/telugu-tts-engine`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ engine }),
+  });
+  if (!response.ok) throw new ApiError("Could not change Telugu TTS engine", response.status);
+}
+
 /** Persist the speaking voice. Shared with the `set_voice` tool, so the picker
  *  and "use a girl's voice" write the same preference. */
 export async function setVoiceSpeaker(voice: string): Promise<void> {

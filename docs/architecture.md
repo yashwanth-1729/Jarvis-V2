@@ -337,13 +337,23 @@ endpoint, old clients, and providers without streaming support.
 English speech is routed away from Sarvam to a local Piper voice by
 `app.services.speech._provider_for`: English resolves to
 `get_english_tts_provider()` (an `app.providers.piper.PiperTTS`), every other
-language to `get_tts_provider()` (Sarvam). Piper is an ONNX model loaded once
-on a worker thread and warmed at startup; it implements both the streaming
-`AudioPacket` protocol and the legacy WAV `synthesize`. If Piper is not
-installed or its model is missing, `_provider_for`'s callers fall back to
-Sarvam for that utterance. This is desktop-only: under Chaquopy on Android
-arm64 neither onnxruntime nor Piper's phonemizer has a wheel, so
-`JARVIS_ENGLISH_TTS` must be `sarvam` there.
+language to `get_tts_provider()` (Sarvam) — except Telugu, which resolves to
+`get_telugu_tts_provider()` (a second `PiperTTS` instance, parametrized with
+the Telugu model/language/fallback hint) when the user has opted in via the
+`telugu_tts_engine` preference (`app.db.crud.PREF_TELUGU_TTS_ENGINE`,
+default `"sarvam"`); `_provider_for` re-reads that preference on every call,
+so a toggle flipped mid-session takes effect on the very next utterance with
+no reconnect. Piper is an ONNX model loaded once on a worker thread and warmed
+at startup; it implements both the streaming `AudioPacket` protocol and the
+legacy WAV `synthesize`. If Piper is not installed or its model is missing,
+`_provider_for`'s callers fall back to Sarvam for that utterance — this is
+also how an opted-in Telugu session degrades if the Telugu model file is
+absent. This Python provider is desktop-only: under Chaquopy on Android arm64
+neither onnxruntime nor Piper's phonemizer has a wheel. English's on-device
+voice reaches Android through a separate route instead — a Kotlin/sherpa-onnx
+bridge (`JarvisTts.kt`), not this backend — and Telugu has no equivalent yet,
+so on Android the `telugu_tts_engine` preference has no effect: Telugu speech
+stays on Sarvam there regardless of the stored choice.
 
 `SarvamTTS.stream_speech` uses the existing pooled httpx client with
 `POST /text-to-speech/stream`, `output_audio_codec=linear16`, and a sample rate no

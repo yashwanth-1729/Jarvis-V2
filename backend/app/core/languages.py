@@ -18,6 +18,11 @@ AUTO_DETECT = "unknown"
 
 DEFAULT_LANGUAGE = "en-IN"
 
+#: The one non-English language with an optional local (Piper) voice. See
+#: `PREF_TELUGU_TTS_ENGINE` in `app.db.crud` and `_provider_for` in
+#: `app.services.speech`.
+TELUGU_LANGUAGE = "te-IN"
+
 
 #: Indic speech renders markedly longer than the equivalent English sentence —
 #: measured on bulbul:v3, the same reply took 3.67s in `en-IN` and 5.55s in

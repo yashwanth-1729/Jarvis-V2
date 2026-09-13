@@ -262,6 +262,8 @@ export interface VoiceConfig {
   /** Currently selected speaking voice. */
   voice: string;
   voices: VoiceOption[];
+  /** "sarvam" (cloud, default) or "piper" (local) — Telugu's speech engine only. */
+  telugu_tts_engine: "sarvam" | "piper";
 }
 
 export interface TranscriptResult {

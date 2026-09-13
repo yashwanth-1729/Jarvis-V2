@@ -7,7 +7,12 @@ import * as React from "react";
 import { HudRings, HudTelemetry } from "@/components/HudLayer";
 import { VoiceSession } from "@/lib/realtime";
 import { intentSurface, readSurface, type SurfaceDescriptor } from "@/lib/surfaces";
-import { fetchVoiceConfig, setVoiceLanguage, setVoiceSpeaker } from "@/lib/voice";
+import {
+  fetchVoiceConfig,
+  setTeluguTtsEngine,
+  setVoiceLanguage,
+  setVoiceSpeaker,
+} from "@/lib/voice";
 import { cn } from "@/lib/utils";
 import type {
   LanguageOption,
@@ -37,6 +42,14 @@ const JarvisCore = dynamic(
  * selected, and showing it as if it did was actively misleading.
  */
 const ENGLISH_LANGUAGE = "en-IN";
+
+/**
+ * The one non-English reply language with an optional local (Piper) voice.
+ * Must match `TELUGU_LANGUAGE` in `backend/app/core/languages.py`. Unlike
+ * English, Sarvam is the default here -- it already spoke Telugu before this
+ * existed -- so this is an opt-in switch, not a fixed indicator.
+ */
+const TELUGU_LANGUAGE = "te-IN";
 
 const STATUS_COPY: Record<VoiceSessionState, string> = {
   idle: "Offline",
@@ -107,6 +120,7 @@ export function VoiceMode({
   const [language, setLanguage] = React.useState("en-IN");
   const [voices, setVoices] = React.useState<VoiceOption[]>([]);
   const [voice, setVoice] = React.useState("priya");
+  const [teluguEngine, setTeluguEngine] = React.useState<"sarvam" | "piper">("sarvam");
 
   const sessionRef = React.useRef<VoiceSession | null>(null);
 
@@ -283,6 +297,7 @@ export function VoiceMode({
         if (config.language) setLanguage(config.language);
         setVoices(config.voices ?? []);
         if (config.voice) setVoice(config.voice);
+        if (config.telugu_tts_engine) setTeluguEngine(config.telugu_tts_engine);
       })
       .catch(() => undefined);
     return () => {
@@ -302,6 +317,17 @@ export function VoiceMode({
     setVoice(id);
     sessionRef.current?.setVoice(id);
     void setVoiceSpeaker(id).catch(() => undefined);
+  }, []);
+
+  const toggleTeluguEngine = React.useCallback(() => {
+    // No socket push needed: the backend re-reads this preference on every
+    // synthesis call (`speech.current_telugu_engine`), so persisting it here
+    // is enough for the next Telugu reply to pick it up mid-session.
+    setTeluguEngine((current) => {
+      const next = current === "piper" ? "sarvam" : "piper";
+      void setTeluguTtsEngine(next).catch(() => undefined);
+      return next;
+    });
   }, []);
 
   React.useEffect(() => {
@@ -480,6 +506,29 @@ export function VoiceMode({
                   .filter((group) => group.options.length > 0)}
               />
             )
+          )}
+
+          {language === TELUGU_LANGUAGE && (
+            <HudChip
+              active={teluguEngine === "piper"}
+              accent={accent}
+              onClick={toggleTeluguEngine}
+              role="switch"
+              aria-checked={teluguEngine === "piper"}
+              aria-label={
+                teluguEngine === "piper"
+                  ? "Switch Telugu speech to Sarvam"
+                  : "Switch Telugu speech to the on-device voice"
+              }
+              title={
+                teluguEngine === "piper"
+                  ? "Telugu is spoken by the local Piper voice. Click to switch back to Sarvam."
+                  : "Telugu is spoken by Sarvam (cloud). Click to switch to the on-device voice."
+              }
+            >
+              <AudioLines className="h-3 w-3" />
+              {teluguEngine === "piper" ? "Local voice" : "Sarvam"}
+            </HudChip>
           )}
 
           <HudChip

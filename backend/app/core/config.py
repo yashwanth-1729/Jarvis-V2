@@ -153,6 +153,18 @@ class Settings(BaseSettings):
     #: pace (English 1.04). 1.0 leaves the voice at its natural speed.
     jarvis_piper_pace: float = Field(default=1.0, alias="JARVIS_PIPER_PACE")
 
+    # --- Telugu TTS (Piper, local, opt-in) ----------------------------------
+    #: Telugu stays on Sarvam by default — unlike English, this is a per-user
+    #: toggle (`PREF_TELUGU_TTS_ENGINE`) surfaced in the language picker, not a
+    #: server-wide setting, because the local Telugu voice is new and Sarvam's
+    #: Indic coverage already works. "piper" only takes effect once the user
+    #: flips the switch; the default keeps existing behaviour unchanged.
+    #: Path to the Piper Telugu .onnx voice, relative to backend/ or absolute.
+    jarvis_piper_telugu_model: str = Field(
+        default="models/piper/te_IN-padmavathi-medium.onnx",
+        alias="JARVIS_PIPER_TELUGU_MODEL",
+    )
+
     # --- Task board --------------------------------------------------------
     #: The board lists outstanding work, so finishing a task removes it. Set
     #: false to keep completed rows around instead.
