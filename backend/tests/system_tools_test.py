@@ -312,6 +312,44 @@ async def main() -> None:
         check("a bad regex is explained, not raised",
               outcome.is_error and "Invalid regular expression" in outcome.content)
 
+        print("\n== files: find_files searches by NAME, not content ==")
+        (sandbox / "notes.exe").write_text("not really an exe", encoding="utf-8")
+        (sandbox / "readme.txt").write_text("NEEDLE mentions exe but is not one", encoding="utf-8")
+
+        outcome = await tools.execute_tool(
+            "find_files", {"pattern": "*.exe", "path": str(sandbox)}
+        )
+        check("finds the exe by filename", "notes.exe" in outcome.content, outcome.content[:200])
+        check("does not match a .txt file just because its content says 'exe'",
+              "readme.txt" not in outcome.content, outcome.content[:200])
+        check("recursive: does not descend into node_modules",
+              "junk.py" not in outcome.content)
+
+        outcome = await tools.execute_tool(
+            "find_files", {"pattern": "*.doesnotexist", "path": str(sandbox)}
+        )
+        check("no match says so plainly, not an error",
+              "No file matching" in outcome.content and not outcome.is_error)
+
+        outcome = await tools.execute_tool("find_files", {"pattern": "*.exe", "path": "/does/not/exist/at/all"})
+        check("a nonexistent root is a clean error", outcome.is_error)
+
+        print("\n== files: disk_usage reports drive totals and a folder ranking ==")
+        (sandbox / "bigger").mkdir()
+        (sandbox / "bigger" / "blob.bin").write_bytes(b"0" * 4096)
+        (sandbox / "smaller").mkdir()
+        (sandbox / "smaller" / "tiny.bin").write_bytes(b"0" * 16)
+
+        outcome = await tools.execute_tool("disk_usage", {"path": str(sandbox)})
+        check("reports drive used/free", "used of" in outcome.content and "free" in outcome.content, outcome.content[:150])
+        check("ranks the bigger folder first",
+              outcome.content.index("bigger/") < outcome.content.index("smaller/"),
+              outcome.content)
+        check("not an error on a real path", not outcome.is_error)
+
+        outcome = await tools.execute_tool("disk_usage", {"path": "/does/not/exist/at/all"})
+        check("a nonexistent root is a clean error", outcome.is_error)
+
         print("\n== files: writes outside the workspace are flagged ==")
         outside = Path(tempfile.gettempdir()) / "jarvis_outside_probe.txt"
         outside.unlink(missing_ok=True)

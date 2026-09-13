@@ -128,6 +128,119 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · Computer-control: filename search, RAM usage, disk usage, browser new-window -- four real gaps, found and fixed
+- User: "agentic features sucks... it is not able to do a single job
+  perfectly" -- then four concrete failures on request: "find some exe
+  files" (nothing), "what app is using my RAM most" (nothing), "which
+  folder/app has taken my C drive most" (nothing), "open chrome in a
+  separate window" (opened a tab). Also referenced OpenClaw as inspiration
+  for broader agentic coverage; looked it up (a general-purpose agent
+  framework, not a specific technique) and, on the user's explicit choice,
+  scoped this pass to system/file visibility rather than adopting anything
+  from it wholesale.
+- Dispatched an Explore agent first rather than guessing -- paid off. Root
+  causes, each with file:line evidence (`backend/app/llm/tools.py`,
+  `tools_os_control.py`, `tools_system.py`):
+  1. **find exe files**: no filename-search tool existed at all.
+     `search_files` (`tools.py:3479`) is a content grep -- description says
+     so explicitly -- and cannot find files by name. `list_dir` could
+     technically do it via `pattern="*.exe", recursive=True` but nothing
+     told the model that's what it's for, and it has no time budget during
+     the walk (only truncates the *output* after a full `rglob` completes).
+  2. **RAM usage**: `list_processes` (`tools_os_control.py:107`, pre-fix)
+     only ever fetched `cpu_percent` -- memory was never in scope. Worse,
+     that cpu_percent reading was structurally always 0.0: psutil measures
+     it as a delta since a Process object's *own* previous call, and
+     `process_iter` builds a fresh object every call, so there was never a
+     second sample to diff against.
+  3. **C drive usage**: confirmed via grep across `backend/app` -- no
+     `disk_usage`, no per-folder size aggregation, nothing. The model's only
+     path would have been constructing its own `run_command` PowerShell
+     one-liner, with zero prompt guidance that this was expected of it.
+  4. **chrome new window**: `launch_app` could technically do this by
+     passing `args="--new-window"`, but nothing -- not the tool description,
+     not `SYSTEM_TOOLS_GUIDANCE`, not `prompts.py` -- ever told the model
+     that flag exists. Chrome's own single-instance behavior (a bare
+     relaunch hands the request to the already-running process) did the
+     rest.
+  - Cross-cutting: `prompts.py` has zero references to any computer-control
+    tool by name. Tool selection rests entirely on each `ToolSpec`'s
+    one-line `description`, and for all four of these, that description
+    either didn't exist or didn't cover the actual question.
+- Fixes, in `tools_system.py` / `tools_os_control.py` / `tools.py`:
+  - `find_files(pattern, root)`: name/glob search via `os.walk`, pruning
+    `SEARCH_SKIP_DIRS`, wall-clock budget (`FIND_TIME_BUDGET_SECONDS = 12`)
+    checked *during* the walk, not after -- an unmatched pattern over `C:\`
+    would otherwise walk all ~500K+ files (measured live, see below) before
+    admitting nothing matched. Defaults to `Path.home()` in the handler when
+    no path is given, not JARVIS's own cwd (which is inside the repo).
+  - `disk_usage(root)`: `shutil.disk_usage` for instant drive totals
+    (used/free/total, no walking needed) plus a `os.scandir`-based recursive
+    size sum per immediate subfolder, wall-clock bounded
+    (`DISK_USAGE_TIME_BUDGET_SECONDS = 25`) since that part genuinely has to
+    touch every file. Known limitation, documented in the message when it
+    fires: if the deadline hits mid-folder, that folder's size is a partial
+    undercount rather than being excluded outright, which could rank it
+    below a smaller, fully-measured folder. Accepted as a reasonable
+    tradeoff for "quick approximate answer" over the previous "no answer at
+    all" -- not revisited given time budget for this pass.
+  - `list_processes`: added memory (RSS, MB) and a `sort_by` param
+    (memory/cpu/name, default memory). Fixed the always-0.0 cpu_percent bug
+    by priming every process's counter with one pass + `await
+    asyncio.sleep(0.15)` before reading real values on the second pass.
+  - `launch_app`: new `new_window: bool` field + `_NEW_WINDOW_FLAGS =
+    {"chrome.exe": "--new-window", "msedge.exe": "--new-window", "firefox.exe":
+    "-new-window"}`. Honest when there's no known flag for the target app
+    (message says so) rather than silently pretending the request was
+    honored.
+  - Rewrote every touched tool's `ToolSpec.description` to name the actual
+    question it answers ("Use this, not search_files, for 'find my ... "
+    files' questions"; "Use this for 'what's using my RAM/CPU'"), since the
+    investigation's own cross-cutting finding was that descriptions, not
+    missing capability alone, gated tool selection.
+- Checks: `system_tools_test.py` gained a `find_files`/`disk_usage` section
+  (name-vs-content distinction using a file whose *content* mentions "exe"
+  but whose *name* doesn't, to actually prove the two tools are answering
+  different questions; skip-dir behavior; nonexistent-root errors; folder
+  ranking order). `computer_control_test.py` gained
+  `list_processes`/`new_window` checks -- deliberately did NOT launch a real
+  chrome/edge with `new_window=true` in that test: this machine's own Chrome
+  is in active use throughout dev sessions (visible in the user's own
+  screenshots this week) and a real launch would dump an unwanted window on
+  the real desktop as a side effect of running tests; checked the
+  `_NEW_WINDOW_FLAGS` mapping directly instead, and used the always-safe
+  notepad launch (already an existing pattern in that file, closed
+  immediately after) to prove the "no known flag" honesty message. Full
+  backend suite green apart from the two already-documented pre-existing
+  failures (live-network `latency_test.py`, date-crossing
+  `reminder_lead_test.py`).
+- Also caught mid-work: the desktop backend running with `--reload` had
+  silently stopped picking up file changes (only one "Application startup
+  complete" line in its log across multiple edits) -- restarted it fresh
+  rather than trusting reload, and treat that as a standing reminder to
+  restart-and-verify rather than assume `--reload` is still working when a
+  session runs long.
+- **Verified live against the real running backend, not just offline
+  unittest** -- sent real `/api/chat` requests with a cleared history for
+  each, and watched the actual tool_use/tool_result events:
+  - "search my computer for exe files with jarvis in the name" ->
+    `find_files` fired with `*jarvis*.exe` under `C:\`, checked 529,321
+    files within the 12s budget, found the real
+    `C:\JarvisApp\Jarvis Desktop.exe`. (First attempt at this same question,
+    with shared chat history from an earlier test still in context, produced
+    a plausible-looking answer with *no tool call at all* -- the model had
+    apparently pattern-matched off an earlier `disk_usage` result that
+    happened to list a `JarvisApp/` folder. Coincidentally correct here, but
+    a real hallucination-off-context risk worth remembering: always clear
+    history before trusting a "did it actually call the tool" test.)
+  - "what app is using my ram the most right now" -> `list_processes`,
+    correctly memory-sorted, real MB figures.
+  - A disk-space question -> `disk_usage`, and it surfaced a genuinely
+    useful real finding, not a test artifact: this dev machine's C: drive is
+    at 99% used, 1.1 GB free.
+  - **Not verified live**: `new_window` against a real browser launch, for
+    the safety reason above.
+
 ### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 5: proxy-free direct-write path for desktop/Android
 - Continuation of the stage-4 entry directly below. User asked, in plain
   terms, whether the proxy was actually needed and where it'd even be

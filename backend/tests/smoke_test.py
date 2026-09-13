@@ -753,6 +753,8 @@ async def main() -> int:
         "edit_file": {"path": "no-such-file-probe.txt", "old_text": "a", "new_text": "b"},
         "list_dir": {"path": "."},
         "search_files": {"query": "probe", "path": "storage"},
+        "find_files": {"pattern": "no-such-file-probe.*", "path": "storage"},
+        "disk_usage": {"path": "storage"},
         # Computer-control: read-only and fast enough to probe like everything
         # above -- no visible side effect on the machine running the test.
         "list_processes": {},

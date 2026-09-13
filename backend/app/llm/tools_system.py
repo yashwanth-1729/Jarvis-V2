@@ -29,10 +29,13 @@ with warnings. There is no sandbox and no path allowlist. What there is:
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import logging
 import os
 import re
 import shlex
+import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -680,6 +683,175 @@ def search_in_files(
     return header + "\n" + "\n".join(f"  {hit}" for hit in hits)
 
 
+#: How many matches `find_files` shows before truncating.
+MAX_FIND_RESULTS = 200
+
+#: Wall-clock budget for `find_files`, not a file-count budget. A recursive
+#: name search for a typo'd or overly common pattern (or one aimed at a whole
+#: drive) would otherwise walk every remaining file before admitting it found
+#: nothing, however long that takes -- this was the actual failure mode
+#: `search_files` (content grep) hit when asked to find files *by name*: it
+#: has no name-matching concept at all, so "find exe files" returned nothing
+#: no matter how the query was phrased.
+FIND_TIME_BUDGET_SECONDS = 12.0
+
+
+def find_files(pattern: str, root: Path) -> str:
+    """Find files by NAME pattern (glob, e.g. '*.exe'), not by content.
+
+    Distinct from `search_in_files` (content grep) on purpose -- "find exe
+    files" and "find files containing 'TODO'" are different questions, and
+    conflating them is exactly what made the first one silently return
+    nothing (the model's only search tool searched inside files, never
+    filenames).
+    """
+    if not root.exists():
+        return f"{root} does not exist."
+    if not root.is_dir():
+        return f"{root} is a file, not a directory."
+
+    deadline = time.monotonic() + FIND_TIME_BUDGET_SECONDS
+    needle = pattern.lower()
+    matches: list[Path] = []
+    scanned = 0
+    timed_out = False
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        if time.monotonic() > deadline:
+            timed_out = True
+            break
+        dirnames[:] = [d for d in dirnames if d not in SEARCH_SKIP_DIRS]
+        for name in filenames:
+            scanned += 1
+            if fnmatch.fnmatch(name.lower(), needle):
+                matches.append(Path(dirpath) / name)
+                if len(matches) >= MAX_FIND_RESULTS:
+                    timed_out = True
+                    break
+        if len(matches) >= MAX_FIND_RESULTS:
+            break
+
+    if not matches:
+        note = (
+            f" — stopped after {FIND_TIME_BUDGET_SECONDS:.0f}s ({scanned:,} file(s) "
+            "checked); narrow the root for a complete scan"
+            if timed_out
+            else f" ({scanned:,} file(s) checked)"
+        )
+        return f"No file matching {pattern!r} found under {root}{note}."
+
+    header = f"{len(matches)} file(s) matching {pattern!r} under {root}"
+    if timed_out:
+        header += f" — stopped early ({scanned:,} checked); narrow the root or pattern for the rest"
+    lines = [header]
+    for path in matches:
+        try:
+            lines.append(f"  {path}  ({path.stat().st_size:,} bytes)")
+        except OSError:
+            lines.append(f"  {path}")
+    return "\n".join(lines)
+
+
+#: How many of the biggest subfolders `disk_usage` reports.
+MAX_DISK_USAGE_ENTRIES = 20
+
+#: Wall-clock budget for walking subfolder sizes. The drive-level total in
+#: the same output comes from `shutil.disk_usage`, which is instant (it reads
+#: filesystem metadata, not every file) -- this budget only bounds the
+#: slower, genuinely-has-to-touch-every-file per-folder breakdown.
+DISK_USAGE_TIME_BUDGET_SECONDS = 25.0
+
+
+def _folder_size(path: Path, deadline: float) -> tuple[int, bool]:
+    """Sum file sizes under `path`. Returns (bytes, hit_deadline)."""
+    total = 0
+    try:
+        with os.scandir(path) as entries:
+            for entry in entries:
+                if time.monotonic() > deadline:
+                    return total, True
+                try:
+                    if entry.name in SEARCH_SKIP_DIRS:
+                        continue
+                    if entry.is_symlink():
+                        continue
+                    if entry.is_dir(follow_symlinks=False):
+                        sub_total, hit = _folder_size(Path(entry.path), deadline)
+                        total += sub_total
+                        if hit:
+                            return total, True
+                    else:
+                        total += entry.stat(follow_symlinks=False).st_size
+                except OSError:
+                    continue
+    except OSError:
+        return total, False
+    return total, False
+
+
+def _human_size(num_bytes: float) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(num_bytes) < 1024 or unit == "TB":
+            return f"{num_bytes:,.1f} {unit}" if unit != "B" else f"{num_bytes:,.0f} {unit}"
+        num_bytes /= 1024
+    return f"{num_bytes:,.1f} TB"
+
+
+def disk_usage(root: Path) -> str:
+    """Drive totals (instant) plus a size ranking of `root`'s immediate
+    subfolders (time-bounded, since that part genuinely has to touch every
+    file). Answers "what's taking up my C drive" -- no tool answered this at
+    all before; the model's only option was constructing its own
+    `run_command` one-liner with no guidance that it was expected to.
+    """
+    if not root.exists():
+        return f"{root} does not exist."
+    if not root.is_dir():
+        return f"{root} is a file, not a directory."
+
+    lines: list[str] = []
+    try:
+        total, used, free = shutil.disk_usage(root)
+        drive = os.path.splitdrive(str(root))[0] or str(root)
+        lines.append(
+            f"{drive}: {_human_size(used)} used of {_human_size(total)} "
+            f"({used / total:.0%}), {_human_size(free)} free."
+        )
+    except OSError as exc:
+        lines.append(f"Could not read drive totals for {root}: {exc}")
+
+    deadline = time.monotonic() + DISK_USAGE_TIME_BUDGET_SECONDS
+    sizes: list[tuple[str, int]] = []
+    timed_out = False
+    try:
+        with os.scandir(root) as entries:
+            candidates = [e for e in entries if e.is_dir(follow_symlinks=False) and e.name not in SEARCH_SKIP_DIRS]
+    except OSError as exc:
+        return "\n".join(lines) + f"\n\nCould not list subfolders of {root}: {exc}"
+
+    for entry in candidates:
+        if time.monotonic() > deadline:
+            timed_out = True
+            break
+        size, hit_deadline = _folder_size(Path(entry.path), deadline)
+        sizes.append((entry.name, size))
+        if hit_deadline:
+            timed_out = True
+            break
+
+    sizes.sort(key=lambda pair: pair[1], reverse=True)
+    lines.append(f"\nBiggest folders directly under {root}:")
+    for name, size in sizes[:MAX_DISK_USAGE_ENTRIES]:
+        lines.append(f"  {name}/  {_human_size(size)}")
+    if timed_out:
+        lines.append(
+            f"  ... stopped after {DISK_USAGE_TIME_BUDGET_SECONDS:.0f}s — sizes above are "
+            "complete for the folders shown, but some folders may be missing or partially "
+            "measured. Point this at a smaller subfolder for a complete breakdown."
+        )
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # File tool inputs
 # ---------------------------------------------------------------------------
@@ -723,3 +895,17 @@ class SearchFilesInput(BaseModel):
     path: str = "."
     glob: str = "*"
     regex: bool = False
+
+
+class FindFilesInput(BaseModel):
+    pattern: str = Field(min_length=1)
+    #: Empty/omitted resolves to the user's home directory in the handler --
+    #: not the working directory `ListDirInput`/`SearchFilesInput` default to,
+    #: since JARVIS's own process cwd is inside the repo and "find my exe
+    #: files" almost never means "inside JARVIS's own source tree".
+    path: str = ""
+
+
+class DiskUsageInput(BaseModel):
+    #: Empty/omitted resolves to the system drive in the handler.
+    path: str = ""

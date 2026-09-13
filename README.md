@@ -442,6 +442,71 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — Filled real gaps in computer-control: filename search, RAM
+  usage, disk usage, and a browser new-window fix.** User reported four
+  specific agentic failures; root-caused each one against the actual tool
+  registry rather than assumption (see `explanations.md`'s matching entry
+  for the file:line evidence). Two tools were genuinely missing, one existed
+  but never collected the data the question needed, one existed but had no
+  way to express what was asked:
+  - **`find_files`** (new, `tools_system.py`) — search by filename/glob
+    (`*.exe`, `report*.pdf`), distinct from `search_files` (content grep,
+    pre-existing), which is what silently returned nothing for "find my exe
+    files" — it was searching file *contents* for the string "exe", not
+    filenames. Defaults to the user's home directory (not JARVIS's own
+    working directory, which is inside the repo). Time-bounded (12s) during
+    the walk itself, not just after — an unmatched pattern over a huge tree
+    would otherwise walk every file before reporting nothing.
+  - **`disk_usage`** (new, `tools_system.py`) — answers "what's taking up my
+    disk space" for the first time; no tool existed at all before. Drive
+    totals via `shutil.disk_usage` (instant); a size ranking of immediate
+    subfolders is the slower part and is time-bounded (25s) since it
+    genuinely has to touch every file.
+  - **`list_processes`** (`tools_os_control.py`) — previously only fetched
+    `cpu_percent` (and that reading was always 0.0 in practice — psutil
+    measures CPU delta since a process object's *previous* call, and
+    `process_iter` creates fresh ones every call; fixed by priming with one
+    pass and a 150ms gap before reading) and never fetched memory at all, so
+    "what's using my RAM" was structurally unanswerable regardless of what
+    the model tried. Added memory (RSS in MB) and a `sort_by`
+    (memory/cpu/name) parameter, defaulting to memory.
+  - **`launch_app`'s new `new_window` parameter** (`tools_os_control.py`) —
+    "open chrome in a separate window" opened a tab because Chrome is
+    single-instance: relaunching the exe with no arguments hands the
+    request to the already-running process. Chrome/Edge/Firefox each have
+    their own new-window command-line flag; `new_window=true` now appends
+    the right one. Honest, not silent, for apps with no known flag (message
+    says so rather than pretending it worked as asked).
+  - Every new/changed tool's description was rewritten so the model is told
+    which question it answers, not just what it technically does — the
+    cross-cutting root cause across all four failures was tool descriptions
+    that didn't cover the actual question being asked, not missing
+    capability alone.
+  - Checks: `system_tools_test.py` gained dedicated coverage for
+    `find_files` and `disk_usage` (name-vs-content distinction, skip-dir
+    behavior, nonexistent-root handling, folder-size ranking); a live
+    `computer_control_test.py` (2026-09-12 line 610's "Agentic computer
+    control" module) `list_processes`/`new_window` addition -- deliberately
+    NOT launching a real chrome/edge in that test, since this machine's own
+    Chrome is in active real use throughout dev sessions and a real
+    new_window launch would dump an extra window on the real desktop; the
+    flag mapping is checked directly instead. `smoke_test.py`'s "every
+    registered tool has a probe" gained probes for both new tools. Full
+    backend suite green (two unrelated pre-existing failures --
+    `latency_test.py` live-network flakiness, `reminder_lead_test.py`'s
+    date-crossing edge case -- reproduced in isolation and confirmed
+    unrelated, same as prior entries this week). **Verified live against the
+    real running backend, not just the offline suite**: sent real chat
+    messages through `/api/chat` and confirmed the model actually calls the
+    right new tool with a clean chat history for each of "find exe files
+    with jarvis in the name" (`find_files`, found the real
+    `C:\JarvisApp\Jarvis Desktop.exe`), "what app is using my RAM the most"
+    (`list_processes`, real memory-sorted data), and a disk-space question
+    (`disk_usage`, revealed this dev machine's C: drive is genuinely at 99%
+    used, 1.1 GB free — a real, useful finding from testing, not a
+    contrived example). **Not verified live**: the `new_window` flag itself
+    against a real browser launch, for the safety reason above; covered by
+    the unit-level flag-mapping check instead.
 - **2026-09-13 — The actual cause of "Backend unreachable" / "localhost
   refused to connect" was neither of the two fixes below it — it was every
   manual build this whole investigation being a dev-mode binary mislabeled

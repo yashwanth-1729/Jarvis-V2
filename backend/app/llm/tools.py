@@ -41,7 +41,9 @@ from app.db import crud
 from app.llm.tools_system import (
     DEFAULT_TIMEOUT_SECONDS,
     MAX_TIMEOUT_SECONDS,
+    DiskUsageInput,
     EditFileInput,
+    FindFilesInput,
     ListDirInput,
     ReadFileInput,
     RunCommandInput,
@@ -50,7 +52,9 @@ from app.llm.tools_system import (
     audit,
     classify,
     describe_result,
+    disk_usage,
     edit_text_file,
+    find_files,
     is_binary,
     list_directory,
     orientation_hint,
@@ -2362,6 +2366,32 @@ async def _handle_search_files(payload: SearchFilesInput) -> ToolOutcome:
     )
 
 
+async def _handle_find_files(payload: FindFilesInput) -> ToolOutcome:
+    # Unlike list_dir/search_files, this defaults to the user's home
+    # directory, not the working directory -- JARVIS's own process cwd is
+    # inside the repo, and "find my exe files" essentially never means
+    # "inside JARVIS's own source tree".
+    root = _resolve(payload.path) if payload.path.strip() else Path.home()
+    body = find_files(payload.pattern, root)
+    audit.info("find_files %r under %s", payload.pattern, root)
+    return ToolOutcome(
+        content=body,
+        is_error="does not exist" in body,
+        display={"pattern": payload.pattern, "path": str(root)},
+    )
+
+
+async def _handle_disk_usage(payload: DiskUsageInput) -> ToolOutcome:
+    root = _resolve(payload.path) if payload.path.strip() else Path(os.environ.get("SystemDrive", "C:") + "\\")
+    body = disk_usage(root)
+    audit.info("disk_usage %s", root)
+    return ToolOutcome(
+        content=body,
+        is_error="does not exist" in body or "Could not read drive totals" in body,
+        display={"path": str(root)},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -3497,6 +3527,49 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         model=SearchFilesInput,
         handler=_handle_search_files,
     ),
+    ToolSpec(
+        name="find_files",
+        capability="system",
+        description=(
+            "Find files BY NAME (e.g. '*.exe', '*.pdf', 'invoice*'), not by "
+            "content -- use this, not search_files, for 'find my ... files' "
+            "questions. Defaults to the user's home directory, not JARVIS's "
+            "own working directory; pass path='C:\\\\' or another drive/folder "
+            "to search elsewhere. Time-bounded on a huge tree -- narrow the "
+            "path if it reports stopping early."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Filename glob, e.g. '*.exe' or 'report*.pdf'."},
+                "path": {"type": "string", "description": "Where to search. Defaults to the user's home directory."},
+            },
+            "required": ["pattern"],
+        },
+        model=FindFilesInput,
+        handler=_handle_find_files,
+    ),
+    ToolSpec(
+        name="disk_usage",
+        capability="system",
+        description=(
+            "Answer 'what's taking up my disk space' / 'which folder is "
+            "biggest' / 'how full is my C drive'. Reports the drive's total "
+            "used/free space instantly, plus a size ranking of the given "
+            "folder's immediate subfolders (this part is time-bounded on a "
+            "huge drive -- point it at a specific folder, e.g. Downloads or "
+            "AppData, for a complete answer faster than scanning the whole "
+            "drive)."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Drive or folder to analyze. Defaults to the system drive (usually C:\\\\)."},
+            },
+        },
+        model=DiskUsageInput,
+        handler=_handle_disk_usage,
+    ),
     # --- computer control: OS-level -----------------------------------------
     # Prefer these over run_command for anything they cover -- an OS launch
     # mechanism is more reliable than a shell one-liner for opening an app,
@@ -3505,11 +3578,17 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         name="list_processes",
         capability="system",
         risk="low",
-        description="List running processes, optionally filtered by name. Use before close_app to find the right pid when a name matches more than one process.",
+        description=(
+            "List running processes with per-process memory (MB) and CPU%. "
+            "Use this for 'what's using my RAM/CPU' (sort_by='memory' or "
+            "'cpu', the default is memory) as well as before close_app to "
+            "find the right pid when a name matches more than one process."
+        ),
         input_schema={
             "type": "object",
             "properties": {
                 "name_contains": {"type": "string", "description": "Case-insensitive substring of the process name. Omit to list everything."},
+                "sort_by": {"type": "string", "enum": ["memory", "cpu", "name"], "description": "Rank by memory usage, CPU usage, or alphabetically by name. Defaults to memory."},
             },
         },
         model=ListProcessesInput,
@@ -3523,13 +3602,16 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
             "Launch an application by common name ('notepad', 'chrome', 'vs code', ...) "
             "or an exact command/path. Prefer this over run_command or UI automation for "
             "opening something -- it uses the OS's own launch mechanism, not a simulated "
-            "click on an icon."
+            "click on an icon. Set new_window=true when asked for 'a new/separate window' "
+            "of a browser (chrome, edge, firefox) -- a bare relaunch of an already-running "
+            "browser opens a new tab in it instead, not a new window."
         ),
         input_schema={
             "type": "object",
             "properties": {
                 "app": {"type": "string", "description": "Common app name, or the exact executable/command to run."},
                 "args": {"type": "string", "description": "Extra command-line arguments, space-separated as typed."},
+                "new_window": {"type": "boolean", "description": "Force a new window rather than reusing an already-running instance. Only has an effect for chrome/edge/firefox."},
             },
             "required": ["app"],
         },

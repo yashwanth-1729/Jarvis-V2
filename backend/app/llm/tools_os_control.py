@@ -33,6 +33,7 @@ import os
 import re
 import webbrowser
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -102,29 +103,61 @@ class ListProcessesInput(BaseModel):
     #: Case-insensitive substring on the process name. Omit to list the
     #: busiest processes overall.
     name_contains: str | None = None
+    #: What to rank by. "memory" and "cpu" both imply the busiest-first order
+    #: a question like "what's using my RAM" actually wants -- "name" is the
+    #: previous alphabetical behavior, kept for "what's running" style asks
+    #: where a stable, scannable order matters more than ranking.
+    sort_by: Literal["memory", "cpu", "name"] = "memory"
 
 
 async def _list_processes(payload: ListProcessesInput) -> str:
     import psutil
 
     query = (payload.name_contains or "").strip().lower()
-    rows: list[tuple[str, int, float]] = []
-    for proc in psutil.process_iter(["pid", "name", "cpu_percent"]):
+    #: cpu_percent from a single process_iter pass is always 0.0 -- psutil
+    #: measures it as a delta since the *previous* call on that Process
+    #: object, and process_iter creates fresh ones every call. A real
+    #: reading needs two samples with a gap between them; free (it overlaps
+    #: with the memory_info() syscalls below) rather than a second full pass.
+    for proc in psutil.process_iter():
+        try:
+            proc.cpu_percent(None)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    await asyncio.sleep(0.15)
+
+    rows: list[tuple[str, int, float, int]] = []
+    for proc in psutil.process_iter(["pid", "name"]):
         try:
             info = proc.info
             name = info.get("name") or ""
             if query and query not in name.lower():
                 continue
-            rows.append((name, info.get("pid", 0), info.get("cpu_percent") or 0.0))
+            cpu = proc.cpu_percent(None)
+            try:
+                rss = proc.memory_info().rss
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                rss = 0
+            rows.append((name, info.get("pid", 0), cpu, rss))
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
-    rows.sort(key=lambda r: r[0].lower())
+    if payload.sort_by == "memory":
+        rows.sort(key=lambda r: r[3], reverse=True)
+    elif payload.sort_by == "cpu":
+        rows.sort(key=lambda r: r[2], reverse=True)
+    else:
+        rows.sort(key=lambda r: r[0].lower())
+
     total = len(rows)
     shown = rows[:MAX_PROCESSES_SHOWN]
 
     header = f"{total} process(es)" + (f" matching '{payload.name_contains}'" if query else "")
-    lines = [f"  {name}  (pid {pid})" for name, pid, _cpu in shown]
+    header += f", sorted by {payload.sort_by}"
+    lines = [
+        f"  {name}  (pid {pid})  {rss / (1024 * 1024):,.0f} MB  {cpu:.1f}% CPU"
+        for name, pid, cpu, rss in shown
+    ]
     if total > len(shown):
         lines.append(f"  ... and {total - len(shown)} more -- narrow with name_contains")
     return header + "\n" + "\n".join(lines) if lines else header + "\n(none)"
@@ -254,11 +287,28 @@ _APP_ALIASES = {
 }
 
 
+#: Browsers are single-instance by default: launching the exe again with no
+#: arguments hands the request to the already-running process, which opens a
+#: new tab, not a new window -- confirmed the actual cause of "open chrome in
+#: a separate window" opening a tab instead. Each of these needs its own
+#: flag; there is no OS-level "new window" concept `launch_app` could apply
+#: generically.
+_NEW_WINDOW_FLAGS = {
+    "chrome.exe": "--new-window",
+    "msedge.exe": "--new-window",
+    "firefox.exe": "-new-window",
+}
+
+
 class LaunchAppInput(BaseModel):
     #: A common name ("notepad", "chrome") or an exact command/path to run.
     app: str = Field(min_length=1)
     #: Extra command-line arguments, space-separated as they would be typed.
     args: str | None = None
+    #: "open X in a new/separate window" (as opposed to a new tab in an
+    #: already-running instance). Only meaningful for apps in
+    #: `_NEW_WINDOW_FLAGS`; harmless no-op otherwise.
+    new_window: bool = False
 
 
 async def _launch_app(payload: LaunchAppInput) -> tuple[bool, str]:
@@ -267,13 +317,19 @@ async def _launch_app(payload: LaunchAppInput) -> tuple[bool, str]:
     app = payload.app.strip()
     resolved = _APP_ALIASES.get(app.lower(), app)
 
+    args = payload.args or ""
+    if payload.new_window:
+        flag = _NEW_WINDOW_FLAGS.get(resolved.lower())
+        if flag and flag not in args:
+            args = f"{flag} {args}".strip()
+
     try:
         if resolved.endswith(":") or resolved.startswith(("http://", "https://")):
             # A URI scheme (ms-settings:, mailto:, etc.) or bare URL --
             # os.startfile hands it to whatever the OS registered for it.
             os.startfile(resolved)  # noqa: S606 - intended OS launch, not arbitrary exec
         else:
-            command = resolved if not payload.args else f"{resolved} {payload.args}"
+            command = resolved if not args else f"{resolved} {args}"
             subprocess.Popen(  # noqa: S603, S607 - the whole point of this tool
                 command,
                 shell=True,
@@ -281,7 +337,10 @@ async def _launch_app(payload: LaunchAppInput) -> tuple[bool, str]:
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
             )
-        return True, f"Launched '{app}'."
+        message = f"Launched '{app}'."
+        if payload.new_window and resolved.lower() not in _NEW_WINDOW_FLAGS:
+            message += " (No known new-window flag for this app; it may have opened normally instead.)"
+        return True, message
     except OSError as exc:
         return False, (
             f"Could not launch '{app}' ({resolved}): {exc}. "

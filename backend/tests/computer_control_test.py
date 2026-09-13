@@ -82,6 +82,31 @@ async def main() -> int:
     ok, message = await tools_os_control._launch_app(LaunchAppInput(app="notepad"))
     check("TEST 4: launch_app launched notepad via the OS, not a UI click", ok, message)
 
+    print("\n== new_window: chrome/edge/firefox have a flag mapped, notepad honestly does not ==")
+    # Deliberately NOT launching a real chrome/edge here: this machine's own
+    # Chrome is in active, real use throughout this session (visible in the
+    # user's own screenshots earlier), and a new_window launch would dump an
+    # extra window onto their real desktop as a side effect of running tests.
+    # Checked at the mapping level instead of end-to-end for that one case.
+    check("chrome.exe has a new-window flag mapped",
+          tools_os_control._NEW_WINDOW_FLAGS.get("chrome.exe") == "--new-window")
+    check("msedge.exe has a new-window flag mapped",
+          tools_os_control._NEW_WINDOW_FLAGS.get("msedge.exe") == "--new-window")
+    ok, message = await tools_os_control._launch_app(LaunchAppInput(app="notepad", new_window=True))
+    check("notepad + new_window is honest that it has no such flag (real launch, safe app)",
+          ok and "no known new-window flag" in message.lower(), message)
+    await tools_os_control._close_app(tools_os_control.CloseAppInput(name_contains="notepad", all_matches=True))
+
+    print("\n== list_processes: memory data is real, sort_by actually sorts ==")
+    from app.llm.tools_os_control import ListProcessesInput, _list_processes
+
+    by_memory = await _list_processes(ListProcessesInput(sort_by="memory"))
+    check("reports memory in MB", " MB " in by_memory, by_memory[:200])
+    check("reports CPU%", "% CPU" in by_memory, by_memory[:200])
+    by_name = await _list_processes(ListProcessesInput(sort_by="name"))
+    check("name-sorted output differs from memory-sorted (real ranking happened)",
+          by_memory != by_name)
+
     await asyncio.sleep(1.5)  # give the window time to actually appear
 
     listing = await tools_ui_automation.ui_list_windows()
