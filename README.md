@@ -361,6 +361,13 @@ do not put them in this README or commit them.
 | `JARVIS_SYNC_ENABLED`, `JARVIS_SYNC_INTERVAL` | Desktop replication loop |
 | `NEXT_PUBLIC_API_BASE` | Optional frontend backend-address override |
 
+A packaged build (desktop/Android) doesn't need either key in `backend/.env`
+at all — Settings → Provider key / Gemini key sends both to the runtime at
+connect time (`POST /api/local/credentials`), held in memory only, never
+written to disk. This is genuine BYOK: Sarvam's key has worked this way for a
+while, and Gemini's key gained the same path so a public build can ship with
+neither key baked in and still let each user supply their own.
+
 Useful routes: `/api/health`, `/docs`, `/api/dashboard`, `/api/chat/history`,
 `/api/records/...`, `/api/location`, `/api/voice/config`, `/api/local/...`,
 and `/api/announcements/...`. Exact request schemas are exposed by FastAPI.
@@ -445,6 +452,37 @@ a boundary, protocol, dependency, provider, storage policy or platform behavior
 changes. Record checks actually run and distinguish source changes from installed
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
+
+- **2026-09-13 — BYOK: Gemini's API key can now be supplied from Settings,
+  same as Sarvam's already could.** Part of the open-source variant's second
+  pillar (SLDT sync being the first) — a public build ships neither key, so
+  both need to be user-suppliable, not just Sarvam's. Extended
+  `POST /api/local/credentials` (`backend/app/api/localstore.py`) to accept
+  `gemini_api_key` alongside the existing `sarvam_api_key`, generalizing the
+  same desktop carve-out logic to both (a blank key from a first-contact call
+  must not silently erase a key that's already working — this exact bug
+  shipped once for Sarvam before that carve-out existed). `close_providers()`
+  already tore down Gemini's cached client on every credentials update
+  (it iterates every provider getter, not just Sarvam's), so no change was
+  needed there. Added a "Gemini key (optional)" field to
+  `SettingsPanel.tsx`, a matching `GEMINI_KEY_STORAGE` in
+  `frontend/src/lib/agentBridge.ts`, and a `gemini_key_configured` field on
+  `/api/health` (`HealthOut`) so Settings can show "the runtime has a Gemini
+  key" the same way it already does for Sarvam. Verified: new
+  `backend/tests/credentials_test.py` (25 assertions — both keys set
+  independently and together, the carve-out preserved for both providers on
+  desktop, both actually clearing on Android, omitting a key entirely
+  leaving it untouched), the full existing `smoke_test.py` still passes, and
+  `frontend`'s `npm run typecheck` is clean. Checked live against the user's
+  actual running backend (real Sarvam/Gemini keys already configured): typed
+  a fake Gemini key into the real Settings UI, confirmed the field's
+  show/hide and persistence-on-save wiring work, then deliberately clicked
+  **Cancel** rather than Save to avoid overwriting the live process's real
+  in-memory keys — that specific mutation path is what the new automated
+  test covers instead, against an isolated test server. Not yet touched:
+  STT/TTS provider keys are Sarvam-only regardless of `JARVIS_ENGLISH_LLM`
+  and unaffected by this entry; this only closes the LLM half of BYOK for
+  Gemini specifically.
 
 - **2026-09-13 — Telugu's local voice reaches Android, following the same
   on-device bridge English already uses (unverified on a device).** The

@@ -128,6 +128,74 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · BYOK: Gemini's key joins Sarvam's on the existing /api/local/credentials path
+- User asked "is jarvis opensource fully completed?" -- answered no: SLDT
+  sync is genuinely done and usable, but BYOK (the other explicitly
+  requested pillar) hadn't been touched at all, there's no LICENSE file,
+  and it's still an open question whether "opensource" means this whole
+  repo goes public or `jarvis-oss/` becomes its own separate repo (since
+  the paid app's own source lives in the same tree today). User then said
+  "OK implement BYOK" -- this entry is that.
+- Researched before writing any code (via a research subagent, since this
+  needed reading across `backend/app/core/config.py`,
+  `backend/app/providers/*.py`, `backend/app/api/localstore.py`, and
+  `frontend/src/lib/agentBridge.ts`): Sarvam's key already had a full BYOK
+  path (`POST /api/local/credentials` mutates the settings singleton,
+  `close_providers()` tears down cached HTTP clients so the new key takes
+  effect on the next request) -- Gemini's key had none, only ever readable
+  from `backend/.env` at process start. No hardcoded/bundled real key
+  exists anywhere in source; `.env.example` already ships placeholders for
+  both. So this was "extend an existing path to a second key," not "strip
+  a secret out of the codebase."
+- Generalized `/api/local/credentials` (`backend/app/api/localstore.py`)
+  from a single hardcoded `sarvam_api_key` field to a small loop over
+  `(payload_key, settings_attr, has_key_attr)` triples, so the exact same
+  desktop-carve-out logic (a blank key from a first-contact call must not
+  erase a key that's already working, unless the runtime is Android, whose
+  sandboxed `.env` never holds a real key to protect) now applies
+  identically to both `sarvam_api_key` and `gemini_api_key` instead of
+  being hand-written once for Sarvam only. Confirmed `close_providers()`
+  already tore down Gemini's client too (it iterates every provider getter
+  including `get_english_chat_provider`, not just Sarvam's) -- so no
+  change was needed there, only in what the endpoint accepts.
+- Added `frontend/src/lib/agentBridge.ts`'s `getGeminiKey()` /
+  `GEMINI_KEY_STORAGE`, extended `sendProviderKey()` to send both keys, and
+  added a "Gemini key (optional)" field to `SettingsPanel.tsx` (show/hide
+  toggle, save-on-reload, matching the existing Sarvam field's pattern
+  exactly). Added `gemini_key_configured` to `/api/health`
+  (`HealthOut`/`main.py`) and a matching status line in Settings, so a user
+  who sets a Gemini key gets the same "the runtime has a key" confirmation
+  Sarvam's field already gave -- without this, a working key and a
+  mistyped one would look identical until something failed later.
+- Verified: new `backend/tests/credentials_test.py` (25 assertions) --
+  each key set independently, both together, the carve-out preserved for
+  both providers on a desktop runtime, both actually clearing on an
+  Android runtime, and omitting a key from the payload entirely leaving it
+  untouched while still reporting its real current state. Re-ran the full
+  existing `backend/tests/smoke_test.py` (unrelated to this change, but it
+  hits `/api/health` and other localstore-adjacent paths) -- still "ALL
+  CHECKS PASSED". `frontend`'s `npm run typecheck` clean.
+- Checked the actual UI live against the user's own already-running
+  backend (found it already up on :8000 with real Sarvam/Gemini keys
+  configured -- did not start a second instance, which would have
+  conflicted on the port anyway). Confirmed the Gemini field renders,
+  shows/hides correctly, and holds typed input -- then deliberately
+  clicked **Cancel** instead of Save, specifically to avoid overwriting
+  that live process's real in-memory keys with a test value. The actual
+  mutate-the-settings-singleton behavior is what the new isolated test
+  server in `credentials_test.py` covers instead; confirmed via
+  `/api/health` before and after that the live backend's real
+  `api_key_configured: true` state was completely undisturbed.
+- Updated `README.md` (config table + Maintenance log),
+  `docs/architecture.md` (new paragraph in "Provider and speech policy"),
+  and `jarvis-oss/README.md` (moved BYOK-for-LLM from "not built yet" to
+  done, noting this is a shared-app-core change that benefits the paid
+  app too, not something scoped only to `jarvis-oss/`).
+- **Left for next:** STT/TTS BYOK untouched (both stay Sarvam-only
+  regardless of the LLM key); still no LICENSE file; the
+  separate-repo-or-not question from the "fully completed?" conversation
+  is still unanswered and unrelated to this entry.
+
 ### 2026-09-13 · Claude Code · Telugu's local voice ported to Android's on-device bridge (code-complete, NOT device-verified)
 - Direct continuation of the same-day "Telugu gets an opt-in local voice"
   entry further below. User tried the toggle on mobile and found nothing —

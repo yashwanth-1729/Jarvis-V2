@@ -3,7 +3,7 @@
 import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
 import * as React from "react";
 
-import { PROVIDER_KEY_STORAGE, getProviderKey } from "@/lib/agentBridge";
+import { GEMINI_KEY_STORAGE, PROVIDER_KEY_STORAGE, getGeminiKey, getProviderKey } from "@/lib/agentBridge";
 import { API_BASE, API_BASE_STORAGE_KEY, isNativeShell } from "@/lib/api";
 import { clearAll } from "@/lib/localdb";
 import {
@@ -131,11 +131,14 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     }
   }, [sldtRecoveryInput]);
   const [providerKey, setProviderKey] = React.useState(() => getProviderKey());
+  const [geminiKey, setGeminiKey] = React.useState(() => getGeminiKey());
   const [showKey, setShowKey] = React.useState(false);
   const [showProviderKey, setShowProviderKey] = React.useState(false);
+  const [showGeminiKey, setShowGeminiKey] = React.useState(false);
   const [backendProbe, setBackendProbe] = React.useState<ProbeState>("idle");
   /** Whether the runtime currently holds a provider key, per its health. */
   const [runtimeHasKey, setRuntimeHasKey] = React.useState<boolean | null>(null);
+  const [runtimeHasGeminiKey, setRuntimeHasGeminiKey] = React.useState<boolean | null>(null);
   const [confirmReset, setConfirmReset] = React.useState(false);
 
   const dialogRef = React.useRef<HTMLDivElement>(null);
@@ -159,10 +162,16 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     fetch(`${API_BASE}/api/health`, { signal: AbortSignal.timeout(5000) })
       .then((response) => (response.ok ? response.json() : null))
       .then((health) => {
-        if (!cancelled) setRuntimeHasKey(health?.api_key_configured ?? null);
+        if (!cancelled) {
+          setRuntimeHasKey(health?.api_key_configured ?? null);
+          setRuntimeHasGeminiKey(health?.gemini_key_configured ?? null);
+        }
       })
       .catch(() => {
-        if (!cancelled) setRuntimeHasKey(null);
+        if (!cancelled) {
+          setRuntimeHasKey(null);
+          setRuntimeHasGeminiKey(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -193,6 +202,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     store("jarvis.supabaseUrl", supabaseUrl);
     store("jarvis.supabaseKey", supabaseKey);
     store(PROVIDER_KEY_STORAGE, providerKey);
+    store(GEMINI_KEY_STORAGE, geminiKey);
 
     setSyncBackend(syncBackend);
     // Only saved once a dataset actually exists (generated or paired this
@@ -223,6 +233,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     supabaseUrl,
     supabaseKey,
     providerKey,
+    geminiKey,
     syncBackend,
     sldtDatasetId,
     sldtRepo,
@@ -413,6 +424,49 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 {runtimeHasKey
                   ? "The runtime has a key."
                   : "The runtime has no key yet — save to send it."}
+              </p>
+            )}
+
+            <label htmlFor="gemini-key" className="block pt-3 text-sm font-medium text-ink">
+              Gemini key <span className="font-normal text-ink-faint">(optional)</span>
+            </label>
+            <p className="text-xs leading-relaxed text-ink-dim">
+              Bring your own Google Gemini key to use it for English chat, with
+              Sarvam as the automatic fallback. Leave blank to stay on Sarvam
+              for everything — nothing else changes.
+            </p>
+            <div className="relative">
+              <input
+                id="gemini-key"
+                type={showGeminiKey ? "text" : "password"}
+                autoComplete="off"
+                spellCheck={false}
+                value={geminiKey}
+                onChange={(event) => setGeminiKey(event.target.value)}
+                placeholder="AIza..."
+                className="h-11 w-full rounded border border-line bg-surface-2 px-3 pr-12 font-mono text-lg text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none sm:text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGeminiKey((current) => !current)}
+                aria-label={showGeminiKey ? "Hide Gemini key" : "Show Gemini key"}
+                className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              >
+                {showGeminiKey ? (
+                  <EyeOff aria-hidden className="h-4 w-4" />
+                ) : (
+                  <Eye aria-hidden className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {runtimeHasGeminiKey !== null && (
+              <p
+                aria-live="polite"
+                className={cn("text-xs", runtimeHasGeminiKey ? "text-accent" : "text-ink-dim")}
+              >
+                {runtimeHasGeminiKey
+                  ? "The runtime has a Gemini key."
+                  : "The runtime has no Gemini key yet — save to send it."}
               </p>
             )}
           </section>

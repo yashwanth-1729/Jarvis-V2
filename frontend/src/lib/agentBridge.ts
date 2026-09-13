@@ -35,8 +35,9 @@ import {
 } from "@/lib/localdb";
 import { nowIso } from "@/lib/syncClient";
 
-/** Where the provider key is remembered on this device. */
+/** Where the provider keys are remembered on this device (BYOK). */
 export const PROVIDER_KEY_STORAGE = "jarvis.providerKey";
+export const GEMINI_KEY_STORAGE = "jarvis.geminiKey";
 
 interface DrainResponse {
   upserts: Partial<Record<SyncedTable, SyncRow[]>>;
@@ -137,20 +138,36 @@ export function getProviderKey(): string {
   }
 }
 
+/** BYOK: an optional Gemini key, used only for `JARVIS_ENGLISH_LLM=gemini` (see backend/app/providers/gemini.py). English chat and everything else works fine without one — it just stays on Sarvam. */
+export function getGeminiKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(GEMINI_KEY_STORAGE)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /**
- * Hand the local runtime its provider key.
+ * Hand the local runtime its provider keys (BYOK).
  *
  * A packaged app ships no `.env`, so the backend starts with no credentials and
- * every call to the assistant fails until it is given one. The key is entered
+ * every call to the assistant fails until it is given one. Each key is entered
  * once in settings and sent on each connect — the client is the only place it
  * is stored, and the runtime holds it in memory for the life of the process.
  *
  * Sending an empty key is meaningful: it clears whatever the runtime had, which
- * is what "remove my key" has to do.
+ * is what "remove my key" has to do. The two keys travel independently (see
+ * `/api/local/credentials`'s desktop carve-out) -- clearing one never touches
+ * the other.
  */
 export async function sendProviderKey(): Promise<boolean> {
-  const result = await post<{ configured: boolean }>("/api/local/credentials", {
-    sarvam_api_key: getProviderKey(),
-  });
+  const result = await post<{ configured: boolean; gemini_configured: boolean }>(
+    "/api/local/credentials",
+    {
+      sarvam_api_key: getProviderKey(),
+      gemini_api_key: getGeminiKey(),
+    },
+  );
   return result?.configured ?? false;
 }

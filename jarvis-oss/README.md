@@ -3,8 +3,8 @@
 An open-source edition of JARVIS's desktop and Android apps, sharing the
 same UI (`frontend/`) as the paid version but replacing its Supabase-backed
 sync with **SLDT** — encrypted, server-independent sync over a GitHub repo
-you own — and (eventually) letting you bring your own LLM/STT/TTS API keys
-instead of a bundled provider.
+you own — and letting you bring your own LLM API keys instead of a bundled
+provider (BYOK).
 
 ## Status
 
@@ -24,6 +24,16 @@ instead of a bundled provider.
 The paid app's Supabase path is completely untouched and remains the
 default — SLDT is opt-in per device.
 
+**BYOK for the LLM is also usable today**, and not limited to the
+open-source variant — it's a change to the shared app core, so the paid
+app benefits too. Settings has a Sarvam key field (existed already) and
+now a Gemini key field (optional — leave it blank and everything stays on
+Sarvam). Neither key is baked into a build; each is entered once per
+device and held only in the runtime's memory (`POST
+/api/local/credentials`, `backend/app/api/localstore.py`), never written
+to disk by the backend. STT and TTS are Sarvam-only regardless of which
+LLM key you supply — BYOK there hasn't been started.
+
 ## What's here
 
 - **[`sldt/`](sldt/README.md)** — the sync engine itself: identity and key
@@ -40,8 +50,8 @@ default — SLDT is opt-in per device.
 
 ## What's not built yet
 
-- **BYOK for LLM/STT/TTS providers.** The other half of "open-source
-  variant" — bring your own API keys instead of a bundled provider. Not
+- **BYOK for STT/TTS.** Both are Sarvam-only today regardless of which LLM
+  key is supplied — bringing your own STT/TTS provider (or key) hasn't been
   started.
 - **A hosted deployment of the proxy.** It exists and is tested, including
   live against the real GitHub API, but hasn't been deployed anywhere

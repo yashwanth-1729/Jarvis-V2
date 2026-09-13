@@ -175,11 +175,11 @@ async def drain() -> dict[str, Any]:
     return {"upserts": upserts, "deletes": deletes, "at": now_iso()}
 
 
-@router.post("/credentials", summary="Hand the runtime its provider key")
+@router.post("/credentials", summary="Hand the runtime its provider keys")
 async def credentials(payload: dict[str, str]) -> dict[str, Any]:
-    """Set the provider API key for this session.
+    """Set this session's provider API keys (BYOK).
 
-    A packaged app ships no ``.env``, so the key cannot come from disk the way
+    A packaged app ships no ``.env``, so a key cannot come from disk the way
     it does on the desktop. The client holds it -- entered once in settings,
     stored on the device -- and hands it over whenever it connects.
 
@@ -188,8 +188,8 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
     place for the key to leak from without adding any capability. It lives in
     memory for the life of the process and goes when the app closes.
 
-    The value is never logged, and the response reports only whether a key is
-    now present.
+    Values are never logged, and the response reports only whether each key
+    is now present.
 
     **Desktop carve-out.** This endpoint predates desktop being client-owned
     at all -- only Android ever called it, because only Android's sandboxed
@@ -208,21 +208,45 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
     untouched. Desktop's Settings panel can still type in an override key at
     any time; only a *blank* value is now treated as "nothing to hand over"
     rather than "erase the working one" when a real key is already active.
+
+    ``gemini_api_key`` follows the identical rule -- added when Gemini
+    (`app/providers/gemini.py`) grew its own BYOK path alongside Sarvam's
+    original one, for the same open-source reason: a public build ships no
+    key of either kind, so both must be settable from the client, not just
+    whichever one happened to need it first.
     """
     _require_client_owned()
 
-    key = (payload.get("sarvam_api_key") or "").strip()
-    if not key and not settings.jarvis_android and settings.has_api_key:
-        return {"configured": True}
-    settings.sarvam_api_key = key
+    changed = False
+    configured: dict[str, bool] = {}
+    for payload_key, attr, has_key_attr in (
+        ("sarvam_api_key", "sarvam_api_key", "has_api_key"),
+        ("gemini_api_key", "gemini_api_key", "has_gemini_key"),
+    ):
+        if payload_key not in payload:
+            continue
+        key = (payload.get(payload_key) or "").strip()
+        if not key and not settings.jarvis_android and getattr(settings, has_key_attr):
+            configured[payload_key] = True
+            continue
+        setattr(settings, attr, key)
+        changed = True
+        configured[payload_key] = bool(key)
 
-    # The HTTP clients bake the key into their auth header when first built and
-    # then cache it, so a new key does nothing until they are torn down. They
-    # rebuild lazily on the next request.
-    await close_providers()
+    if changed:
+        # The HTTP clients bake the key into their auth header when first built
+        # and then cache it, so a new key does nothing until they are torn
+        # down. They rebuild lazily on the next request.
+        await close_providers()
 
-    logger.info("Provider credentials %s", "set" if key else "cleared")
-    return {"configured": bool(key)}
+    logger.info(
+        "Provider credentials updated: %s",
+        ", ".join(f"{k}={'set' if v else 'cleared'}" for k, v in configured.items()) or "none",
+    )
+    return {
+        "configured": configured.get("sarvam_api_key", settings.has_api_key),
+        "gemini_configured": configured.get("gemini_api_key", settings.has_gemini_key),
+    }
 
 
 @router.get("/sync-bootstrap", summary="Hand a first-run client its Supabase credentials")

@@ -163,6 +163,7 @@ async def health() -> HealthOut:
         model=settings.sarvam_chat_model,
         database=str(settings.db_file),
         api_key_configured=settings.has_api_key,
+        gemini_key_configured=settings.has_gemini_key,
         details={
             "chat_provider": settings.jarvis_chat_provider,
             "stt_provider": settings.jarvis_stt_provider,

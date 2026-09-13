@@ -192,6 +192,11 @@ class HealthOut(BaseModel):
     model: str
     database: str
     api_key_configured: bool
+    #: BYOK's Gemini key (see app/providers/gemini.py, /api/local/credentials).
+    #: Always reported, even when JARVIS_ENGLISH_LLM=sarvam, so Settings can
+    #: show "the runtime has a key" the moment one is set, before the user
+    #: has to also flip that separate toggle to see it take effect.
+    gemini_key_configured: bool
     details: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -404,6 +404,26 @@ turn rather than a hang on every turn. The configured model keeps the normal
 timeout and three-attempt retry, and its failure is surfaced as an error
 rather than looped. Per-turn `reasoning_effort` is carried through the failover.
 
+BYOK: `POST /api/local/credentials` (`app/api/localstore.py`) is the one path
+a client-owned-data runtime (desktop or Android) uses to hand the backend its
+own provider keys instead of relying on `backend/.env`, which a packaged app
+never ships with real secrets in. Sarvam's key had this path first; Gemini's
+key now travels identically, both mutating the same mutable `Settings`
+singleton (`app.core.config.settings`) and both torn down the same way
+afterward -- `close_providers()` already iterated every provider getter
+(including `get_english_chat_provider`, which resolves to Gemini's
+`EnglishChatProvider` when `JARVIS_ENGLISH_LLM=gemini`), so extending BYOK to
+Gemini needed no change to teardown, only to the endpoint accepting the key
+and the client sending it. Both keys share one carve-out: a blank value from
+a first-contact handshake means "nothing to hand over" rather than "erase the
+working key" whenever a real key is already active and the runtime isn't
+Android (whose sandboxed `.env` never holds a real key to protect) -- this
+exact bug shipped once for Sarvam (a fresh desktop launch flipped
+`api_key_configured` from true to false within seconds of the frontend's own
+first-contact call) before the carve-out existed, and it would have recurred
+identically for Gemini without generalizing the same rule to both keys
+rather than treating it as Sarvam-specific.
+
 ## Remaining parts of the reference
 
 - **Continuous capture and partial ASR:** Still absent. ScriptProcessor captures
