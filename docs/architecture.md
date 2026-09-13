@@ -166,9 +166,27 @@ level the paid app already gives the Supabase key on desktop
 offers `createDirectGitHubStore` for exactly that case: reads and writes
 both go straight to GitHub with a caller-held token, no proxy, no server
 to deploy. `SldtClient` needed no changes to support it -- it only ever
-depends on the generic `Store` interface. There is still no settings UI
-letting a user actually choose SLDT over Supabase. Neither this app's
-boundaries nor its Supabase path are affected.
+depends on the generic `Store` interface.
+
+A user can now actually choose SLDT: `SettingsPanel.tsx`'s existing sync
+section gained a backend toggle, and `syncClient.ts`'s `startAutoSync`
+gained one optional field (`remote`) so a configured device substitutes an
+`SldtRemote` for the default `SupabaseRemote` -- every existing caller
+that omits it keeps the exact prior Supabase-only behavior. The one new
+piece of state this introduces, `frontend/src/lib/sldtConfig.ts`, deliberately
+splits where things live: non-secret settings (repo, path prefix, which
+write mode, even the GitHub PAT for the direct path) go in `localStorage`,
+the same place and trust level the Supabase URL/key already sit at on this
+same device; the SLDT recovery code's secret half goes in `sessionStorage`
+instead, specifically because the settings panel's own save flow
+unconditionally reloads the page and a bare in-memory variable would be
+wiped by that same reload, immediately undoing whatever the user just
+entered. This was exercised in a real browser (not just compiled): a
+generated identity, a saved (fake, deliberately) token, a real reload, and
+a real failed network call surfacing through the same error-status UI a
+bad Supabase key already uses. Neither this app's boundaries nor its
+Supabase path are affected -- Supabase remains the default backend for
+every device that hasn't opted into SLDT.
 
 ## Systematic memory boundary
 

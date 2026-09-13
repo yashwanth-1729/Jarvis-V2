@@ -13,10 +13,13 @@ the readable Markdown vault now operate as one local-first system. See the
 [JARVIS 3.0 release note](docs/releases/3.0.0.md).
 
 An open-source variant is being built alongside this app under
-[`jarvis-oss/`](jarvis-oss/), replacing the Supabase-backed sync mirror with
-SLDT (server-independent encrypted sync over a publicly addressable object
-store) and BYOK provider credentials. It does not modify this app or its data
-path; see [`jarvis-oss/sldt/README.md`](jarvis-oss/sldt/README.md) for status.
+[`jarvis-oss/`](jarvis-oss/README.md), replacing the Supabase-backed sync
+mirror with SLDT (server-independent encrypted sync over a GitHub repo you
+own) and BYOK provider credentials. It does not modify this app or its data
+path. SLDT is now usable from this app's own Settings screen (Sync backend →
+SLDT) — see [`jarvis-oss/README.md`](jarvis-oss/README.md) for the project
+overview and [`jarvis-oss/sldt/README.md`](jarvis-oss/sldt/README.md) for
+full status.
 
 ## Run and build
 
@@ -588,6 +591,38 @@ there is no background process automatically rewriting documentation.
   working directory with no possible coincidental relationship to the repo)
   and confirming `/api/health` still responded — isolates the env var, not
   path-walking luck, as what actually fixed it.
+
+- **2026-09-13 — SLDT stage 6: usable from Settings, verified in a real
+  browser.** Follows the stage-5 entry below. Added a "Sync backend"
+  section to `frontend/src/components/SettingsPanel.tsx`: a user can now
+  actually choose SLDT over Supabase, generate a new dataset or pair with
+  an existing one via its recovery code, configure a GitHub repo, and pick
+  direct or proxied writes — none of this was reachable from the app
+  before this entry. Backed by a new `frontend/src/lib/sldtConfig.ts`
+  (settings in `localStorage`, same trust level the Supabase URL/key
+  already get there; the recovery code's secret half in `sessionStorage`
+  specifically — not a bare variable, which the settings panel's own
+  always-reload-on-save behavior would have wiped immediately after the
+  user just entered it, and not `localStorage`, which would defeat the
+  design's "re-derive each session" intent). `syncClient.ts` gained one
+  optional field (`remote`) so `startAutoSync` can use an `SldtRemote`
+  instead of always constructing a `SupabaseRemote`; every existing caller
+  that omits it is unaffected. **Verified in a real browser, not just
+  compiled:** ran the actual dev server, generated a genuine working
+  recovery code through the UI, filled in a repo and a deliberately fake
+  GitHub token, saved through a real page reload (everything — including
+  the session-unlock state — persisted correctly across it), and watched
+  the auto-sync effect make a real request to the real GitHub API that
+  failed with 401, surfacing as a clean "Sync failed" banner through the
+  exact same status pipeline a bad Supabase key already used — no crash,
+  no special-casing needed anywhere. Test data cleared from the browser
+  afterward. Also added a top-level `jarvis-oss/README.md` project
+  overview, since this is headed for a public release and didn't have one
+  yet. Full suite green: `jarvis-oss/sldt` (92 assertions/8 files),
+  `jarvis-oss/proxy` (15), and `frontend`'s existing `sync.test.ts` (43,
+  untouched) plus new `sldtRemote.test.ts` (13) and `sldtConfig.test.ts`
+  (17); `npm run build` succeeds. See `jarvis-oss/sldt/README.md`'s "The
+  settings UI" section for the full account.
 
 - **2026-09-13 — SLDT stage 5: a proxy-free way to reach GitHub for
   desktop/Android.** Follows the stage-4 entry below. User asked directly

@@ -557,6 +557,13 @@ export interface AutoSyncOptions {
   onPulled?: () => void;
   pushDebounceMs?: number;
   pullIntervalMs?: number;
+  /**
+   * Use this `Remote` instead of the default Supabase one. The only caller
+   * that needs this today is a device configured for SLDT instead of
+   * Supabase (see `@/lib/sldtConfig`); every existing caller omits it and
+   * gets exactly the prior Supabase-only behavior unchanged.
+   */
+  remote?: Remote;
 }
 
 /** A voice turn is speaking: set by the voice UI so pushes wait for silence. */
@@ -579,10 +586,13 @@ export function startAutoSync(options: AutoSyncOptions = {}): AutoSyncController
   const pushDebounceMs = options.pushDebounceMs ?? 2500;
   const pullIntervalMs = options.pullIntervalMs ?? 45_000;
 
-  if (typeof window === "undefined" || !isAvailable() || !getSupabaseConfig()) {
+  if (typeof window === "undefined" || !isAvailable()) {
     return NOOP_CONTROLLER;
   }
-  const remote = new SupabaseRemote(getSupabaseConfig()!);
+  if (!options.remote && !getSupabaseConfig()) {
+    return NOOP_CONTROLLER;
+  }
+  const remote = options.remote ?? new SupabaseRemote(getSupabaseConfig()!);
 
   let status: AutoSyncStatus = { phase: "idle", at: null, message: null };
   let busy = false;

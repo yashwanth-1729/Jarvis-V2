@@ -128,6 +128,100 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 6: usable from Settings, verified in a real browser
+- Continuation of the stage-5 entry further below -- same feature. User
+  said "continue"; given SLDT stage 5 had left "no settings UI" as the
+  single biggest remaining gap on every prior entry, I took that as the
+  obvious next step rather than re-asking, but did stop to check one real
+  design tradeoff first (below) since building the wrong version would
+  mean redoing actual UI work.
+- Mid-build, the user reminded me this is headed for a public open-source
+  GitHub release and to build accordingly (user-facing copy, not
+  developer shorthand; no test artifacts left in the shipped repo). Kept
+  that in mind for the settings copy and added a top-level
+  `jarvis-oss/README.md` overview, which didn't exist yet and should have
+  for a public release.
+- The one real decision I checked first: the SLDT design says never
+  persist the account secret, re-derive each session -- but the existing
+  Supabase settings UI just remembers the URL/key in `localStorage`
+  forever, so "faster" and "secure" pointed in different directions.
+  Asked; the user said "whatever is faster and secure," which -- since
+  neither option was actually more code to write -- meant the secure
+  default: never persist the raw secret to `localStorage`.
+- Implementation, in order:
+  1. `frontend/src/lib/syncClient.ts`: added one optional field
+     (`AutoSyncOptions.remote`) so `startAutoSync` can be handed an
+     `SldtRemote` instead of always constructing a `SupabaseRemote`.
+     Every existing caller that omits it hits the exact same code path as
+     before -- confirmed by re-running the existing `sync.test.ts` (43
+     assertions) unchanged afterward.
+  2. New `frontend/src/lib/sldtConfig.ts`: settings persistence + session
+     secret handling. Real bug caught before it shipped: I first put the
+     account secret in a bare module variable ("in memory for this
+     session"), then realized this settings panel's own `save()` always
+     calls `window.location.reload()` -- meaning the very first thing
+     that would happen after a user generates a new identity or pairs
+     with a recovery code is losing it again, before sync ever ran once.
+     Switched to `sessionStorage`: survives a same-tab reload, clears
+     when the tab/app actually closes, which is the right granularity
+     ("re-enter per app relaunch," not "re-enter per settings save").
+     Wrote this reasoning into the module doc so it isn't rediscovered
+     the hard way again.
+  3. Second real bug, also caught before shipping (by the new test, not
+     inspection): the `Remote` this module hands `startAutoSync` needs a
+     stable, dataset-specific `id` from its very first call, because
+     `syncClient.ts` namespaces pull/push cursors by `remote.id` --
+     initially used a generic placeholder id for the not-yet-resolved
+     async `SldtRemote`, which would have silently merged cursor state
+     across two different SLDT datasets on the same device. Fixed by
+     computing `sldt:<datasetId>` synchronously (the datasetId is known
+     immediately; only deriving keys and touching IndexedDB is async).
+  4. `frontend/src/lib/useSync.ts`: branches on the stored backend choice;
+     added `needsSldtSecret` to `AutoSyncState` so the UI can say
+     "re-enter your recovery code" instead of a generic "not configured,"
+     which would read like the account itself was lost.
+  5. `frontend/src/components/SettingsPanel.tsx`: a "Sync backend"
+     toggle (Supabase / SLDT), with the existing Supabase fields
+     untouched and shown only when Supabase is selected. SLDT reveals:
+     generate-new-dataset (shows the recovery code exactly once, user
+     must dismiss it deliberately) or pair-with-existing-code, repo/
+     branch/path-prefix fields, and a direct-vs-proxy write-mode toggle
+     with the matching field underneath.
+- Verified in the actual dev server via the Browser tool, not just typechecked:
+  opened Settings, switched to SLDT, clicked "Create new dataset" and got
+  a real, correctly-formatted recovery code
+  (`SLDT:DT5uUpki...:NrdOQM0j...`), dismissed it, filled in a fake repo
+  name and a deliberately fake GitHub token, clicked Save & reload --
+  after the reload, every field (including "Unlocked for this session")
+  had persisted correctly, and the auto-sync effect made a real request
+  to api.github.com that failed with 401, surfacing as a clean "Sync
+  failed — unexpected response reading manifest.json: status 401" banner
+  through the exact same status pipeline a bad Supabase key already uses.
+  No crash, no unhandled rejection, no special-casing needed anywhere in
+  that path. Cleared the test localStorage/sessionStorage keys via the
+  console afterward and confirmed the app returned to its normal
+  Supabase-connected state.
+- Added `frontend/tests/sldtConfig.test.ts` (17 assertions, a minimal
+  in-memory `Storage` polyfill since Node has no `window` of its own).
+  Full suite after this stage: `jarvis-oss/sldt` 92/8 files,
+  `jarvis-oss/proxy` 15, frontend `sync.test.ts` 43 (untouched),
+  `sldtRemote.test.ts` 13, `sldtConfig.test.ts` 17 (new); `npm run
+  typecheck` and `npm run build` both clean/succeed.
+- Noticed unrelated modified files under `backend/app/llm/` (tools.py,
+  tools_os_control.py, tools_system.py + their tests) sitting uncommitted
+  in the working tree partway through this session -- not mine, left
+  untouched, staged only my own files. Worth a `git status` check before
+  either agent's next session starts, in case that's in-progress work
+  that needs finishing or committing.
+- Updated `README.md`, `docs/architecture.md`, `jarvis-oss/sldt/README.md`,
+  and added `jarvis-oss/README.md` (new, project-level overview for the
+  public release).
+- **Left for next:** BYOK for LLM/STT/TTS still untouched; the proxy is
+  still not deployed anywhere (only matters for a hypothetical future web
+  build); the SLDT path has been verified in the web dev build and
+  Node-based live tests but not yet inside an actual built Tauri desktop
+  app or installed Android APK.
+
 ### 2026-09-13 · Claude Code · Telugu speech gets an opt-in local voice (Piper), Sarvam stays the default
 - User: "install piper telugu audio ... but unlike before dont remove sarvam
   tts fully... keep it as a button like switch to sarvam and when it is in

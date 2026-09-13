@@ -1,17 +1,18 @@
 # SLDT -- server-independent encrypted data synchronization
 
-Status: **verified end-to-end against the real GitHub API; two network
-trust models available; still not activated for any user.** Stage 5.
-Stages 1-3 built the engine, persistence, network wiring, a proxy, and an
-unactivated `Remote` adapter for the paid frontend. Stage 4 ran the whole
-chain for real (own throwaway public repo, own fine-grained PAT, the
-actual proxy process, no mocks) and fixed two real protocol bugs that only
-a live network round trip surfaced -- see "What the live round trip found"
-below. Stage 5 added a second, proxy-free way to reach GitHub
-(`createDirectGitHubStore`) for the targets that don't need one -- see
-"Two ways to reach GitHub" below for which to use where. No existing file
-imports the frontend adapter; still no settings UI to actually choose SLDT
-over Supabase.
+Status: **usable, end to end, from the app's own Settings screen.** Stage
+6. Stages 1-5 built the engine, persistence, both network paths (proxied
+and direct), a proxy, verified all of it live against the real GitHub API,
+and built (but never wired up) a `Remote` adapter for the paid frontend --
+see "What the live round trip found" below for the real bugs a live round
+trip surfaced that no mock caught. Stage 6 is the activation: a "Sync
+backend" section in the paid app's own Settings panel lets a user actually
+choose SLDT over Supabase, generate or pair a dataset, and configure
+either write path -- verified in a real browser, including a live (fake
+credential, deliberately) network call surfacing its error cleanly through
+the existing sync-status UI with no crash. See
+[`jarvis-oss/README.md`](../README.md) for the project-level overview this
+now supports, and "The settings UI" below for what was built and verified.
 
 ## What this is
 
@@ -194,6 +195,57 @@ Neither change alters resolution for any of the app's own existing
 imports -- both are scoped to resolving paths that already reach outside
 `frontend/` or specifically end in `.js`.
 
+## The settings UI
+
+`frontend/src/components/SettingsPanel.tsx`'s existing "sync" section now
+has a **Sync backend** toggle: Supabase (default, exactly the prior
+behavior) or **SLDT (GitHub)**. Selecting SLDT reveals:
+
+- **Create new dataset** or **Pair** with an existing dataset's recovery
+  code -- the code is shown exactly once on generation (there is no way to
+  retrieve it again) and the user must dismiss it deliberately, not on a
+  timer.
+- GitHub repo / branch / path prefix fields.
+- A **Direct** vs. **Through a proxy** choice for how this device writes
+  (see "Two ways to reach GitHub" above), with the matching field (a
+  GitHub token, or a proxy URL) shown underneath.
+
+New supporting module: `frontend/src/lib/sldtConfig.ts`. Persists
+everything above in `localStorage` -- the same trust level and mechanism
+`syncClient.ts` already uses for the Supabase URL/key -- **except the
+recovery code's secret half**, which lives in `sessionStorage` instead
+(not a bare in-memory variable, and not `localStorage`): a bare variable
+would be wiped by this panel's own existing `save()`, which unconditionally
+reloads the page, meaning the very first thing that happened after
+generating a new identity would be forgetting it again before sync ever
+ran once. `sessionStorage` survives that reload but clears when the
+tab/app actually closes -- "re-enter every time you relaunch the app," the
+design's intended granularity, not "re-enter every time any setting
+changes." `tests/sldtConfig.test.ts` (17 assertions) covers the full
+lifecycle against a minimal in-memory storage polyfill (Node has no
+`window` of its own).
+
+`startAutoSync`/`AutoSyncOptions` in `syncClient.ts` gained one new,
+optional field (`remote`) so a configured device can hand it an
+`SldtRemote` instead of letting it default-construct a `SupabaseRemote` --
+existing callers that don't pass it are provably unaffected (unchanged
+guard, unchanged construction path when omitted). `useSync.ts` picks a
+backend at the top of its existing effect based on `sldtConfig`'s stored
+choice, with `needsSldtSecret` added to `AutoSyncState` so the UI can
+distinguish "not configured" from "configured, but re-enter your recovery
+code" -- the latter being the ordinary state right after almost every
+reload, not an error.
+
+**Verified in a real browser**, not just typechecked: started the actual
+dev server, opened Settings, switched to SLDT, generated a real identity
+(a genuine working recovery code appeared), filled in a repo and a
+deliberately fake GitHub token, saved (reload survived, all fields and the
+session unlock state persisted correctly), and watched the auto-sync
+effect make a real request that failed with 401 -- surfaced as a clean
+"Sync failed" banner through the exact same status pipeline Supabase
+errors already use, no special-casing needed, no crash. Test data was
+then cleared from the browser's storage before finishing.
+
 ## What the live round trip found
 
 Ran the full chain for real: a throwaway public GitHub repo, a fine-grained
@@ -255,23 +307,19 @@ them things a mocked test could have caught:
 
 ## What's explicitly deferred (not this stage)
 
-- **Any UI to actually choose SLDT.** No settings screen for pairing a
-  device, entering a recovery code, or configuring the GitHub repo/proxy
-  URL -- `sldtRemote.ts` exists and works, but nothing in the app offers
-  the user a way to construct one and pass it to `syncOnce`/`startAutoSync`
-  instead of the default Supabase remote. That's a real product decision
-  (a build-time flag? a runtime toggle alongside the Supabase settings?),
-  deliberately not made here.
 - **BYOK for LLM/STT/TTS providers.** A separate piece of the
   open-source variant, not part of the sync layer.
 - **Deploying the proxy anywhere persistent.** It was run locally for the
   live test above and stopped afterward; there is no hosted, always-on
-  deployment yet.
-- **Android/desktop-specific wiring.** The frontend adapter runs in
-  whatever webview loads `frontend/`, so it should work unchanged on
-  Tauri desktop and the Android build once activated -- but that has not
-  been exercised on-device, only in the web build and this Node-based live
-  test.
+  deployment yet. Only matters once a web build exists -- desktop/Android
+  use the direct path and never need it.
+- **On-device verification.** The settings UI and both GitHub paths have
+  been verified in the web dev build (a real browser, a real dev server)
+  and in Node-based live tests, but not yet inside an actual built/signed
+  Tauri desktop app or an installed Android APK. The code path is the same
+  shared frontend either way, but "the same code" and "verified there" are
+  different claims -- this repo's own documentation conventions ask that
+  distinction be kept explicit.
 
 ## Threat model notes worth keeping visible
 
@@ -312,8 +360,9 @@ npm run typecheck
 
 cd ../../frontend
 npx tsx tests/sldtRemote.test.ts   # SldtRemote through the real syncOnce() path, 0 network calls
+npx tsx tests/sldtConfig.test.ts   # settings + session-secret lifecycle, 0 network calls
 npm run typecheck
-npm run build      # proves the app still builds with the adapter present but unimported
+npm run build      # the real production build, with the Settings UI's SLDT section included
 ```
 
 **Live test (real network, not part of the above):** requires your own
@@ -324,6 +373,31 @@ for the exact env vars and how to run the proxy locally first.
 
 ## Maintenance and latest changes
 
+- 2026-09-13: Stage 6. SLDT is now reachable from the app itself: a "Sync
+  backend" section in `frontend/src/components/SettingsPanel.tsx` (create
+  or pair a dataset, pick a GitHub repo/branch/path prefix, choose direct
+  vs. proxied writes), backed by a new `frontend/src/lib/sldtConfig.ts`
+  (localStorage for everything non-secret, `sessionStorage` -- not a bare
+  variable, not `localStorage` -- for the recovery code's secret half, so
+  the settings panel's own reload-on-save doesn't immediately erase what
+  the user just entered). `syncClient.ts` gained one optional field
+  (`AutoSyncOptions.remote`) so a configured device can substitute an
+  `SldtRemote` for the default `SupabaseRemote`; existing callers are
+  unaffected. `useSync.ts` picks the backend from `sldtConfig` and exposes
+  `needsSldtSecret` so the UI can tell "not configured" apart from "just
+  needs its recovery code re-entered," which is the ordinary state after
+  most reloads, not an error. Added `tests/sldtConfig.test.ts` (17
+  assertions). Verified in a real browser (dev server, not just tsc):
+  generated a genuine identity, filled in a repo and a deliberately fake
+  token, saved through a real reload (everything persisted correctly,
+  including the session-unlock state), and watched a real 401 from the
+  live network call surface as a clean error banner through the exact
+  pipeline Supabase errors already use -- no crash, no special-casing.
+  Added a top-level `jarvis-oss/README.md` project overview, since this is
+  headed for a public release. Full suite still green after this stage:
+  `jarvis-oss/sldt` 92 assertions/8 files, `jarvis-oss/proxy` 15, and
+  `frontend`'s `sync.test.ts` (43, untouched), `sldtRemote.test.ts` (13),
+  `sldtConfig.test.ts` (17, new) all passing; `npm run build` succeeds.
 - 2026-09-13: Stage 5. Added `createDirectGitHubStore` (`githubClient.ts`):
   reads and writes both go straight to GitHub's Contents API with a
   caller-held token, no proxy involved. Prompted by a direct question

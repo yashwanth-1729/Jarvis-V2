@@ -12,6 +12,18 @@ import {
   setLocationByName,
   type RememberedLocation,
 } from "@/lib/geo";
+import {
+  applyRecoveryCode,
+  generateNewIdentity,
+  getSldtSettings,
+  getSyncBackend,
+  hasSessionSecret,
+  setSessionSecret,
+  setSldtSettings,
+  setSyncBackend,
+  type SldtWriteMode,
+  type SyncBackend,
+} from "@/lib/sldtConfig";
 import { cn } from "@/lib/utils";
 
 type ProbeState = "idle" | "checking" | "ok" | "fail";
@@ -78,6 +90,46 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   });
   const [supabaseUrl, setSupabaseUrl] = React.useState(() => stored("jarvis.supabaseUrl"));
   const [supabaseKey, setSupabaseKey] = React.useState(() => stored("jarvis.supabaseKey"));
+
+  // -- SLDT (open-source sync alternative to Supabase) -------------------
+  const [syncBackend, setSyncBackendChoice] = React.useState<SyncBackend>(() => getSyncBackend());
+  const [sldtDatasetId, setSldtDatasetId] = React.useState(() => getSldtSettings()?.datasetId ?? "");
+  const [sldtRepo, setSldtRepo] = React.useState(() => getSldtSettings()?.repo ?? "");
+  const [sldtBranch, setSldtBranch] = React.useState(() => getSldtSettings()?.branch ?? "main");
+  const [sldtPathPrefix, setSldtPathPrefix] = React.useState(() => getSldtSettings()?.pathPrefix ?? "sldt/");
+  const [sldtWriteMode, setSldtWriteMode] = React.useState<SldtWriteMode>(
+    () => getSldtSettings()?.writeMode ?? "direct",
+  );
+  const [sldtProxyUrl, setSldtProxyUrl] = React.useState(() => getSldtSettings()?.proxyUrl ?? "");
+  const [sldtDirectToken, setSldtDirectToken] = React.useState(() => getSldtSettings()?.directToken ?? "");
+  const [showSldtToken, setShowSldtToken] = React.useState(false);
+  const [sldtUnlocked, setSldtUnlocked] = React.useState(() => hasSessionSecret());
+  const [sldtRecoveryInput, setSldtRecoveryInput] = React.useState("");
+  const [sldtNewRecoveryCode, setSldtNewRecoveryCode] = React.useState<string | null>(null);
+  const [sldtError, setSldtError] = React.useState<string | null>(null);
+
+  /** First-time setup: a brand new dataset. The code is shown once -- there is no way to recover it later, so it stays on screen until the user dismisses it themselves. */
+  const generateSldtIdentity = React.useCallback(() => {
+    const { identity, recoveryCode } = generateNewIdentity();
+    setSessionSecret(identity.secret);
+    setSldtDatasetId(identity.datasetId);
+    setSldtNewRecoveryCode(recoveryCode);
+    setSldtUnlocked(true);
+    setSldtError(null);
+  }, []);
+
+  /** Joining a dataset an existing device already created. */
+  const pairSldtRecoveryCode = React.useCallback(() => {
+    try {
+      const { datasetId } = applyRecoveryCode(sldtRecoveryInput);
+      setSldtDatasetId(datasetId);
+      setSldtUnlocked(true);
+      setSldtRecoveryInput("");
+      setSldtError(null);
+    } catch {
+      setSldtError("That doesn't look like a valid recovery code (expected SLDT:<id>:<secret>).");
+    }
+  }, [sldtRecoveryInput]);
   const [providerKey, setProviderKey] = React.useState(() => getProviderKey());
   const [showKey, setShowKey] = React.useState(false);
   const [showProviderKey, setShowProviderKey] = React.useState(false);
@@ -141,11 +193,45 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     store("jarvis.supabaseUrl", supabaseUrl);
     store("jarvis.supabaseKey", supabaseKey);
     store(PROVIDER_KEY_STORAGE, providerKey);
+
+    setSyncBackend(syncBackend);
+    // Only saved once a dataset actually exists (generated or paired this
+    // session, or a prior session's) -- selecting "SLDT" alone with nothing
+    // set up yet must not write a half-complete config that buildSldtRemote
+    // would then treat as configured-but-broken.
+    if (syncBackend === "sldt" && sldtDatasetId) {
+      setSldtSettings({
+        datasetId: sldtDatasetId,
+        repo: sldtRepo.trim(),
+        branch: sldtBranch.trim() || "main",
+        pathPrefix: sldtPathPrefix.trim() || "sldt/",
+        writeMode: sldtWriteMode,
+        proxyUrl: sldtWriteMode === "proxy" ? sldtProxyUrl.trim() : null,
+        directToken: sldtWriteMode === "direct" ? sldtDirectToken.trim() : null,
+      });
+    }
+    // The session secret itself lives in sessionStorage already (see
+    // sldtConfig.ts) -- nothing further to persist for it here, and a
+    // reload deliberately does NOT clear it (only closing the tab/app does).
+
     // Reloading rather than mutating live: API_BASE is read once at module load
     // by callers across the app, so a hot change would leave half of them
     // talking to the old address.
     window.location.reload();
-  }, [backend, supabaseUrl, supabaseKey, providerKey]);
+  }, [
+    backend,
+    supabaseUrl,
+    supabaseKey,
+    providerKey,
+    syncBackend,
+    sldtDatasetId,
+    sldtRepo,
+    sldtBranch,
+    sldtPathPrefix,
+    sldtWriteMode,
+    sldtProxyUrl,
+    sldtDirectToken,
+  ]);
 
   const reset = React.useCallback(async () => {
     await clearAll();
@@ -333,53 +419,305 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
           {/* -- sync ------------------------------------------------------- */}
           <section className="space-y-2 border-t border-line pt-5">
-            <label htmlFor="supabase-url" className="block text-sm font-medium text-ink">
-              Sync project URL
-            </label>
+            <label className="block text-sm font-medium text-ink">Sync backend</label>
             <p className="text-xs leading-relaxed text-ink-dim">
               Carries your board between devices. Nothing is stored here until you sync.
             </p>
-            <input
-              id="supabase-url"
-              type="url"
-              inputMode="url"
-              autoComplete="off"
-              spellCheck={false}
-              value={supabaseUrl}
-              onChange={(event) => setSupabaseUrl(event.target.value)}
-              placeholder="https://your-project.supabase.co"
-              className="h-11 w-full rounded border border-line bg-surface-2 px-3 text-lg text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none sm:text-sm"
-            />
-
-            <label htmlFor="supabase-key" className="block pt-2 text-sm font-medium text-ink">
-              Sync key
-            </label>
-            <div className="relative">
-              <input
-                id="supabase-key"
-                type={showKey ? "text" : "password"}
-                autoComplete="off"
-                spellCheck={false}
-                value={supabaseKey}
-                onChange={(event) => setSupabaseKey(event.target.value)}
-                className="h-11 w-full rounded border border-line bg-surface-2 px-3 pr-12 font-mono text-lg text-ink focus:border-accent focus:outline-none sm:text-xs"
-              />
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowKey((current) => !current)}
-                aria-label={showKey ? "Hide key" : "Show key"}
-                className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-              >
-                {showKey ? (
-                  <EyeOff aria-hidden className="h-4 w-4" />
-                ) : (
-                  <Eye aria-hidden className="h-4 w-4" />
+                onClick={() => setSyncBackendChoice("supabase")}
+                className={cn(
+                  "h-11 flex-1 rounded border px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                  syncBackend === "supabase"
+                    ? "border-accent bg-accent/10 text-ink"
+                    : "border-line text-ink-dim hover:text-ink",
                 )}
+              >
+                Supabase
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncBackendChoice("sldt")}
+                className={cn(
+                  "h-11 flex-1 rounded border px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                  syncBackend === "sldt"
+                    ? "border-accent bg-accent/10 text-ink"
+                    : "border-line text-ink-dim hover:text-ink",
+                )}
+              >
+                SLDT (GitHub)
               </button>
             </div>
-            <p className="text-xs leading-relaxed text-ink-dim">
-              Stored on this device only, never in the app bundle.
-            </p>
+
+            {syncBackend === "supabase" ? (
+              <>
+                <label htmlFor="supabase-url" className="block pt-2 text-sm font-medium text-ink">
+                  Sync project URL
+                </label>
+                <input
+                  id="supabase-url"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={supabaseUrl}
+                  onChange={(event) => setSupabaseUrl(event.target.value)}
+                  placeholder="https://your-project.supabase.co"
+                  className="h-11 w-full rounded border border-line bg-surface-2 px-3 text-lg text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none sm:text-sm"
+                />
+
+                <label htmlFor="supabase-key" className="block pt-2 text-sm font-medium text-ink">
+                  Sync key
+                </label>
+                <div className="relative">
+                  <input
+                    id="supabase-key"
+                    type={showKey ? "text" : "password"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={supabaseKey}
+                    onChange={(event) => setSupabaseKey(event.target.value)}
+                    className="h-11 w-full rounded border border-line bg-surface-2 px-3 pr-12 font-mono text-lg text-ink focus:border-accent focus:outline-none sm:text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((current) => !current)}
+                    aria-label={showKey ? "Hide key" : "Show key"}
+                    className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                  >
+                    {showKey ? (
+                      <EyeOff aria-hidden className="h-4 w-4" />
+                    ) : (
+                      <Eye aria-hidden className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs leading-relaxed text-ink-dim">
+                  Stored on this device only, never in the app bundle.
+                </p>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs leading-relaxed text-ink-dim">
+                  No account, no server you run yourself required for reads — your
+                  board syncs as encrypted objects in a GitHub repo you own. See{" "}
+                  <span className="font-mono">jarvis-oss/sldt/README.md</span> for how
+                  it works.
+                </p>
+
+                {sldtNewRecoveryCode ? (
+                  <div className="space-y-2 rounded border border-accent/40 bg-accent/5 p-3">
+                    <p className="text-xs font-medium text-ink">
+                      Save this recovery code now — it is the only way back into this
+                      account, and it cannot be shown again.
+                    </p>
+                    <code className="block break-all rounded bg-surface-2 p-2 text-xs text-ink">
+                      {sldtNewRecoveryCode}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => setSldtNewRecoveryCode(null)}
+                      className="inline-flex h-9 items-center rounded border border-line px-3 text-xs text-ink-dim hover:text-ink"
+                    >
+                      I&rsquo;ve saved it
+                    </button>
+                  </div>
+                ) : sldtUnlocked ? (
+                  <p className="text-xs text-accent">
+                    Unlocked for this session (dataset {sldtDatasetId.slice(0, 8)}&hellip;).
+                  </p>
+                ) : sldtDatasetId ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-ink-dim">
+                      This device knows the dataset but needs its recovery code again —
+                      it is never stored, by design.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={sldtRecoveryInput}
+                        onChange={(event) => setSldtRecoveryInput(event.target.value)}
+                        placeholder="SLDT:..."
+                        className="h-11 min-w-0 flex-1 rounded border border-line bg-surface-2 px-3 font-mono text-xs text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={pairSldtRecoveryCode}
+                        className="inline-flex h-11 shrink-0 items-center rounded border border-line px-3 text-sm text-ink-dim hover:text-ink"
+                      >
+                        Unlock
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={generateSldtIdentity}
+                        className="inline-flex h-11 flex-1 items-center justify-center rounded border border-line text-sm text-ink-dim hover:text-ink"
+                      >
+                        Create new dataset
+                      </button>
+                    </div>
+                    <p className="text-center text-xs text-ink-faint">or, if another device already made one</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={sldtRecoveryInput}
+                        onChange={(event) => setSldtRecoveryInput(event.target.value)}
+                        placeholder="SLDT:..."
+                        className="h-11 min-w-0 flex-1 rounded border border-line bg-surface-2 px-3 font-mono text-xs text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={pairSldtRecoveryCode}
+                        className="inline-flex h-11 shrink-0 items-center rounded border border-line px-3 text-sm text-ink-dim hover:text-ink"
+                      >
+                        Pair
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {sldtError && <p className="text-xs text-critical">{sldtError}</p>}
+
+                <label htmlFor="sldt-repo" className="block pt-2 text-sm font-medium text-ink">
+                  GitHub repo
+                </label>
+                <input
+                  id="sldt-repo"
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={sldtRepo}
+                  onChange={(event) => setSldtRepo(event.target.value)}
+                  placeholder="yourname/sldt-storage"
+                  className="h-11 w-full rounded border border-line bg-surface-2 px-3 font-mono text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                />
+
+                <div className="flex gap-2 pt-2">
+                  <div className="flex-1 space-y-1">
+                    <label htmlFor="sldt-branch" className="block text-xs font-medium text-ink">
+                      Branch
+                    </label>
+                    <input
+                      id="sldt-branch"
+                      type="text"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={sldtBranch}
+                      onChange={(event) => setSldtBranch(event.target.value)}
+                      className="h-10 w-full rounded border border-line bg-surface-2 px-3 font-mono text-xs text-ink focus:border-accent focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <label htmlFor="sldt-prefix" className="block text-xs font-medium text-ink">
+                      Path prefix
+                    </label>
+                    <input
+                      id="sldt-prefix"
+                      type="text"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={sldtPathPrefix}
+                      onChange={(event) => setSldtPathPrefix(event.target.value)}
+                      className="h-10 w-full rounded border border-line bg-surface-2 px-3 font-mono text-xs text-ink focus:border-accent focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <label className="block pt-2 text-sm font-medium text-ink">How this device writes</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSldtWriteMode("direct")}
+                    className={cn(
+                      "h-10 flex-1 rounded border px-2 text-xs font-medium",
+                      sldtWriteMode === "direct"
+                        ? "border-accent bg-accent/10 text-ink"
+                        : "border-line text-ink-dim hover:text-ink",
+                    )}
+                  >
+                    Direct (desktop/Android)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSldtWriteMode("proxy")}
+                    className={cn(
+                      "h-10 flex-1 rounded border px-2 text-xs font-medium",
+                      sldtWriteMode === "proxy"
+                        ? "border-accent bg-accent/10 text-ink"
+                        : "border-line text-ink-dim hover:text-ink",
+                    )}
+                  >
+                    Through a proxy (web)
+                  </button>
+                </div>
+
+                {sldtWriteMode === "direct" ? (
+                  <>
+                    <label htmlFor="sldt-token" className="block pt-2 text-sm font-medium text-ink">
+                      GitHub token
+                    </label>
+                    <p className="text-xs leading-relaxed text-ink-dim">
+                      A fine-grained PAT scoped to just this repo, Contents: Read and
+                      write. Stored on this device only — the same trust level this
+                      app already gives a Supabase key here.
+                    </p>
+                    <div className="relative">
+                      <input
+                        id="sldt-token"
+                        type={showSldtToken ? "text" : "password"}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={sldtDirectToken}
+                        onChange={(event) => setSldtDirectToken(event.target.value)}
+                        placeholder="github_pat_..."
+                        className="h-11 w-full rounded border border-line bg-surface-2 px-3 pr-12 font-mono text-xs text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSldtToken((current) => !current)}
+                        aria-label={showSldtToken ? "Hide token" : "Show token"}
+                        className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                      >
+                        {showSldtToken ? (
+                          <EyeOff aria-hidden className="h-4 w-4" />
+                        ) : (
+                          <Eye aria-hidden className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label htmlFor="sldt-proxy" className="block pt-2 text-sm font-medium text-ink">
+                      Proxy URL
+                    </label>
+                    <p className="text-xs leading-relaxed text-ink-dim">
+                      Where jarvis-oss/proxy is deployed — it holds the GitHub token
+                      instead of this browser page.
+                    </p>
+                    <input
+                      id="sldt-proxy"
+                      type="url"
+                      inputMode="url"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={sldtProxyUrl}
+                      onChange={(event) => setSldtProxyUrl(event.target.value)}
+                      placeholder="https://sldt-proxy.example.workers.dev"
+                      className="h-11 w-full rounded border border-line bg-surface-2 px-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                    />
+                  </>
+                )}
+              </div>
+            )}
           </section>
 
           {/* -- destructive, kept apart from everything else --------------- */}

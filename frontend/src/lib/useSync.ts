@@ -11,6 +11,7 @@ import {
   lastSyncAt,
   startAutoSync,
 } from "@/lib/syncClient";
+import { buildSldtRemote, getSldtSettings, getSyncBackend, hasSessionSecret } from "@/lib/sldtConfig";
 
 export type { SyncPhase } from "@/lib/syncClient";
 
@@ -21,6 +22,15 @@ export interface AutoSyncState {
   lastAt: string | null;
   message: string | null;
   configured: boolean;
+  /**
+   * True only when this device is set to SLDT, has settings saved, but this
+   * page session hasn't had its recovery code re-entered yet -- the SLDT
+   * design's deliberate tradeoff (the secret is never persisted) means this
+   * is the ordinary state right after every reload, not an error. Lets the
+   * UI say "re-enter your recovery code" instead of a generic "not
+   * configured", which would look like the account itself was lost.
+   */
+  needsSldtSecret: boolean;
 }
 
 /**
@@ -46,6 +56,7 @@ export function useAutoSync({
   const [lastAt, setLastAt] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const [configured, setConfigured] = React.useState(false);
+  const [needsSldtSecret, setNeedsSldtSecret] = React.useState(false);
 
   // The callback is registered once inside the controller, so route it through
   // a ref to always reach the latest without restarting the controller.
@@ -61,6 +72,30 @@ export function useAutoSync({
     });
 
     void (async () => {
+      if (getSyncBackend() === "sldt") {
+        const settings = getSldtSettings();
+        const remote = enabled ? buildSldtRemote() : null;
+        if (!alive) return;
+        setConfigured(remote !== null);
+        setNeedsSldtSecret(enabled && settings !== null && !hasSessionSecret());
+
+        if (!enabled || !remote) return;
+
+        controller = startAutoSync({
+          remote,
+          onChange: (status) => {
+            if (!alive) return;
+            setPhase(status.phase);
+            setMessage(status.message);
+            if (status.at) setLastAt(status.at);
+          },
+          onPulled: () => pulledRef.current?.(),
+        });
+        return;
+      }
+
+      setNeedsSldtSecret(false);
+
       // A first-run desktop device has nothing in localStorage yet but the
       // local backend may already know its Supabase project — fill from
       // there before deciding sync has nothing to work with. A no-op
@@ -95,5 +130,6 @@ export function useAutoSync({
     lastAt,
     message,
     configured,
+    needsSldtSecret,
   };
 }
