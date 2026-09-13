@@ -501,6 +501,34 @@ there is no background process automatically rewriting documentation.
   and confirming `/api/health` still responded — isolates the env var, not
   path-walking luck, as what actually fixed it.
 
+- **2026-09-13 — SLDT stage 5: a proxy-free way to reach GitHub for
+  desktop/Android.** Follows the stage-4 entry below. User asked directly
+  whether the write proxy is actually needed — it isn't, for this app's
+  actual shape: the proxy solves a browser-specific problem (a page served
+  to arbitrary visitors can't hold a write-capable secret), and JARVIS's
+  desktop/Android targets are the app's own binary on its own device
+  holding its own credential — the same trust level the paid app already
+  gives the Supabase service key on desktop (`backend/.env`, no proxy;
+  only Android's *bundled backend* blanks that key, because an APK can be
+  extracted, unlike a local install or a value entered into a running
+  app's own settings). Added `createDirectGitHubStore` to
+  `jarvis-oss/sldt/src/githubClient.ts`: reads and writes both go straight
+  to GitHub's Contents API with a caller-held token, no proxy involved.
+  `SldtClient` needed zero changes — it only ever depended on the generic
+  `Store` interface, so which network path to use is entirely the
+  caller's choice. Also closed a real test gap: `githubClient.ts` had no
+  unit coverage before (only the stage-4 live round trip exercised it) —
+  added `jarvis-oss/sldt/tests/githubClient.test.ts`, 16 assertions with
+  `fetch` mocked, covering both paths' exact request shapes including sha
+  handling (omitted for a new object, included for an update) and a 409
+  surfacing as `ConcurrentWriteConflict`. Full `jarvis-oss/sldt` suite now
+  92 assertions across 8 files, all green; `npx tsc --noEmit` clean. The
+  proxy itself is unchanged and still exists for the one case it's
+  actually for: a future hosted web build. See
+  `jarvis-oss/sldt/README.md`'s "Two ways to reach GitHub" for the
+  decision written out in full, and `jarvis-oss/proxy/README.md`'s updated
+  framing.
+
 - **2026-09-13 — SLDT stage 4: verified live against the real GitHub API,
   two real bugs fixed.** Follows the stage-3 entry below. Ran the whole
   chain for real — a throwaway public GitHub repo, a fine-grained PAT

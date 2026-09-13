@@ -1,14 +1,17 @@
 # SLDT -- server-independent encrypted data synchronization
 
-Status: **verified end-to-end against the real GitHub API and a real
-locally-run proxy -- still not activated for any user.** Stage 4. Stages
-1-3 built the engine, persistence, network wiring, a proxy, and an
-unactivated `Remote` adapter for the paid frontend; this stage ran the
-whole chain for real (own throwaway public repo, own fine-grained PAT, the
+Status: **verified end-to-end against the real GitHub API; two network
+trust models available; still not activated for any user.** Stage 5.
+Stages 1-3 built the engine, persistence, network wiring, a proxy, and an
+unactivated `Remote` adapter for the paid frontend. Stage 4 ran the whole
+chain for real (own throwaway public repo, own fine-grained PAT, the
 actual proxy process, no mocks) and fixed two real protocol bugs that only
 a live network round trip surfaced -- see "What the live round trip found"
-below. No existing file imports the frontend adapter; still no settings UI
-to actually choose SLDT over Supabase.
+below. Stage 5 added a second, proxy-free way to reach GitHub
+(`createDirectGitHubStore`) for the targets that don't need one -- see
+"Two ways to reach GitHub" below for which to use where. No existing file
+imports the frontend adapter; still no settings UI to actually choose SLDT
+over Supabase.
 
 ## What this is
 
@@ -39,6 +42,42 @@ platforms with zero native code. It is intentionally decoupled from
 the core protocol can be validated in isolation before anything wires
 into it.
 
+## Two ways to reach GitHub -- pick by trust model, not by preference
+
+`githubClient.ts` exports two factory functions. Both return a plain
+`Store`, so `SldtClient` (and everything above it) never knows or cares
+which one it's holding -- the choice is made once, where the app decides
+which environment its own code is running in.
+
+- **`createGitHubStore({..., proxyBaseUrl})`** -- reads go straight to
+  GitHub's public Contents API with no credential; writes go through the
+  stateless proxy in `../proxy/`, which is the one place the GitHub PAT
+  lives. Use this when the code holding the `Store` could be read by
+  someone other than the person it belongs to -- concretely, **a web
+  build**: a page served to arbitrary visitors cannot hold a write-capable
+  secret without handing it to every one of them.
+- **`createDirectGitHubStore({..., token})`** -- reads and writes both go
+  straight to GitHub's Contents API, authenticated with a token the caller
+  already holds. No proxy involved at all. Use this when the code is
+  already running somewhere only its owner can read -- **desktop or
+  Android**: this is your own app on your own device holding your own
+  credential, the same trust level the paid app already gives the
+  Supabase service key on desktop (`backend/.env`, no proxy in front of
+  it; only Android's *bundled backend* blanks that key, specifically
+  because an APK can be extracted and reverse-engineered, unlike a local
+  desktop install or a value the user enters into their own running app's
+  settings).
+
+Neither option is "more correct" -- they answer different questions about
+where the code runs. Picking the proxy path for desktop/Android would just
+be an unnecessary moving part (a server to deploy and keep running) for a
+threat model that doesn't apply there. See `githubClient.ts`'s own module
+doc for the same reasoning in code, and `tests/githubClient.test.ts` for
+both paths' request shapes verified with `fetch` mocked (no live network
+needed to keep this covered -- the direct-write request shape itself was
+also independently confirmed live during stage 4's `curl` debugging of the
+proxy, which sends an identical authenticated `PUT`).
+
 ## Layout
 
 ```
@@ -54,7 +93,7 @@ sldt/
     sync.ts         the sync algorithm tying all of the above together
     errors.ts       distinct failure types (tamper, replay, corruption, wrong key, CAS conflict)
     browserStore.ts  IndexedDB persistence for the local object set, sync cursor, and non-secret identity
-    githubClient.ts  wires `GitHubStore` to reality: direct reads, proxied writes -- see jarvis-oss/proxy/
+    githubClient.ts  wires `GitHubStore` to reality: proxied (createGitHubStore) or direct-write (createDirectGitHubStore) -- see "Two ways to reach GitHub" above
     client.ts        SldtClient: the one façade an app calls -- identity+persistence+engine composed
   tests/            no framework -- manual check() harness, run with `npx tsx tests/<name>.test.ts`,
                     matching the convention already used by frontend/tests/*.test.ts
@@ -285,6 +324,24 @@ for the exact env vars and how to run the proxy locally first.
 
 ## Maintenance and latest changes
 
+- 2026-09-13: Stage 5. Added `createDirectGitHubStore` (`githubClient.ts`):
+  reads and writes both go straight to GitHub's Contents API with a
+  caller-held token, no proxy involved. Prompted by a direct question
+  about whether the proxy is actually needed for desktop/Android -- it
+  isn't; the proxy solves a browser-specific problem (a page served to
+  arbitrary visitors can't hold a write secret), and desktop/Android are
+  the app's own binary on its own device holding its own credential, the
+  same trust level the paid app already gives the Supabase key on desktop.
+  `SldtClient` needed zero changes -- it already only ever depended on the
+  `Store` interface, so which network path a caller picks is entirely
+  their own choice at construction time. Added `tests/githubClient.test.ts`
+  (new -- this file had no unit coverage before, only the stage-4 live
+  round trip), 16 assertions with `fetch` mocked, covering both paths'
+  exact request shapes: unauthenticated proxied reads, the proxy's
+  allowlisted write body, authenticated direct reads/writes, sha omitted
+  on a brand-new object vs. included on an update, and a 409 surfacing as
+  `ConcurrentWriteConflict`. Full suite now 92 assertions across 8 files,
+  all still green; `npx tsc --noEmit` clean.
 - 2026-09-13: Stage 4. Ran the full chain live: a real throwaway GitHub
   repo, a real fine-grained PAT, the actual proxy running locally, two
   simulated devices, no mocks. `live-tests/githubRoundTrip.ts` (not part of

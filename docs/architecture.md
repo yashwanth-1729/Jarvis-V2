@@ -156,9 +156,19 @@ protocol genuinely cannot fix: a *stale read* that isn't detectably wrong
 any deployment's periodic background pull already does. See
 `jarvis-oss/sldt/README.md`'s "What the live round trip found" for the
 full account. The proxy itself is still not deployed anywhere persistent
-(it was run locally for that test and stopped), and there is still no
-settings UI letting a user actually choose SLDT over Supabase. Neither this
-app's boundaries nor its Supabase path are affected.
+(it was run locally for that test and stopped). The proxy is now
+understood to be needed only for a web build, though: it exists to keep a
+write-capable GitHub PAT out of a browser page served to arbitrary
+visitors, a problem desktop and Android don't have -- they're the app's
+own binary on its own device holding its own credential, the same trust
+level the paid app already gives the Supabase key on desktop
+(`backend/.env`, no proxy). `jarvis-oss/sldt/src/githubClient.ts` now
+offers `createDirectGitHubStore` for exactly that case: reads and writes
+both go straight to GitHub with a caller-held token, no proxy, no server
+to deploy. `SldtClient` needed no changes to support it -- it only ever
+depends on the generic `Store` interface. There is still no settings UI
+letting a user actually choose SLDT over Supabase. Neither this app's
+boundaries nor its Supabase path are affected.
 
 ## Systematic memory boundary
 

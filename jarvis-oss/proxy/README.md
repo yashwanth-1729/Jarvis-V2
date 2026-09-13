@@ -1,15 +1,26 @@
 # SLDT write proxy
 
-The one server-side component SLDT needs, per the design doc: browsers can't
-safely hold a GitHub PAT, so this tiny stateless service holds it instead and
-forwards only an allowlisted write shape to GitHub's Contents API. It never
-decrypts anything, never inspects `content` beyond its byte length, and never
-logs a value -- only field names/shapes, as an audit trail that the boundary
-held.
+**Only needed for a web build.** This solves one specific problem: a
+browser page served to arbitrary visitors can't safely hold a GitHub PAT
+without handing it to every one of them. It has nothing to do with
+desktop or Android, where the app is already running on its owner's own
+device holding its own credential -- see `jarvis-oss/sldt/src/githubClient.ts`'s
+`createDirectGitHubStore`, which talks to GitHub directly with no proxy at
+all, and its own module doc for the full reasoning (same trust level the
+paid app already gives the Supabase key on desktop). Pick this proxy path
+only for code that will actually run inside someone else's browser.
 
-Reads (`GET`) never go through this proxy -- `jarvis-oss/sldt/src/githubClient.ts`
-calls GitHub's Contents API directly for those, since reading a public repo
-needs no credential. This service handles `POST /write` only.
+Where it is needed, this is the one server-side component SLDT's design
+calls for: this tiny stateless service holds the PAT instead and forwards
+only an allowlisted write shape to GitHub's Contents API. It never
+decrypts anything, never inspects `content` beyond its byte length, and
+never logs a value -- only field names/shapes, as an audit trail that the
+boundary held.
+
+Reads (`GET`) never go through this proxy even when it's in use --
+`jarvis-oss/sldt/src/githubClient.ts`'s `createGitHubStore` calls GitHub's
+Contents API directly for those, since reading a public repo needs no
+credential. This service handles `POST /write` only.
 
 ## What it guards against
 

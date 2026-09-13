@@ -128,6 +128,64 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 5: proxy-free direct-write path for desktop/Android
+- Continuation of the stage-4 entry directly below. User asked, in plain
+  terms, whether the proxy was actually needed and where it'd even be
+  deployed -- a fair question I should have raised myself back when the
+  proxy was first built, since the answer changes what's worth building
+  next.
+- The honest answer: no, not for this app's actual shape. The proxy exists
+  for one specific problem -- a browser page served to arbitrary visitors
+  can't hold a write-capable secret without handing it to every one of
+  them. JARVIS's desktop and Android targets don't have that problem: it's
+  the app's own binary on its own device holding its own credential,
+  exactly the trust level the paid app already gives the Supabase service
+  key on desktop (`backend/.env`, no proxy in front of it) -- Android
+  blanks that same key only because an *APK* can be extracted and
+  reverse-engineered, which doesn't apply to a value a user enters into
+  their own running app's settings.
+- Added `createDirectGitHubStore` to
+  `jarvis-oss/sldt/src/githubClient.ts`: authenticates both reads and
+  writes straight to GitHub's Contents API with a token the caller
+  already holds, no proxy involved at all. `createGitHubStore` (the
+  proxied path) is untouched and still exists for the one case it's
+  actually for -- a future hosted web build.
+- `SldtClient` (`client.ts`) needed zero changes to support this -- it
+  already only ever takes a generic `Store`, so which network path a
+  caller picks was always just a construction-time choice, not something
+  baked into the façade. This is a good sign the stage-1 abstraction
+  boundary was drawn in the right place.
+- Closed a real, pre-existing test gap while I was in this file:
+  `githubClient.ts` had never had its own unit test -- only the stage-4
+  live round trip had exercised it, meaning the mapping logic (request
+  shapes, sha-omitted-vs-included, status code handling) had no coverage
+  that didn't cost a real network call. Added
+  `jarvis-oss/sldt/tests/githubClient.test.ts` with `fetch` mocked: 16
+  assertions covering both `createGitHubStore` and `createDirectGitHubStore`
+  -- unauthenticated vs. authenticated headers, the proxy's allowlisted
+  write body (no repo/branch fields) vs. the direct path's real GitHub PUT
+  body, sha omitted when creating a new object vs. included when updating,
+  and a 409 surfacing as `ConcurrentWriteConflict` rather than being
+  swallowed.
+- Did not re-run a live test for the new path specifically (the previous
+  PAT should be revoked per the last entry's instruction, and a live round
+  trip wasn't asked for this time) -- noted in the README that the exact
+  authenticated-PUT request shape `directWrite` sends was already
+  confirmed live during stage 4's manual `curl` debugging of the token
+  permission issue, so this isn't untested reasoning, just not re-run
+  end-to-end through this specific code path.
+- Verified: `npm test` in `jarvis-oss/sldt` -- 92 assertions across 8
+  files, all green (was 76/7 before this entry). `npx tsc --noEmit` clean.
+  Nothing under `frontend/`, `backend/`, or `native/` touched.
+- Updated `README.md`, `docs/architecture.md`, `jarvis-oss/sldt/README.md`
+  (new "Two ways to reach GitHub" section), and `jarvis-oss/proxy/README.md`
+  (reframed as web-build-only up front, so it doesn't read as required
+  infrastructure it isn't).
+- **Left for next:** still no settings UI for a user to actually choose
+  SLDT (and now, if desktop, which of the two GitHub paths); the proxy
+  still isn't deployed anywhere (understood now to only matter for a future
+  web build); BYOK untouched.
+
 ### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 4: live round trip against real GitHub, two real bugs fixed
 - Continuation of the stage-3 entry further below -- same feature. User
   asked to actually deploy-and-test the proxy against a real GitHub repo
