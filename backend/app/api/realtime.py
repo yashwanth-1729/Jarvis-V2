@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
-from app.core.languages import AUTO_DETECT, DEFAULT_LANGUAGE, is_supported
+from app.core.languages import AUTO_DETECT, DEFAULT_LANGUAGE, TELUGU_LANGUAGE, is_supported
 from app.core.voices import DEFAULT_VOICE
 from app.core.voices import is_supported as voice_supported
 from app.db import crud
@@ -342,16 +342,22 @@ def _strip_markup(text: str) -> str:
 class _ClientPhrase:
     """A chunk the client will speak itself, so the server sends no audio.
 
-    Mobile has its own on-device English voice (Piper via sherpa-onnx, run
-    natively in Kotlin -- Chaquopy has no onnxruntime for arm64). When the
-    client advertises `?english_tts=client`, English chunks are yielded as
+    Mobile has its own on-device voices (Piper via sherpa-onnx, run natively
+    in Kotlin -- Chaquopy has no onnxruntime for arm64) for English and,
+    opt-in, Telugu. When the client advertises `?english_tts=client` (English)
+    or `?telugu_tts=client` (Telugu, only used when the user has also set
+    `telugu_tts_engine` to `"piper"`), that language's chunks are yielded as
     this marker instead of real audio: it costs no Sarvam credit, and the
     client synthesizes and plays it in the same order these events arrive
-    (see `frontend/src/lib/realtime.ts`). Non-English is unaffected -- it
-    always comes from Sarvam, on every client.
+    (see `frontend/src/lib/realtime.ts`). Every other language, and Telugu on
+    a client without the on-device voice or with Sarvam still selected, is
+    unaffected -- it always comes from Sarvam.
     """
 
     text: str
+    #: Tells the client which native voice to use (see
+    #: `NATIVE_VOICE_IDS` in `frontend/src/lib/nativeTts.ts`).
+    language: str
 
 
 def _speakable(text: str) -> str:
@@ -381,6 +387,11 @@ class VoiceSession:
         #: Mobile only: the client has a native English voice and will
         #: synthesize its own English audio -- see `_ClientPhrase`.
         self.client_english_tts = getattr(socket, "query_params", {}).get("english_tts") == "client"
+        #: Mobile only: the client has a native Telugu voice ready. Whether it
+        #: is actually USED still depends on the user's `telugu_tts_engine`
+        #: opt-in, checked per-chunk in `synthesize()` -- unlike English this
+        #: flag alone does not mean "always use it".
+        self.client_telugu_tts = getattr(socket, "query_params", {}).get("telugu_tts") == "client"
         self._audio_slots = asyncio.Semaphore(20)
         self._outstanding_audio: set[int] = set()
         #: Transcribed segments of the utterance currently being spoken.
@@ -482,6 +493,14 @@ class VoiceSession:
 
         await self.send({"type": "state", "value": "thinking"}, generation)
 
+        # Snapshot once per turn, same reasoning as `self.language`/`self.voice`
+        # below: a setting flip mid-turn must not change which engine an
+        # in-flight phrase uses, and it also decides `chunk_limit` up front
+        # rather than re-reading it on every chunk.
+        telugu_engine_native = (
+            self.client_telugu_tts and await speech.current_telugu_engine() == "piper"
+        )
+
         # Server timings begin at commitment, AFTER transcription. They do not
         # represent microphone end-to-speaker latency. Logged rather than
         # guessed, because the three stages have very different costs and only
@@ -505,7 +524,10 @@ class VoiceSession:
 
         async def synthesize(chunk: str, language: str, voice: str):
             if self.client_english_tts and language == DEFAULT_LANGUAGE:
-                yield _ClientPhrase(chunk)
+                yield _ClientPhrase(chunk, language)
+                return
+            if telugu_engine_native and language == TELUGU_LANGUAGE:
+                yield _ClientPhrase(chunk, language)
                 return
             started = time.perf_counter()
             first = True
@@ -526,7 +548,7 @@ class VoiceSession:
                 # this chunk's playback and reports nothing back for it.
                 if index not in revealed:
                     revealed.add(index)
-                    await emit({"type": "phrase", "text": packet.text})
+                    await emit({"type": "phrase", "text": packet.text, "language": packet.language})
                 return
             if isinstance(packet, Exception):
                 logger.warning("TTS phrase failed: %s", packet)
@@ -557,7 +579,13 @@ class VoiceSession:
         # Sarvam or desktop Piper -- see NATIVE_TTS_MAX_CHUNK_CHARS. Every
         # chunk after the opener needs the tighter cap so its synthesis time
         # stays under the audio duration of the chunk playing ahead of it.
-        chunk_limit = NATIVE_TTS_MAX_CHUNK_CHARS if self.client_english_tts else MAX_CHUNK_CHARS
+        # Telugu only needs it while this turn will actually speak natively
+        # (`telugu_engine_native`, snapshotted above, and Telugu is this
+        # turn's language) -- with Sarvam still selected, Telugu chunks never
+        # touch the native worker at all. English's existing condition is
+        # unchanged: it stays keyed on client capability alone, as before.
+        native_this_turn = self.client_english_tts or (telugu_engine_native and self.language == TELUGU_LANGUAGE)
+        chunk_limit = NATIVE_TTS_MAX_CHUNK_CHARS if native_this_turn else MAX_CHUNK_CHARS
 
         async def queue(chunk: str, bound: bool = True) -> None:
             nonlocal seq, spoken_any

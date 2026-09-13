@@ -15,20 +15,50 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "JarvisTts"
 
+/** One on-device voice's asset filenames, relative to assets/piper/. */
+private data class VoiceSpec(val modelAsset: String, val tokensAsset: String)
+
 /**
- * On-device English speech: the same high-tier Piper voice (`en_US-ryan-high`)
- * desktop speaks with, run natively here via sherpa-onnx.
+ * Registered on-device voices, keyed by the same id used everywhere else in
+ * the app (Piper's `<lang>_<REGION>-<name>-<quality>` naming, matching
+ * `backend/app/core/config.py`'s `jarvis_piper_model` /
+ * `jarvis_piper_telugu_model`).
+ *
+ * English's tokens file is named plain `tokens.txt` -- a holdover from when
+ * it was the only voice and sherpa-onnx's own tarball ships it that way.
+ * Every voice added since gets its own `<id>.tokens.txt` name instead, since
+ * a second `tokens.txt` would collide (see setup_piper_telugu.ps1).
+ */
+private val VOICES = mapOf(
+  "en_US-ryan-high" to VoiceSpec("en_US-ryan-high.onnx", "tokens.txt"),
+  "te_IN-padmavathi-medium" to VoiceSpec(
+    "te_IN-padmavathi-medium.onnx",
+    "te_IN-padmavathi-medium.tokens.txt",
+  ),
+)
+
+/**
+ * On-device speech for languages with a local Piper voice, run natively via
+ * sherpa-onnx. English speaks `en_US-ryan-high` unconditionally (Sarvam is
+ * only ever a fallback for it); Telugu's `te_IN-padmavathi-medium` is used
+ * only when the user opts in (see `telugu_tts_engine` /
+ * `PREF_TELUGU_TTS_ENGINE` on the backend) -- Sarvam is Telugu's default.
  *
  * Chaquopy's Python backend can't do this itself -- neither onnxruntime nor
  * Piper's phonemizer has an arm64/Android wheel -- so this is plain Kotlin
- * calling sherpa-onnx's prebuilt native library (see build.gradle.kts). The
- * voice ships inside the APK under assets/piper/ (fetched by
- * backend/tools/android/setup_piper.ps1, gitignored) and is copied out to a
- * real filesystem path once, since sherpa needs actual file paths for the
- * model, tokens and espeak-ng-data -- not the asset manager's virtual ones.
+ * calling sherpa-onnx's prebuilt native library (see build.gradle.kts). Voices
+ * ship inside the APK under assets/piper/ (fetched by
+ * backend/tools/android/setup_piper.ps1 and setup_piper_telugu.ps1, both
+ * gitignored) and are copied out to a real filesystem path once, since sherpa
+ * needs actual file paths for the model, tokens and espeak-ng-data -- not the
+ * asset manager's virtual ones. espeak-ng-data is shared across every voice
+ * (it is Piper's language-independent phonemizer data set), so it is only
+ * ever provisioned and loaded once regardless of how many voices are used.
  */
 object SherpaTts {
-  @Volatile private var tts: OfflineTts? = null
+  // One loaded engine per voice id, built lazily and cached -- a session
+  // that never touches Telugu never pays to load its model.
+  private val engines = mutableMapOf<String, OfflineTts>()
   private val loadLock = Any()
 
   /**
@@ -46,13 +76,23 @@ object SherpaTts {
 
   private fun dir(context: Context) = File(context.filesDir, "tts")
 
-  /** Copy the bundled voice out of read-only assets to a real path, once. */
+  /**
+   * Copy the bundled voices out of read-only assets to a real path, once per
+   * voice not yet on disk.
+   *
+   * Runs the full-tree copy again if ANY registered voice's model file is
+   * still missing -- covers both a fresh install and an existing install that
+   * only ever provisioned English before Telugu's assets were added by a
+   * later app update. `copyAsset` overwrites, so re-running it after English
+   * is already provisioned just re-copies English's files alongside adding
+   * Telugu's; harmless, and only ever happens once per newly-added voice.
+   */
   private fun provision(context: Context) {
     val d = dir(context)
-    if (File(d, "en_US-ryan-high.onnx").exists()) return
+    if (VOICES.values.all { File(d, it.modelAsset).exists() }) return
     d.mkdirs()
     copyAsset(context, "piper", d)
-    Log.i(TAG, "voice provisioned -> ${d.absolutePath}")
+    Log.i(TAG, "voices provisioned -> ${d.absolutePath}")
   }
 
   private fun copyAsset(context: Context, path: String, dest: File) {
@@ -67,16 +107,17 @@ object SherpaTts {
     for (child in children) copyAsset(context, "$path/$child", File(dest, child))
   }
 
-  private fun engine(context: Context): OfflineTts {
-    tts?.let { return it }
+  private fun engine(context: Context, voiceId: String): OfflineTts {
+    engines[voiceId]?.let { return it }
     synchronized(loadLock) {
-      tts?.let { return it }
+      engines[voiceId]?.let { return it }
+      val spec = VOICES[voiceId] ?: error("unknown voice id: $voiceId")
       val d = dir(context).absolutePath
       val config = OfflineTtsConfig(
         model = OfflineTtsModelConfig(
           vits = OfflineTtsVitsModelConfig(
-            model = "$d/en_US-ryan-high.onnx",
-            tokens = "$d/tokens.txt",
+            model = "$d/${spec.modelAsset}",
+            tokens = "$d/${spec.tokensAsset}",
             dataDir = "$d/espeak-ng-data",
           ),
           numThreads = NUM_THREADS,
@@ -91,33 +132,34 @@ object SherpaTts {
       // above, so this takes sherpa's file-path constructor rather than its
       // (slower, one-shot) load-from-APK-assets one.
       val instance = OfflineTts(config = config)
-      tts = instance
+      engines[voiceId] = instance
       return instance
     }
   }
 
   /**
-   * Provision and load the model, off the caller's thread if needed.
+   * Provision and load one voice's model, off the caller's thread if needed.
    *
    * Safe to call repeatedly and from multiple threads -- `engine()` is
-   * synchronized and caches the loaded model, so every call after the first
-   * successful one is free. Returns false (never throws) on any failure, so a
-   * missing or corrupt voice just means English keeps using Sarvam.
+   * synchronized and caches each loaded voice, so every call after a given
+   * voice's first successful load is free. Returns false (never throws) on
+   * any failure -- an unknown id, or a missing/corrupt voice -- so the caller
+   * just falls back to Sarvam for that language.
    */
-  fun ready(context: Context): Boolean {
+  fun ready(context: Context, voiceId: String): Boolean {
     return try {
       provision(context)
-      engine(context)
+      engine(context, voiceId)
       true
     } catch (error: Throwable) {
-      Log.e(TAG, "load failed: ${error.message}", error)
+      Log.e(TAG, "load failed for $voiceId: ${error.message}", error)
       false
     }
   }
 
   /** Mono PCM16 little-endian samples + the model's sample rate, all at once. */
-  fun synthesize(context: Context, text: String, pace: Float): Pair<ByteArray, Int> {
-    val audio = engine(context).generate(text = text, sid = 0, speed = pace)
+  fun synthesize(context: Context, voiceId: String, text: String, pace: Float): Pair<ByteArray, Int> {
+    val audio = engine(context, voiceId).generate(text = text, sid = 0, speed = pace)
     return pcm16(audio.samples) to audio.sampleRate
   }
 
@@ -136,8 +178,14 @@ object SherpaTts {
    * offline-tts-vits-impl.h), which is how an interrupted reply stops using
    * the CPU mid-phrase instead of finishing work nobody will hear.
    */
-  fun stream(context: Context, text: String, pace: Float, onSentence: (ByteArray, Int) -> Boolean) {
-    val engine = engine(context)
+  fun stream(
+    context: Context,
+    voiceId: String,
+    text: String,
+    pace: Float,
+    onSentence: (ByteArray, Int) -> Boolean,
+  ) {
+    val engine = engine(context, voiceId)
     val rate = engine.sampleRate()
     engine.generateWithCallback(text = text, sid = 0, speed = pace) { samples ->
       if (onSentence(pcm16(samples), rate)) 1 else 0
@@ -204,15 +252,16 @@ class JarvisTtsBridge(
    */
   private val epoch = AtomicInteger()
 
+  /** Ready check for a specific voice id (see `SherpaTts.VOICES`). */
   @JavascriptInterface
-  fun isReady(): Boolean = SherpaTts.ready(context)
+  fun isReady(voiceId: String): Boolean = SherpaTts.ready(context, voiceId)
 
   /** Whole-phrase synthesis, delivered once. Kept for diagnostics. */
   @JavascriptInterface
-  fun synthesize(requestId: String, text: String, pace: Double) {
+  fun synthesize(requestId: String, voiceId: String, text: String, pace: Double) {
     pool.execute {
       try {
-        val (pcm, rate) = SherpaTts.synthesize(context, text, pace.toFloat())
+        val (pcm, rate) = SherpaTts.synthesize(context, voiceId, text, pace.toFloat())
         val encoded = Base64.encodeToString(pcm, Base64.NO_WRAP)
         evalJs("window.__jarvisTtsDeliver && window.__jarvisTtsDeliver('$requestId','$encoded',$rate)")
       } catch (error: Throwable) {
@@ -226,7 +275,7 @@ class JarvisTtsBridge(
    * generated, then `__jarvisTtsDone`. This is what voice mode uses.
    */
   @JavascriptInterface
-  fun synthesizeStream(requestId: String, text: String, pace: Double) {
+  fun synthesizeStream(requestId: String, voiceId: String, text: String, pace: Double) {
     val mine = epoch.get()
     // TEMPORARY diagnostic (2026-09-12, remove after the Piper gap
     // investigation): reconstruct the real on-device timeline -- when this
@@ -234,14 +283,14 @@ class JarvisTtsBridge(
     // thread, when each sentence's audio was actually ready, and total
     // phrase time. Filter with: adb logcat -s JarvisTts
     val queuedAt = SystemClock.elapsedRealtime()
-    Log.i(TAG, "req=$requestId QUEUED chars=${text.length} pool_active=${(pool as java.util.concurrent.ThreadPoolExecutor).activeCount}")
+    Log.i(TAG, "req=$requestId QUEUED voice=$voiceId chars=${text.length} pool_active=${(pool as java.util.concurrent.ThreadPoolExecutor).activeCount}")
     pool.execute {
       if (epoch.get() != mine) return@execute
       val startedAt = SystemClock.elapsedRealtime()
       Log.i(TAG, "req=$requestId WORKER_START waited_ms=${startedAt - queuedAt} thread=${Thread.currentThread().name}")
       var sentenceIdx = 0
       try {
-        SherpaTts.stream(context, text, pace.toFloat()) { pcm, rate ->
+        SherpaTts.stream(context, voiceId, text, pace.toFloat()) { pcm, rate ->
           if (epoch.get() != mine) return@stream false
           sentenceIdx += 1
           val now = SystemClock.elapsedRealtime()
@@ -274,12 +323,16 @@ class JarvisTtsBridge(
   }
 
   /**
-   * Load the model ahead of the first request, so the first English reply of
+   * Load English's model ahead of the first request, so the first reply of
    * the session doesn't pay the load cost. Fire-and-forget; a slow or failed
    * warm-up is invisible except in logcat, and `isReady`/`synthesize` retry the
    * load on demand regardless.
+   *
+   * Telugu is not warmed here: it is opt-in and rare (Sarvam is its default),
+   * so most sessions would pay to load a model they never use. It loads
+   * lazily on its own first request instead -- see `SherpaTts.ready`.
    */
   fun warm() {
-    pool.execute { SherpaTts.ready(context) }
+    pool.execute { SherpaTts.ready(context, "en_US-ryan-high") }
   }
 }

@@ -1,10 +1,16 @@
-# Android: on-device Piper English TTS (sherpa-onnx)
+# Android: on-device Piper TTS (sherpa-onnx)
 
-**Status:** frontend bridge client shipped (`frontend/src/lib/nativeTts.ts`, typechecks).
-The native half below is written and ready but **must be built on a machine with
-the Android NDK/SDK + a device** — it was not compiled or run in the session that
-wrote it. Do not add the Kotlin/Gradle changes until the AAR and model are in
-place, or the Android build fails to resolve `com.k2fsa.sherpa.onnx`.
+**Status (2026-09-13):** English shipped and verified on-device (see
+explanations.md's 2026-09-11/12 entries — provisioning, streaming,
+gap-diagnosis and the concurrency/chunk-size tuning all happened after this
+doc was first written, so its code samples below are historical design notes,
+not the current implementation. Read the real files instead: `JarvisTts.kt`,
+`nativeTts.ts`, `realtime.ts`, `realtime.py`.). **Telugu's on-device voice
+(`te_IN-padmavathi-medium`) was added 2026-09-13, code-complete and
+self-consistent (Python backend tests pass, frontend typechecks, Kotlin
+reviewed by hand against the AAR's documented API) but not yet built or run on
+a device** — this machine has no Android SDK installed, so `./gradlew` could
+not compile it. Treat it as unverified until someone builds and runs it once.
 
 ## Why native, not Chaquopy
 
@@ -13,45 +19,60 @@ The phone runs the backend under Chaquopy on `arm64-v8a`. Piper's Python stack
 `pip install piper-tts` cannot work there (the same wall that forced the
 hand-cross-compiled `pydantic_core`). sherpa-onnx ships **prebuilt arm64 native
 libraries + a Kotlin API** that run the identical Piper VITS weights on the phone
-CPU. So English TTS on mobile is produced natively in Kotlin and handed to the
-existing WebView voice pipeline as PCM16 — everything else (half-duplex mic,
-caption timing, ordering) is unchanged.
+CPU. So on-device TTS is produced natively in Kotlin and handed to the existing
+WebView voice pipeline as PCM16 — everything else (half-duplex mic, caption
+timing, ordering) is unchanged.
 
 Decision recorded in explanations.md: **max Piper model on both platforms**, so
-Android uses the same high tier as desktop — `en_US-ryan-high`.
+Android's English voice is the same high tier as desktop — `en_US-ryan-high`.
+Telugu has no equivalent "which tier" decision to make: `te_IN-padmavathi-medium`
+is the only Telugu voice this project has evaluated at all (see the Telugu TTS
+Arena project's findings), so desktop and Android use the same one.
 
 ## One-command setup (run this first)
 
 ```powershell
-./backend/tools/android/setup_piper.ps1
+./backend/tools/android/setup_piper.ps1          # English + the shared AAR + espeak-ng-data
+./backend/tools/android/setup_piper_telugu.ps1   # Telugu, run after the above
 ```
 
-This fetches both large binaries — neither is in git — and places them:
+The first script fetches the two large binaries neither voice can do without —
+neither is in git — and places them:
 
 - `sherpa-onnx-1.13.8.aar` → `frontend/src-tauri/gen/android/app/libs/`
 - the `vits-piper-en_US-ryan-high` bundle → `.../app/src/main/assets/piper/`,
   which is `en_US-ryan-high.onnx` + `tokens.txt` + `espeak-ng-data/` (all three
   in one download — the high tier, same weights as desktop).
 
-Bundling into `assets/` means the voice ships inside the APK and works offline
-from first launch (no runtime download). The AAR and the `assets/piper/` folder
-are gitignored. Re-running the script is safe; it skips what is already there.
+The second script adds Telugu on top: `te_IN-padmavathi-medium.onnx` (reused
+from `backend/models/piper/` if already downloaded there for the desktop
+voice, else fetched from the same HuggingFace source) plus a
+`te_IN-padmavathi-medium.tokens.txt` it derives locally from the voice's
+`phoneme_id_map` — no such tarball exists in sherpa-onnx's own release, so
+there was nothing to download for a `tokens.txt` the way English got one.
+`espeak-ng-data` is not re-fetched: it is Piper's shared, language-independent
+phonemizer data, so English's copy already covers Telugu's `te` phonemes too.
 
-On first launch the Kotlin engine copies `assets/piper/` to
-`filesDir/tts/` once (espeak-ng-data must live on a real filesystem path, not be
-read through the asset manager). It no-ops until that copy exists, so English
-falls back to Sarvam only on the very first run before the copy completes.
+Bundling into `assets/` means each voice ships inside the APK and works
+offline from first launch (no runtime download). The AAR and the whole
+`assets/piper/` folder are gitignored. Re-running either script is safe; both
+skip what is already in place.
+
+On first launch the Kotlin engine copies `assets/piper/` to `filesDir/tts/`
+once per voice not yet copied (espeak-ng-data and each model must live on a
+real filesystem path, not be read through the asset manager). It no-ops until
+a given voice's copy exists, so that voice falls back to Sarvam only on the
+very first run before its copy completes — and adding Telugu to an
+already-installed app re-copies the tree once more on that device's next
+launch to pick up the new voice, alongside English's files it already had.
 
 ## Gradle (`frontend/src-tauri/gen/android/app/build.gradle.kts`)
 
-Drop the prebuilt AAR into `app/libs/` (download `sherpa-onnx-<ver>.aar` from the
-sherpa-onnx releases) and add:
+One line, already in place, shared by every voice — a second voice needs no
+Gradle change, only more assets:
 
 ```kotlin
-dependencies {
-    // ...existing...
-    implementation(files("libs/sherpa-onnx.aar"))
-}
+implementation(files("libs/sherpa-onnx-1.13.8.aar"))
 ```
 
 The AAR carries the `arm64-v8a` `.so` files; `abiFilters` is already limited to
@@ -59,119 +80,16 @@ The AAR carries the `arm64-v8a` `.so` files; `abiFilters` is already limited to
 
 ## Kotlin bridge — `.../builds/yashwanth/jarvis/JarvisTts.kt`
 
-Mirrors the `JarvisNotifications` bridge. Loads the model lazily on a worker
-thread, converts sherpa's `FloatArray` samples to PCM16, and delivers base64 back
-to the WebView by request id.
-
-```kotlin
-package builds.yashwanth.jarvis
-
-import android.content.Context
-import android.util.Base64
-import android.util.Log
-import android.webkit.JavascriptInterface
-import com.k2fsa.sherpa.onnx.OfflineTts
-import com.k2fsa.sherpa.onnx.OfflineTtsConfig
-import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
-import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
-import java.io.File
-import java.util.concurrent.Executors
-
-private const val TAG = "JarvisTts"
-
-/** Loads the Piper voice once and synthesizes PCM16 off the UI thread. */
-object SherpaTts {
-  @Volatile private var tts: OfflineTts? = null
-
-  private fun dir(context: Context) = File(context.filesDir, "tts")
-
-  /** Copy the bundled voice out of read-only assets to a real path, once. */
-  private fun provision(context: Context) {
-    val d = dir(context)
-    if (File(d, "en_US-ryan-high.onnx").exists()) return
-    d.mkdirs()
-    copyAsset(context, "piper", d)
-  }
-
-  private fun copyAsset(context: Context, path: String, dest: File) {
-    val children = context.assets.list(path) ?: emptyArray()
-    if (children.isEmpty()) { // a file
-      context.assets.open(path).use { input ->
-        dest.outputStream().use { input.copyTo(it) }
-      }
-      return
-    }
-    dest.mkdirs()
-    for (child in children) copyAsset(context, "$path/$child", File(dest, child))
-  }
-
-  /** Ready only when the voice is provisioned and the model has loaded. */
-  fun ready(context: Context): Boolean {
-    return try {
-      provision(context)
-      engine(context); true
-    } catch (e: Throwable) {
-      Log.e(TAG, "load failed: ${e.message}"); false
-    }
-  }
-
-  @Synchronized private fun engine(context: Context): OfflineTts {
-    tts?.let { return it }
-    val d = dir(context).absolutePath
-    val config = OfflineTtsConfig(
-      model = OfflineTtsModelConfig(
-        vits = OfflineTtsVitsModelConfig(
-          model = "$d/en_US-ryan-high.onnx",
-          tokens = "$d/tokens.txt",
-          dataDir = "$d/espeak-ng-data",
-        ),
-        numThreads = 2,
-        debug = false,
-      ),
-    )
-    return OfflineTts(config = config).also { tts = it }
-  }
-
-  /** PCM16 little-endian mono + sample rate. `pace` is rate (bigger = faster). */
-  fun synthesize(context: Context, text: String, pace: Float): Pair<ByteArray, Int> {
-    val audio = engine(context).generate(text = text, sid = 0, speed = pace)
-    val samples = audio.samples // FloatArray in [-1, 1]
-    val pcm = ByteArray(samples.size * 2)
-    var j = 0
-    for (s in samples) {
-      val v = (s.coerceIn(-1f, 1f) * 32767f).toInt()
-      pcm[j++] = (v and 0xFF).toByte()
-      pcm[j++] = ((v shr 8) and 0xFF).toByte()
-    }
-    return pcm to audio.sampleRate
-  }
-}
-
-/** The `window.JarvisTts` bridge. `evalJs` runs a string in the WebView. */
-class JarvisTtsBridge(
-  private val context: Context,
-  private val evalJs: (String) -> Unit,
-) {
-  private val pool = Executors.newSingleThreadExecutor()
-
-  @JavascriptInterface
-  fun isReady(): Boolean = SherpaTts.ready(context)
-
-  @JavascriptInterface
-  fun synthesize(requestId: String, text: String, pace: Double) {
-    pool.execute {
-      try {
-        val (pcm, rate) = SherpaTts.synthesize(context, text, pace.toFloat())
-        val b64 = Base64.encodeToString(pcm, Base64.NO_WRAP)
-        evalJs("window.__jarvisTtsDeliver && window.__jarvisTtsDeliver('$requestId','$b64',$rate)")
-      } catch (e: Throwable) {
-        val msg = (e.message ?: "synthesis failed").replace("'", " ")
-        evalJs("window.__jarvisTtsError && window.__jarvisTtsError('$requestId','$msg')")
-      }
-    }
-  }
-}
-```
+Read the file directly rather than a doc snapshot of it — it has moved on from
+a single hardcoded voice to a small registry (`SherpaTts.VOICES: Map<voiceId,
+VoiceSpec>`), one lazily-loaded `OfflineTts` per voice id, keyed the same way
+`app/core/config.py`'s `jarvis_piper_model` / `jarvis_piper_telugu_model` are.
+Mirrors the `JarvisNotifications` bridge for the WebView-to-native direction:
+loads a voice's model lazily on a worker thread, converts sherpa's
+`FloatArray` samples to PCM16, and delivers base64 back to the WebView by
+request id. Adding a third voice means: register it in `VOICES`, add its files
+via a `setup_piper_<name>.ps1` script, and register its id in
+`nativeTts.ts`'s `NATIVE_VOICE_IDS` — nothing else in the bridge changes.
 
 ## Register it (`MainActivity.kt`, in `attachNotificationBridge` after the WebView is found)
 
@@ -180,35 +98,53 @@ webView.addJavascriptInterface(
   JarvisTtsBridge(applicationContext) { js -> webView.post { webView.evaluateJavascript(js, null) } },
   "JarvisTts",
 )
+ttsBridge.warm()
 ```
 
-## Frontend wiring (`frontend/src/lib/realtime.ts`)
+## Frontend wiring (`frontend/src/lib/realtime.ts`, `nativeTts.ts`)
 
 The client already accepts PCM: `SpeechQueue.push(buffer, text, seq, sampleRate)`.
-For **English on Android**, synthesize locally and push, instead of playing the
-backend's audio for that phrase:
+For a language with a ready on-device voice, the client synthesizes locally
+and pushes instead of playing the backend's audio for that phrase:
 
-1. When `isNativeTtsAvailable()` and the turn's language is English, tell the
-   backend to stream **text only** for TTS (add a per-turn flag on the voice
-   WebSocket, e.g. `english_tts: "client"`), so it does not also render Sarvam
-   audio. Non-English and desktop keep the existing backend audio path.
-2. As each English phrase arrives as text, call
-   `synthesizeNative(phrase, pace)` and `speechQueue.push(pcm, phrase, seq, sampleRate)`.
-   On reject, fall back to requesting backend audio for that phrase.
-
-Backend change: in `app/api/realtime.py`, when the client advertises
-`english_tts=client`, skip server TTS for English turns and emit the phrase text
-with its sequence so the client can synthesize and keep ordering. Everything
-non-English is unchanged.
+1. At connect (`VoiceSession.start()`), advertise each on-device voice that is
+   actually ready as its own WebSocket query flag —
+   `isNativeTtsAvailable("en-IN")` → `english_tts=client`,
+   `isNativeTtsAvailable("te-IN")` → `telugu_tts=client`. English's flag alone
+   means "always use it" (Sarvam is only its fallback); Telugu's flag only
+   means "ask me" — the backend additionally checks the user's
+   `telugu_tts_engine` opt-in (default `"sarvam"`) before ever sending a
+   Telugu `"phrase"`.
+2. Server-side (`app/api/realtime.py`'s `synthesize()`), a chunk becomes a
+   `_ClientPhrase(text, language)` — no audio rendered, no Sarvam credit spent
+   — instead of real audio when that language's client flag is set (and, for
+   Telugu, the opt-in is also on). The `"phrase"` WebSocket message carries
+   `language` so the client knows which voice/pace to use.
+3. Client-side, the `"phrase"` case looks up the pace for `payload.language`
+   (`NATIVE_PACE`, mirroring each `Language(...).pace` in
+   `app/core/languages.py`) and calls `streamNative(text, pace, onChunk,
+   language)`, which resolves `language` to a voice id via
+   `NATIVE_VOICE_IDS` and calls `window.JarvisTts.synthesizeStream(requestId,
+   voiceId, text, pace)`. On reject, the phrase's caption still reveals; no
+   fallback re-request to the backend happens mid-turn (matching how a Sarvam
+   synthesis failure is already handled).
 
 ## Verification checklist (on a build machine + device)
 
 - [ ] AAR resolves; `npm run android` builds for `arm64-v8a`.
-- [ ] First launch downloads model/tokens/espeak-ng-data into `filesDir/tts/`.
-- [ ] `window.JarvisTts.isReady()` returns true after provisioning.
+- [ ] First launch copies each provisioned voice's model/tokens/espeak-ng-data
+      into `filesDir/tts/`.
+- [ ] `window.JarvisTts.isReady("en_US-ryan-high")` returns true after
+      provisioning.
 - [ ] An English voice turn is spoken by ryan-high, not Sarvam (confirm offline:
       airplane mode after provisioning, English still speaks).
-- [ ] A Telugu turn still uses Sarvam.
-- [ ] Half-duplex, captions and ordering behave as before.
-- [ ] Cold-synth latency acceptable; if the first phrase lags, warm the engine at
-      startup (call `SherpaTts.ready` on a thread after provisioning).
+- [ ] With the Telugu toggle left on Sarvam (the default), a Telugu turn still
+      uses Sarvam even though the device has the model provisioned.
+- [ ] With the Telugu toggle switched to the local voice,
+      `window.JarvisTts.isReady("te_IN-padmavathi-medium")` returns true and a
+      Telugu turn is spoken by padmavathi, not Sarvam (confirm offline too).
+- [ ] Half-duplex, captions and ordering behave as before, for both voices.
+- [ ] Cold-synth latency acceptable for each voice; if the first phrase lags,
+      warm that voice at startup (`SherpaTts.ready(context, voiceId)` on a
+      thread) -- only English is warmed automatically today (see
+      `JarvisTtsBridge.warm`), since Telugu is opt-in and rare.

@@ -128,6 +128,78 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-13 · Claude Code · Telugu's local voice ported to Android's on-device bridge (code-complete, NOT device-verified)
+- Direct continuation of the same-day "Telugu gets an opt-in local voice"
+  entry further below. User tried the toggle on mobile and found nothing —
+  turned out the desktop-only Python `PiperTTS` path I'd built doesn't touch
+  Android at all, which runs TTS through a completely separate Kotlin/
+  sherpa-onnx bridge (`JarvisTts.kt`) that only ever knew about English. User
+  confirmed wanting the Android port done in this same session ("Start now"
+  over "separate session later").
+- Investigated via an Explore agent first (matches JarvisTts.kt's single
+  hardcoded `en_US-ryan-high` field, `setup_piper.ps1`'s English-only tarball
+  fetch, the `english_tts=client` / `_ClientPhrase` gate in `realtime.py`, and
+  confirmed no Rust/Tauri layer is involved -- it's a plain WebView
+  `JavascriptInterface`) before touching anything, per AGENTS.md.
+- Generalized `SherpaTts` from one `OfflineTts` field to a
+  `VOICES: Map<voiceId, VoiceSpec>` registry + `Map<voiceId, OfflineTts>` cache
+  (`JarvisTts.kt`), each voice keyed the same as
+  `jarvis_piper_model`/`jarvis_piper_telugu_model` on the desktop backend.
+  `JarvisTtsBridge`'s `isReady`/`synthesize`/`synthesizeStream` all take an
+  explicit `voiceId` now. `warm()` only warms English (unconditional, common);
+  Telugu loads lazily on first real use since it is opt-in and rare.
+- New `backend/tools/android/setup_piper_telugu.ps1`: reuses the desktop's
+  already-downloaded `te_IN-padmavathi-medium.onnx`/`.onnx.json` (or fetches
+  from the same `rhasspy/piper-voices` HuggingFace source `piper.download_voices`
+  uses, found by reading its source: `URL_FORMAT` in
+  `site-packages/piper/download_voices.py`), and *derives*
+  `te_IN-padmavathi-medium.tokens.txt` locally from the voice's own
+  `phoneme_id_map` -- there is no sherpa-onnx tarball for this voice the way
+  English's `vits-piper-en_US-ryan-high` release exists. Verified the
+  derivation logic against English's own shipped `tokens.txt`: both are
+  exactly `sorted(phoneme_id_map.items(), key=id)` written as `symbol id` per
+  line. PowerShell's `ConvertFrom-Json` failed on this (folds `'X'`/`'x'` as
+  the same property, case-insensitively -- a PSObject quirk, not a JSON one),
+  so the derivation shells out to the backend's own Python instead. Ran the
+  script for real: produced 157 correct symbol/id lines, verified by eye.
+  `espeak-ng-data` is not re-fetched -- confirmed reusable by checking the
+  Telugu voice's own config (`"espeak": {"voice": "te"}`, `"phoneme_type":
+  "espeak"`), i.e. it phonemizes through the same shared espeak-ng data
+  English's bundle already ships, just a different language code inside it.
+- `nativeTts.ts`: added `NATIVE_VOICE_IDS` (language -> voice id map, must
+  match `JarvisTts.kt`'s `VOICES` keys and `app/core/languages.py`'s codes),
+  threaded a `language` param through `isNativeTtsAvailable`/`streamNative`.
+- `realtime.ts`: advertises `telugu_tts=client` alongside the existing
+  `english_tts=client`, keyed off `isNativeTtsAvailable("te-IN")`. `"phrase"`
+  messages now carry `language`, used to pick pace (`NATIVE_PACE`, mirroring
+  each `Language(...).pace`) and voice id for `streamNative`.
+- `realtime.py`: `_ClientPhrase` gained a `language` field (sent back to the
+  client in the `"phrase"` payload). New `client_telugu_tts` flag from the
+  query string. `synthesize()`'s branch for Telugu additionally requires
+  `telugu_tts_engine == "piper"` (snapshotted once per turn as
+  `telugu_engine_native`, same pattern as the existing `self.language`/
+  `self.voice` snapshot a few lines below it) -- unlike English, advertising
+  readiness is not enough on its own; the desktop toggle's semantics (Sarvam
+  default, explicit opt-in) carry over to Android instead of being
+  overridden by client capability. `chunk_limit`'s native-tighter-cap
+  condition gained an OR for this case; English's own condition is
+  byte-for-byte unchanged from before this session.
+- Verified: backend imports; the full `voice_pipeline_test.py` (18/18) and
+  `smoke_test.py` pass; `npx tsc --noEmit` clean. **Could not verify the
+  Kotlin compiles or runs**: this machine has no Android SDK
+  (`ANDROID_HOME`/`sdk.dir` unset, no SDK directory found anywhere under the
+  user profile), so `./gradlew :app:compileArmDebugKotlin` failed at the SDK
+  resolution step, before ever reaching the Kotlin compiler. The change is
+  mechanical (threading one new `String` parameter through existing,
+  previously-working call sites, plus a `Map` replacing a single `var`) and
+  was read back carefully against the file's existing patterns, but treat it
+  as unbuilt until someone with the SDK runs `npm run android:install` and
+  tests both voices on a device.
+- Left untouched, not mine: whatever `docs/architecture.md` and other files
+  changed under me mid-session (jarvis-oss SLDT work landed in the working
+  tree while this was in progress) -- re-read before editing each time rather
+  than clobbering.
+
 ### 2026-09-13 · Claude Code · jarvis-oss SLDT stage 6: usable from Settings, verified in a real browser
 - Continuation of the stage-5 entry further below -- same feature. User
   said "continue"; given SLDT stage 5 had left "no settings UI" as the

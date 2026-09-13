@@ -367,11 +367,17 @@ legacy WAV `synthesize`. If Piper is not installed or its model is missing,
 `_provider_for`'s callers fall back to Sarvam for that utterance — this is
 also how an opted-in Telugu session degrades if the Telugu model file is
 absent. This Python provider is desktop-only: under Chaquopy on Android arm64
-neither onnxruntime nor Piper's phonemizer has a wheel. English's on-device
-voice reaches Android through a separate route instead — a Kotlin/sherpa-onnx
-bridge (`JarvisTts.kt`), not this backend — and Telugu has no equivalent yet,
-so on Android the `telugu_tts_engine` preference has no effect: Telugu speech
-stays on Sarvam there regardless of the stored choice.
+neither onnxruntime nor Piper's phonemizer has a wheel. Both voices reach
+Android through a separate route instead — a Kotlin/sherpa-onnx bridge
+(`JarvisTts.kt`), not this backend, with its own voice registry keyed the same
+way (`en_US-ryan-high`, `te_IN-padmavathi-medium`). There the same
+`telugu_tts_engine` preference (checked in `app.api.realtime.VoiceSession`,
+not `_provider_for`, since Android's realtime session routes around this
+Python provider entirely) decides whether a Telugu turn becomes a
+client-synthesized `_ClientPhrase` (`app/api/realtime.py`) or ordinary Sarvam
+audio, the same way `client_english_tts` already gated English's. Telugu's Android bridge was added
+2026-09-13 and is code-complete but unverified on a device (no Android SDK on
+the machine that wrote it); treat it as unproven until built and run once.
 
 `SarvamTTS.stream_speech` uses the existing pooled httpx client with
 `POST /text-to-speech/stream`, `output_audio_codec=linear16`, and a sample rate no

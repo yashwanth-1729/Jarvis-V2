@@ -1,16 +1,26 @@
 import { SpeechQueue } from "@/lib/speechQueue";
 import { API_BASE } from "@/lib/api";
-import { cancelNative, isNativeTtsAvailable, streamNative } from "@/lib/nativeTts";
+import {
+  cancelNative,
+  isNativeTtsAvailable,
+  streamNative,
+  type NativeVoiceLanguage,
+} from "@/lib/nativeTts";
 import type { VoiceSessionState } from "@/types";
 
 /**
- * English's speaking-rate nudge, applied to on-device synthesis.
+ * Speaking-rate nudges for on-device synthesis, one per language that has a
+ * native voice.
  *
- * Must track `Language("en-IN", ...).pace` in `backend/app/core/languages.py`
- * (currently 1.04) -- this is the client-side mirror for the one case where
- * the client, not the backend, drives Piper (see the `"phrase"` case below).
+ * Must track each `Language(...).pace` in `backend/app/core/languages.py`
+ * (en-IN 1.04, te-IN 1.20) -- this is the client-side mirror for the one case
+ * where the client, not the backend, drives Piper (see the `"phrase"` case
+ * below).
  */
-const ENGLISH_PACE = 1.04;
+const NATIVE_PACE: Record<NativeVoiceLanguage, number> = {
+  "en-IN": 1.04,
+  "te-IN": 1.2,
+};
 
 /* ==========================================================================
  * Capture + voice activity detection
@@ -562,14 +572,20 @@ export class VoiceSession {
   async start(): Promise<void> {
     this.setState("connecting");
 
-    // Advertise the on-device English voice only when it is actually ready
-    // (Android with the model provisioned); the server then sends English
-    // chunks as `"phrase"` text instead of synthesizing them via Sarvam. This
-    // is a per-connection decision made once, here -- a native engine that
-    // fails mid-session degrades per-phrase (see the `"phrase"` case below),
-    // not by falling back to a second server round-trip.
-    const nativeEnglish = isNativeTtsAvailable() ? "&english_tts=client" : "";
-    const url = `${API_BASE.replace(/^http/, "ws")}/api/voice/session?audio=pcm16${nativeEnglish}`;
+    // Advertise each on-device voice only when it is actually ready (Android
+    // with that model provisioned); the server then sends its chunks as
+    // `"phrase"` text instead of synthesizing them via Sarvam. This is a
+    // per-connection decision made once, here -- a native engine that fails
+    // mid-session degrades per-phrase (see the `"phrase"` case below), not by
+    // falling back to a second server round-trip.
+    //
+    // English is unconditional once ready (Sarvam is only ever its fallback);
+    // Telugu is additionally gated server-side on the user's opt-in
+    // (`telugu_tts_engine` == "piper") -- advertising readiness here only
+    // means "ask me", not "always use me", for Telugu.
+    const nativeEnglish = isNativeTtsAvailable("en-IN") ? "&english_tts=client" : "";
+    const nativeTelugu = isNativeTtsAvailable("te-IN") ? "&telugu_tts=client" : "";
+    const url = `${API_BASE.replace(/^http/, "ws")}/api/voice/session?audio=pcm16${nativeEnglish}${nativeTelugu}`;
     const socket = new WebSocket(url);
     this.socket = socket;
 
@@ -709,8 +725,9 @@ export class VoiceSession {
         break;
       }
       case "phrase": {
-        // English chunk the server left for this device to voice, because the
-        // session advertised a native voice at connect time (see `start()`).
+        // A chunk the server left for this device to voice, because the
+        // session advertised a native voice for this language at connect
+        // time (see `start()`).
         //
         // Its playback slot is reserved right now, in arrival order, and each
         // sentence is scheduled the moment Piper finishes it -- so a long
@@ -721,8 +738,10 @@ export class VoiceSession {
         // never interrupts the reply.
         if (Number(payload.gen ?? 0) < this.turnGen) break;
         const text = String(payload.text ?? "");
+        const language = (payload.language as NativeVoiceLanguage | undefined) ?? "en-IN";
+        const pace = NATIVE_PACE[language] ?? NATIVE_PACE["en-IN"];
         const stream = this.queue.pushStream(text, cancelNative);
-        streamNative(text, ENGLISH_PACE, (pcm, rate) => stream.append(pcm, rate)).then(
+        streamNative(text, pace, (pcm, rate) => stream.append(pcm, rate), language).then(
           () => stream.end(),
           (error: unknown) => stream.fail(error instanceof Error ? error : new Error(String(error))),
         );

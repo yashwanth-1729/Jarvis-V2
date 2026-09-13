@@ -1,16 +1,17 @@
 /**
- * On-device English speech for the Android build.
+ * On-device speech for the Android build, for the languages that have a
+ * local Piper voice.
  *
  * The phone runs the JARVIS backend under Chaquopy, where Piper's ONNX stack
- * has no arm64 wheel, so English cannot be synthesized in Python there. Instead
- * the native shell exposes a `window.JarvisTts` bridge backed by sherpa-onnx,
- * which runs the *same* high-tier Piper voice (`en_US-ryan-high`) on the phone
- * CPU. This module is the WebView side of that bridge.
+ * has no arm64 wheel, so synthesis cannot happen in Python there. Instead the
+ * native shell exposes a `window.JarvisTts` bridge backed by sherpa-onnx,
+ * which runs the *same* Piper voices desktop uses on the phone CPU. This
+ * module is the WebView side of that bridge.
  *
  * It is inert everywhere the bridge is absent — desktop, web, and any Android
- * build that has not provisioned the model — so callers can ask
- * `isNativeTtsAvailable()` first and fall back to the normal backend audio path
- * (Sarvam) with no special-casing.
+ * build that has not provisioned a given voice's model — so callers can ask
+ * `isNativeTtsAvailable(voiceId)` first and fall back to the normal backend
+ * audio path (Sarvam) with no special-casing.
  *
  * Audio is *streamed*: the Kotlin side calls back once per sentence as it is
  * generated (PCM16 mono), then once more when the phrase is done. A phrase is
@@ -19,13 +20,26 @@
  * why Telugu never had gaps.
  */
 
+/**
+ * Voice ids as registered in `JarvisTts.kt`'s `SherpaTts.VOICES` map, and the
+ * language each is spoken for. Must match `app.core.languages.DEFAULT_LANGUAGE`
+ * / `TELUGU_LANGUAGE` on the backend and the model filenames the setup
+ * scripts (`backend/tools/android/setup_piper*.ps1`) place under assets/piper/.
+ */
+export const NATIVE_VOICE_IDS = {
+  "en-IN": "en_US-ryan-high",
+  "te-IN": "te_IN-padmavathi-medium",
+} as const;
+
+export type NativeVoiceLanguage = keyof typeof NATIVE_VOICE_IDS;
+
 interface NativeTtsBridge {
   /** Fire-and-forget: stream `text` sentence by sentence, by request id. */
-  synthesizeStream(requestId: string, text: string, pace: number): void;
+  synthesizeStream(requestId: string, voiceId: string, text: string, pace: number): void;
   /** Abandon every queued and in-progress synthesis. */
   cancelAll(): void;
-  /** True once the model and espeak-ng-data are loaded and ready. */
-  isReady(): boolean;
+  /** True once `voiceId`'s model and espeak-ng-data are loaded and ready. */
+  isReady(voiceId: string): boolean;
 }
 
 declare global {
@@ -124,20 +138,22 @@ function installHooks(): void {
   };
 }
 
-/** Whether on-device English synthesis is available in this shell right now. */
-export function isNativeTtsAvailable(): boolean {
+/** Whether on-device synthesis for `language` is available in this shell right now. */
+export function isNativeTtsAvailable(language: NativeVoiceLanguage = "en-IN"): boolean {
   if (typeof window === "undefined") return false;
   const bridge = window.JarvisTts;
   if (!bridge || typeof bridge.synthesizeStream !== "function") return false;
+  const voiceId = NATIVE_VOICE_IDS[language];
+  if (!voiceId) return false;
   try {
-    return bridge.isReady();
+    return bridge.isReady(voiceId);
   } catch {
     return false;
   }
 }
 
 /**
- * Synthesize English speech on-device, one sentence at a time.
+ * Synthesize speech on-device, one sentence at a time.
  *
  * `onChunk` receives each sentence's PCM16 as soon as it exists. Resolves when
  * the phrase is finished; rejects (never hangs) if the bridge is absent,
@@ -147,9 +163,12 @@ export function streamNative(
   text: string,
   pace: number,
   onChunk: (pcm: ArrayBuffer, sampleRate: number) => void,
+  language: NativeVoiceLanguage = "en-IN",
 ): Promise<void> {
   const bridge = typeof window !== "undefined" ? window.JarvisTts : undefined;
   if (!bridge) return Promise.reject(new Error("native TTS bridge unavailable"));
+  const voiceId = NATIVE_VOICE_IDS[language];
+  if (!voiceId) return Promise.reject(new Error(`no on-device voice for ${language}`));
   installHooks();
 
   const clean = text.trim();
@@ -164,7 +183,7 @@ export function streamNative(
     pending.set(requestId, { onChunk, resolve, reject });
     startWatchdog();
     try {
-      bridge.synthesizeStream(requestId, clean, pace);
+      bridge.synthesizeStream(requestId, voiceId, clean, pace);
     } catch (error) {
       pending.delete(requestId);
       reject(error instanceof Error ? error : new Error("native TTS call failed"));

@@ -446,6 +446,37 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-13 — Telugu's local voice reaches Android, following the same
+  on-device bridge English already uses (unverified on a device).** The
+  desktop opt-in below now has an Android counterpart: `JarvisTts.kt`'s
+  `SherpaTts` moved from a single hardcoded English voice to a small registry
+  (`VOICES: Map<voiceId, VoiceSpec>`), so it now loads either
+  `en_US-ryan-high` or `te_IN-padmavathi-medium` on demand, keyed the same way
+  as the desktop settings. New `backend/tools/android/setup_piper_telugu.ps1`
+  fetches Telugu's voice files (reusing the desktop copy already in
+  `backend/models/piper/` when present) and derives its `tokens.txt` from the
+  voice's own `phoneme_id_map` locally, since no ready-made sherpa-onnx bundle
+  exists for it the way English's does — `espeak-ng-data` is shared and not
+  re-fetched. The client now advertises readiness per voice
+  (`english_tts=client`, `telugu_tts=client` on the voice WebSocket); the
+  server's `_ClientPhrase` marker (`app/api/realtime.py`) now carries which
+  language it's for, gating Telugu additionally on the `telugu_tts_engine`
+  opt-in (English stays unconditional, as before) — so an Android device with
+  the model provisioned still uses Sarvam for Telugu until the user flips the
+  toggle. `nativeTts.ts`/`realtime.ts` thread a voice id and per-language pace
+  through the existing streaming path; no change to how phrases are ordered,
+  captioned or interrupted.
+  Checked: backend imports and the 18-check `voice_pipeline_test` plus the
+  full `smoke_test` pass; `npx tsc --noEmit` clean; `tokens.txt` derivation
+  spot-checked against the existing English file's exact format (`symbol id`
+  per line, sorted by id) and run for real against the Telugu voice (157
+  symbols). **Not verified: an actual Gradle/Kotlin compile or an on-device
+  run** — this machine has no Android SDK installed (`./gradlew
+  compileArmDebugKotlin` failed on a missing SDK location, not a code error),
+  so the Kotlin changes are reviewed by hand against the AAR's existing usage
+  in this file, not compiler-checked. Build and test on a device before
+  relying on this.
+
 - **2026-09-13 — Telugu gets an opt-in local voice (Piper), Sarvam stays the
   default.** Adds `te_IN-padmavathi-medium` alongside the existing English
   Piper voice, so Telugu speech can run offline like English already does —
