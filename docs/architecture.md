@@ -336,6 +336,12 @@ an action that happened but no durable record that it happened. This receipt
 ordering does not turn an announced-but-never-started call into a completed one;
 durable run/step state remains the later agent-runtime upgrade.
 
+Targeted computer queries use the same explicit outcome convention as computer
+actions. A missing window/tab, malformed selector, or element search with no
+match becomes an error `ToolOutcome`, rather than a successful-looking string
+which encourages the model to continue from a target that does not exist.
+Broad listings (`ui_list_windows`) remain successful informational results.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

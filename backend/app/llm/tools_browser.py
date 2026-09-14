@@ -321,7 +321,8 @@ class BrowserGetAttributeInput(ElementRefInput):
 
 
 # ---------------------------------------------------------------------------
-# Handlers -- return (ok, message) or str; tools.py wraps these in ToolOutcome
+# Handlers return ``(ok, message)`` when a request can name a missing tab,
+# malformed selector, or absent element. Pure listings remain plain strings.
 # ---------------------------------------------------------------------------
 
 async def browser_open() -> str:
@@ -417,15 +418,15 @@ async def browser_title(payload: TabIdInput) -> tuple[bool, str]:
     return True, await handle.page.title()  # type: ignore[attr-defined]
 
 
-async def browser_inspect(payload: BrowserInspectInput) -> str:
+async def browser_inspect(payload: BrowserInspectInput) -> tuple[bool, str]:
     try:
         handle = _session.get_tab(payload.tab_id)
     except LookupError as exc:
-        return str(exc)
+        return False, str(exc)
 
     raw = await handle.page.locator("body").aria_snapshot()  # type: ignore[attr-defined]
     if not raw or not raw.strip():
-        return "The page has no accessible content (it may still be loading)."
+        return True, "The page has no accessible content (it may still be loading)."
 
     parsed = _parse_aria_snapshot(raw)
     found: list[dict] = []
@@ -437,14 +438,14 @@ async def browser_inspect(payload: BrowserInspectInput) -> str:
     rows = [f"  [{ref}] {_describe(node)}" for ref, node in zip(refs, limited)]
 
     header = f"Page: {await handle.page.title()} ({handle.page.url})\n{len(found)} interactive element(s)"  # type: ignore[attr-defined]
-    return format_listing(header, rows, truncated_count=max(0, len(found) - len(limited)))
+    return True, format_listing(header, rows, truncated_count=max(0, len(found) - len(limited)))
 
 
-async def browser_find(payload: BrowserFindInput) -> str:
+async def browser_find(payload: BrowserFindInput) -> tuple[bool, str]:
     try:
         handle = _session.get_tab(payload.tab_id)
     except LookupError as exc:
-        return str(exc)
+        return False, str(exc)
     page = handle.page
 
     locator = None
@@ -463,15 +464,15 @@ async def browser_find(payload: BrowserFindInput) -> str:
     elif payload.selector:
         locator, strategy = page.locator(payload.selector), f"selector={payload.selector}"
     else:
-        return "Give at least one of: role, text, label, placeholder, test_id, selector."
+        return False, "Give at least one of: role, text, label, placeholder, test_id, selector."
 
     try:
         count = await locator.count()
     except Exception as exc:  # noqa: BLE001 - a malformed selector, most likely
-        return f"Search failed ({strategy}): {exc}"
+        return False, f"Search failed ({strategy}): {exc}"
 
     if count == 0:
-        return f"No element matched {strategy}."
+        return False, f"No element matched {strategy}."
 
     registry = _registry_for(handle.tab_id)
     items: list[Ref] = []
@@ -490,7 +491,7 @@ async def browser_find(payload: BrowserFindInput) -> str:
     for ref, item in zip(refs, items):
         rows.append(f"  [{ref}] {item.summary}")
 
-    return format_listing(f"{count} element(s) matched {strategy}", rows, truncated_count=max(0, count - shown))
+    return True, format_listing(f"{count} element(s) matched {strategy}", rows, truncated_count=max(0, count - shown))
 
 
 def _resolve(tab_id_hint: str | None, element_id: str):

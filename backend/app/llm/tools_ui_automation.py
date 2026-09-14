@@ -251,11 +251,11 @@ async def ui_focus_window(payload: UiFocusWindowInput) -> tuple[bool, str]:
     return True, f'Focused "{w.window_text()}".'
 
 
-async def ui_inspect(payload: UiInspectInput) -> str:
+async def ui_inspect(payload: UiInspectInput) -> tuple[bool, str]:
     try:
         w = _find_window(payload.window)
     except LookupError as exc:
-        return str(exc)
+        return False, str(exc)
 
     found: list = []
     root_role, root_name, root_facts = _element_summary(w)
@@ -266,14 +266,14 @@ async def ui_inspect(payload: UiInspectInput) -> str:
     rows = [f"  [{ref}] {_format_element(role, name, facts)}" for ref, (_, role, name, facts) in zip(refs, limited)]
 
     header = f'Window: {w.window_text()} ({len(found)} interactive element(s) within depth {payload.max_depth})'
-    return format_listing(header, rows, truncated_count=max(0, len(found) - len(limited)))
+    return True, format_listing(header, rows, truncated_count=max(0, len(found) - len(limited)))
 
 
-async def ui_find_element(payload: UiFindElementInput) -> str:
+async def ui_find_element(payload: UiFindElementInput) -> tuple[bool, str]:
     try:
         w = _find_window(payload.window)
     except LookupError as exc:
-        return str(exc)
+        return False, str(exc)
 
     found: list = []
     # A generous depth for a targeted search -- unlike ui_inspect, this is
@@ -299,7 +299,9 @@ async def ui_find_element(payload: UiFindElementInput) -> str:
     rows = [f"  [{ref}] {_format_element(role, name, facts)}" for ref, (_, role, name, facts) in zip(refs, limited)]
 
     header = f"{len(matched)} matching element(s) in \"{w.window_text()}\""
-    return format_listing(header, rows, truncated_count=max(0, len(matched) - len(limited)))
+    if not matched:
+        return False, f'No matching element in "{w.window_text()}".'
+    return True, format_listing(header, rows, truncated_count=max(0, len(matched) - len(limited)))
 
 
 def _resolve(element_id: str):

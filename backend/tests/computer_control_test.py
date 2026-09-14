@@ -112,7 +112,7 @@ async def main() -> int:
     listing = await tools_ui_automation.ui_list_windows()
     check("notepad appears in ui_list_windows", "notepad" in listing.lower(), listing[:200])
 
-    inspected = await tools_ui_automation.ui_inspect(UiInspectInput(window="Notepad"))
+    ok, inspected = await tools_ui_automation.ui_inspect(UiInspectInput(window="Notepad"))
     check("ui_inspect found at least one element", "[e" in inspected, inspected[:200])
     check(
         "ui_inspect found an editable text area",
@@ -120,11 +120,11 @@ async def main() -> int:
         inspected[:300],
     )
 
-    found = await tools_ui_automation.ui_find_element(
+    ok, found = await tools_ui_automation.ui_find_element(
         UiFindElementInput(window="Notepad", role="Document")
     )
     if "[e" not in found:
-        found = await tools_ui_automation.ui_find_element(
+        ok, found = await tools_ui_automation.ui_find_element(
             UiFindElementInput(window="Notepad", role="Edit")
         )
     check("ui_find_element located the editor", "[e" in found, found[:300])
@@ -174,7 +174,7 @@ async def main() -> int:
     # the generation), then try to use the first generation's id.
     ok, _ = await tools_os_control._launch_app(LaunchAppInput(app="notepad"))
     await asyncio.sleep(1.5)
-    first = await tools_ui_automation.ui_inspect(UiInspectInput(window="Notepad"))
+    ok, first = await tools_ui_automation.ui_inspect(UiInspectInput(window="Notepad"))
     first_ref = next(
         (l.strip()[1 : l.strip().index("]")] for l in first.splitlines() if l.strip().startswith("[e")),
         None,
@@ -206,7 +206,7 @@ async def main() -> int:
     ok, message = await tools_ui_automation.ui_focus_window(UiFocusWindowInput(title="Calculator"))
     check("ui_focus_window focused it", ok, message)
 
-    structure = await tools_ui_automation.ui_inspect(UiInspectInput(window="Calculator"))
+    ok, structure = await tools_ui_automation.ui_inspect(UiInspectInput(window="Calculator"))
     check("ui_inspect returned real structure, not an empty listing", "[e" in structure, structure[:200])
 
     await tools_os_control._close_app(CloseAppInput(name_contains="calculator", all_matches=True))
@@ -230,14 +230,14 @@ async def main() -> int:
         ok, title = await tools_browser.browser_title(tools_browser.TabIdInput())
         check("browser_title returned a real title", ok and bool(title.strip()), title)
 
-        page_structure = await tools_browser.browser_inspect(tools_browser.BrowserInspectInput())
+        ok, page_structure = await tools_browser.browser_inspect(tools_browser.BrowserInspectInput())
         check(
             "browser_inspect returned the page's accessibility tree",
             "example.com" in page_structure.lower() or "[e" in page_structure or "link" in page_structure.lower(),
             page_structure[:300],
         )
 
-        found = await tools_browser.browser_find(BrowserFindInput(role="link"))
+        ok, found = await tools_browser.browser_find(BrowserFindInput(role="link"))
         link_ref = None
         for line in found.splitlines():
             line = line.strip()

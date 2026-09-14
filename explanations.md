@@ -128,6 +128,18 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P04 honest computer-query outcomes
+
+- Converted targeted UI/browser inspect and find operations to explicit
+  `(ok, message)` results. Missing targets, malformed browser selectors and no
+  element match now become `ToolOutcome(is_error=True)` instead of textual
+  failures which the agent interpreted as success. Broad window listing remains
+  an informational success.
+- Updated the live computer-control fixture's internal return handling and added
+  a no-browser missing-tab regression (2/2); receipt ordering remains 5/5.
+  No live browser/provider call, build/install or user data touched. Next: P05
+  subprocess cancellation cleanup. Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · P03 tool-result receipt ordering
 
 - A completed tool's provider-format receipt is now persisted before the agent

@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Computer searches now report honest failures.** Targeted UI
+  and browser inspect/find operations return an error outcome for missing
+  windows/tabs, invalid selectors or no match, rather than a success with an
+  error-shaped string. An offline missing-tab fixture passes 2 checks; the
+  existing receipt-order fixture still passes 5. No live browser/provider call,
+  build, installation or user-data mutation was performed.
+
 - **2026-09-14 — Tool-result receipts survive immediate client interruption.**
   The agent saves each completed provider-format tool receipt before publishing
   its `tool_result` event, preventing an SSE disconnect at that event boundary

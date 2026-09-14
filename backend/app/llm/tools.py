@@ -2438,8 +2438,8 @@ _DATETIME_HINT = "Absolute datetime, YYYY-MM-DDTHH:MM:SS."
 # Computer-control adapters
 #
 # The domain modules (tools_os_control, tools_ui_automation, tools_browser)
-# return either a plain informational string (an inspection that cannot
-# fail) or an (ok, message) pair (an action that can). These two tiny
+# return either a plain informational string (a listing that cannot fail) or
+# an (ok, message) pair (an action or targeted query that can). These two tiny
 # wrappers are the entire adapter layer -- every handler below is one line
 # because of it, which is the point: the domain modules own all of the real
 # logic, tools.py only owns the wire format.
@@ -2540,8 +2540,8 @@ async def _handle_clipboard_set(payload: ClipboardSetInput) -> ToolOutcome:
 
 _handle_ui_list_windows = _computer_query_no_input(ui_list_windows)
 _handle_ui_focus_window = _computer_action(ui_focus_window)
-_handle_ui_inspect = _computer_query(ui_inspect)
-_handle_ui_find_element = _computer_query(ui_find_element)
+_handle_ui_inspect = _computer_action(ui_inspect)
+_handle_ui_find_element = _computer_action(ui_find_element)
 _handle_ui_click = _computer_action(ui_click)
 _handle_ui_set_text = _computer_action(ui_set_text)
 _handle_ui_get_text = _computer_action(ui_get_text)
@@ -2551,8 +2551,8 @@ _handle_ui_select = _computer_action(ui_select)
 
 _handle_browser_open = _computer_query_no_input(browser_open)
 _handle_browser_navigate = _computer_action(browser_navigate)
-_handle_browser_inspect = _computer_query(browser_inspect)
-_handle_browser_find = _computer_query(browser_find)
+_handle_browser_inspect = _computer_action(browser_inspect)
+_handle_browser_find = _computer_action(browser_find)
 _handle_browser_click = _computer_action(browser_click)
 _handle_browser_type = _computer_action(browser_type)
 
