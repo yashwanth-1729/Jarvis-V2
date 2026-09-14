@@ -128,6 +128,28 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · Agentic reliability diagnosis, no implementation
+
+- User asked why agentic behavior is weak and how to reach/exceed OpenClaw-level
+  capability. Added `docs/agentic-audit-2026-09-14.md` and README audit entry.
+- Reproduced offline: Gemini reuses `call_0` across responses and overwrites prior
+  replay name/signature; browser query errors receive success status; parent
+  cancellation skips command-child cleanup; model-supplied `confirmed=true` reaches
+  a mocked executor without any server-owned approval. Parallel in-memory probes
+  reproduced missing receipts after a yielded tool result and no finalization
+  after round eight. No real dangerous command or user-data mutation occurred.
+- Existing Gemini tests 18/18 and reasoning routing 20/20 pass, demonstrating
+  missing coverage rather than absence of defects. No live providers, installs,
+  native builds or interactive automation. New work files only on D:.
+- Desktop source review found early `seededRef` completion/no reconnect handshake,
+  TCP/process-only readiness, and discarded startup output. Correction to the
+  earlier watchdog notes: `backend.rs` still resets consecutive failures on a
+  successful spawn, before sustained health; repeated spawn-then-crash can loop.
+- Remaining: fixes and regression tests, durable job/session runtime with scoped
+  approvals, closed-loop verification, then measured capability expansion. This
+  audit does not claim OpenClaw parity, a reproduced historical desktop failure,
+  or any TTS installation progress. Preserve other agents' working-tree files.
+
 ### 2026-09-13 · Claude Code · BYOK: Gemini's key joins Sarvam's on the existing /api/local/credentials path
 - User asked "is jarvis opensource fully completed?" -- answered no: SLDT
   sync is genuinely done and usable, but BYOK (the other explicitly

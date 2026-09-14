@@ -453,6 +453,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Agentic reliability audit (diagnosis only).** Added
+  [findings and staged upgrade plan](docs/agentic-audit-2026-09-14.md), including
+  reproduced tool-ID, interruption, reporting and approval defects plus desktop
+  readiness gaps. Offline Gemini tests passed 18 checks; reasoning routing passed
+  20. No application changes, installs, live provider calls or native builds.
+
 - **2026-09-13 — BYOK: Gemini's API key can now be supplied from Settings,
   same as Sarvam's already could.** Part of the open-source variant's second
   pillar (SLDT sync being the first) — a public build ships neither key, so
