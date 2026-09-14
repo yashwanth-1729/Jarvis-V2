@@ -831,6 +831,18 @@ async def run_turn(
                     refreshed |= outcome.refresh
                 logger.info("tool result: %s ok=%s", call.name, ok)
 
+                # Durability comes before observability. A client can close an
+                # SSE connection the instant it sees this event; persisting the
+                # receipt first means a restarted agent can distinguish work
+                # that completed from a call that was only announced.
+                tool_message = {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": outcome_text,
+                }
+                await crud.append_chat_message("user", "", tool_message)
+                messages.append(tool_message)
+
                 yield {
                     "type": "tool_result",
                     "data": {
@@ -843,14 +855,6 @@ async def run_turn(
                 }
                 if not parse_error and outcome.refresh:
                     yield {"type": "refresh", "data": {"domains": sorted(outcome.refresh)}}
-
-                tool_message = {
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": outcome_text,
-                }
-                await crud.append_chat_message("user", "", tool_message)
-                messages.append(tool_message)
         else:
             yield {
                 "type": "error",

@@ -329,6 +329,13 @@ preferences/transcripts/handshake states may be unscoped. Old generations cannot
 restart audio or reopen panels. Refresh notifications represent real mutations;
 clients must not discard them merely because playback was interrupted.
 
+For a tool execution, the backend persists the provider-shaped `tool` receipt
+before it emits the matching `tool_result` SSE event. An SSE reader is allowed
+to disconnect immediately after seeing an event, so publishing first would leave
+an action that happened but no durable record that it happened. This receipt
+ordering does not turn an announced-but-never-started call into a completed one;
+durable run/step state remains the later agent-runtime upgrade.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally
@@ -449,7 +456,10 @@ external action idempotency key.
 - **Heard-only history:** Playback acks currently control buffering, not DB history.
   Persisted tool cycles and assistant messages retain existing semantics. Safely
   truncating interrupted dialogue needs an explicit receipt/history policy that
-  preserves real tool results. Do not delete committed actions when audio stops.
+  preserves real tool results. Completed tool receipts are now committed before
+  their client event, but explicit unstarted/uncertain step state is still a
+  future durable-runtime requirement. Do not delete committed actions when audio
+  stops.
 - **Full-duplex default:** Intentionally not adopted. The user's mic-muting choice
   remains the default. Optional barge-in is retained, with the existing echo/VAD
   limitations; no new echo cancellation model was added.

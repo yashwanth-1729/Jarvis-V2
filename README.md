@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Tool-result receipts survive immediate client interruption.**
+  The agent saves each completed provider-format tool receipt before publishing
+  its `tool_result` event, preventing an SSE disconnect at that event boundary
+  from losing the transcript record of completed work. An offline fixture closes
+  the real async generator at that point and passes 5 checks. No live provider
+  request, build, installation or user-data mutation was performed.
+
 - **2026-09-14 — Gemini multi-round tool replay preserves missing-ID calls.**
   Gemini function calls now receive backend-unique transcript IDs, so a later
   response cannot overwrite an earlier call's name or required thought signature.

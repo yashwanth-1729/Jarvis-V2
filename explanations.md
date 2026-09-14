@@ -128,6 +128,18 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P03 tool-result receipt ordering
+
+- A completed tool's provider-format receipt is now persisted before the agent
+  yields its matching `tool_result` event. This protects the concrete case where
+  a browser/voice SSE reader disconnects as soon as it sees that event.
+- Added `tests/agent_receipt_order_test.py`, which closes the real async
+  generator immediately after the result and verifies the receipt survives in a
+  throwaway database (5/5). Explicit durable state for calls never started still
+  belongs to the later runtime packets; this patch does not invent a result for
+  them. No provider call, build/install or user data touched. Next: P04 honest
+  computer-query outcomes. Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · P02 Gemini tool-call identity repair
 
 - Implemented the first playbook repair packet: `GeminiChat` now allocates a
