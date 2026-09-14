@@ -101,6 +101,8 @@ export default function CommandCenterPage() {
   const missedRef = React.useRef(0);
   /** Whether the agent's working copy has been seeded this session. */
   const seededRef = React.useRef(false);
+  /** Prevent concurrent refreshes from starting duplicate first-contact work. */
+  const seedingRef = React.useRef(false);
   /**
    * True when this runtime is only the AI and the local store is
    * authoritative — the arrangement on mobile. Asked of the runtime rather
@@ -177,24 +179,33 @@ export default function CommandCenterPage() {
           // row stays local.
           merged = { ...local, brief: remote.brief };
           missedRef.current = 0;
-          if (!seededRef.current) {
-            seededRef.current = true;
+          if (!seededRef.current && !seedingRef.current) {
+            seedingRef.current = true;
             // Credentials first: the runtime cannot answer anything without
             // them, and both belong to the same first-contact handshake.
             void sendProviderKey()
-              .then(() => seedAgentStore())
+              .then((acknowledged) => acknowledged && seedAgentStore())
+              .then((seeded) => {
+                // Do not mark first contact complete before both steps have
+                // acknowledged. A backend still starting can then retry on a
+                // later refresh instead of remaining keyless all session.
+                seededRef.current = seeded === true;
+                return seeded === true ? regenerateBrief().catch(() => null) : null;
+              })
               // The brief is computed from the runtime's database and cached,
               // so the one fetched a moment ago describes the *empty* working
               // copy that existed before the seed — "all clear" over a board
               // showing three overdue tasks. It is deterministic, not a model
               // call, so rebuilding it costs nothing.
-              .then(() => regenerateBrief().catch(() => null))
               .then((brief) => {
                 if (brief) setState((current) => (current ? { ...current, brief } : current));
               })
               // Voice availability depends on the key, and was already
               // read before we sent it.
-              .finally(() => setCredentialsSent((n) => n + 1));
+              .finally(() => {
+                seedingRef.current = false;
+                setCredentialsSent((n) => n + 1);
+              });
           }
         } catch {
           // No runtime means no brief. The board is unaffected, so this is not

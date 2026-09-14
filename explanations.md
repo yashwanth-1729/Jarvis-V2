@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P08 acknowledged credential handshake
+
+- First-contact credentials/seed work now remains retryable until both endpoint
+  responses acknowledge it. `sendProviderKey` reports transport acknowledgement,
+  not Sarvam-key presence, so valid keyless/Gemini-only configurations do not
+  masquerade as failed requests. Concurrent refreshes are coalesced.
+- Ran `npm run typecheck` successfully. No native build/install, provider call
+  or user data touched. Next: P09 durable runtime foundation (not started).
+  Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · P07 truthful desktop backend readiness
 
 - Replaced TCP-only desktop readiness with a bounded `GET /api/health` probe

@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — First-contact credential handoff is retryable.** Client-owned
+  runtimes mark their first handshake complete only after both credentials and
+  working-copy seed endpoints acknowledge it; a backend that is still starting
+  can retry on refresh. Frontend type-check passed. No native build/install or
+  user-data mutation was performed.
+
 - **2026-09-14 — Desktop backend readiness now uses the health endpoint.** The
   native watchdog verifies JARVIS’s `/api/health` response rather than a bare
   TCP connection, and counts starts that never become healthy as failures before

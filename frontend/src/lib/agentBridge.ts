@@ -169,5 +169,8 @@ export async function sendProviderKey(): Promise<boolean> {
       gemini_api_key: getGeminiKey(),
     },
   );
-  return result?.configured ?? false;
+  // This boolean means the runtime acknowledged the handshake, not that a
+  // particular provider key is present. A valid keyless setup (or Gemini-only
+  // setup) must not look like a transport failure and retry forever.
+  return result !== null;
 }

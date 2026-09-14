@@ -362,6 +362,12 @@ and counted as a failed restart; the failure counter resets only after the
 health window, not on `Command::spawn`. This prevents a stale listener or
 crash-looping import from presenting a false-ready desktop app.
 
+On client-owned-data runtimes, first contact is acknowledged only after the
+credentials endpoint responds and the agent working-copy seed responds. A failed
+or not-yet-started backend leaves this handshake retryable; it is not marked
+complete merely because the browser began a request. The acknowledgement means
+transport success, not that any specific optional provider key is configured.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally
