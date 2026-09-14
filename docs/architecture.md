@@ -383,6 +383,13 @@ newer unsupported schema fails without downgrade or deletion. Tests which replac
 `JARVIS_DB_PATH` derive a sibling runtime fixture path unless an explicit
 `JARVIS_RUNTIME_DB_PATH` is supplied.
 
+`RuntimeRepository` canonicalizes and hashes each submitted request inside the
+control plane. `(session_id, client_request_id)` is idempotent only when that
+hash matches; changed content conflicts. Run transitions use an expected-state
+predicate and insert the corresponding monotonically ordered event in the same
+serialized `BEGIN IMMEDIATE` transaction. Events publish only after this layer
+returns from commit; restart fixtures reopen the file and replay the same facts.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

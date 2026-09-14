@@ -134,10 +134,11 @@ Medium, worth doing:
   steps and ordered events. It uses WAL + synchronous FULL, foreign keys, useful
   admission/replay indexes and refuses unsupported newer versions without wipe.
 - Added `JARVIS_RUNTIME_DB_PATH`; isolated tests derive a sibling runtime path
-  from an overridden personal DB. Offline database checks pass 7/7 and P09
-  contracts remain 6/6. No worker, API, provider call, install or personal data
-  touched. Next: P11 transactional repository and migrations. Untracked files
-  preserved.
+  from an overridden personal DB. Added transactional repository submission,
+  request-hash dedup/conflict detection, expected-state transitions and atomic
+  ordered events. Repository checks pass 6/6, database checks 7/7, and P09
+  contracts 6/6. No worker, API, provider call, install or personal data touched.
+  Next: P11 migrations and restoration. Untracked files preserved.
 
 ### 2026-09-14 · Codex · P09 durable runtime contracts
 

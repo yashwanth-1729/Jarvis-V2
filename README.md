@@ -461,8 +461,10 @@ there is no background process automatically rewriting documentation.
 - **2026-09-14 — Separate durable runtime database added (P10).** Agent-control
   state now has an isolated, versioned SQLite schema for sessions, runs, steps
   and ordered events. It uses WAL, `synchronous=FULL`, foreign keys and refuses
-  newer unsupported schemas without wiping them. Seven offline isolation and
-  durability checks pass; the store is not yet connected to an execution worker.
+  newer unsupported schemas without wiping them. The transactional repository
+  deduplicates identical submissions, rejects changed content under a reused
+  client ID, and commits state with its event atomically. Thirteen offline store
+  checks pass; the store is not yet connected to an execution worker.
 
 - **2026-09-14 — Durable agent-runtime contracts established (P09).** Added
   strict, versioned run-request, proposal and tool-receipt contracts under a
