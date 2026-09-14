@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P05 cancellation-safe command ownership
+
+- Cancellation of `run_command` now cleans up before it propagates: Windows
+  commands are placed in a kill-on-close Job Object (with `taskkill /T` fallback)
+  and pipe readers/process handles are reaped. POSIX retains process-group kill.
+  This fixes the Windows shell-child leak observed in the first regression run.
+- Added a temporary-child cancellation fixture (3/3) and reran the full offline
+  `system_tools_test.py` suite (109/109). No provider call, build/install or
+  user data touched. Next: P06 tool-budget finalization. Existing untracked
+  files preserved.
+
 ### 2026-09-14 · Codex · P04 honest computer-query outcomes
 
 - Converted targeted UI/browser inspect and find operations to explicit

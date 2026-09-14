@@ -342,6 +342,12 @@ match becomes an error `ToolOutcome`, rather than a successful-looking string
 which encourages the model to continue from a target that does not exist.
 Broad listings (`ui_list_windows`) remain successful informational results.
 
+Desktop shell commands have an ownership boundary as well: cancellation first
+closes a Windows kill-on-close job containing the shell and its descendants,
+then uses the existing process-tree fallback and reaps pipe readers. POSIX keeps
+its detached process-group kill. Cancellation is re-raised after cleanup, so a
+request interruption cannot be mistaken for a completed command result.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

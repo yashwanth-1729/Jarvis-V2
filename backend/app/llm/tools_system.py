@@ -210,6 +210,83 @@ async def _kill_tree(process: asyncio.subprocess.Process) -> None:
             pass
 
 
+def _windows_kill_on_close_job(pid: int) -> int | None:
+    """Put an owned Windows command tree in a kill-on-close job, if allowed.
+
+    `taskkill /T` is a best-effort fallback, not an ownership guarantee: a
+    `cmd /c` child can escape the shell's visible tree before taskkill finishes.
+    A job object gives the runtime a kernel-enforced lifetime for processes it
+    created. Packaged hosts occasionally already run inside a restrictive job,
+    so failure deliberately falls back without preventing the command itself.
+    """
+    if os.name != "nt":
+        return None
+
+    import ctypes
+    from ctypes import wintypes
+
+    class _BasicLimitInformation(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_int64),
+            ("PerJobUserTimeLimit", ctypes.c_int64),
+            ("LimitFlags", wintypes.DWORD),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", wintypes.DWORD),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", wintypes.DWORD),
+            ("SchedulingClass", wintypes.DWORD),
+        ]
+
+    class _IoCounters(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_uint64) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+        )]
+
+    class _ExtendedLimitInformation(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", _BasicLimitInformation),
+            ("IoInfo", _IoCounters),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    job = kernel32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE / JobObjectExtendedLimitInformation.
+    limits = _ExtendedLimitInformation()
+    limits.BasicLimitInformation.LimitFlags = 0x00002000
+    if not kernel32.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+        kernel32.CloseHandle(job)
+        return None
+
+    # PROCESS_SET_QUOTA | PROCESS_TERMINATE is enough to attach and later
+    # terminate the process tree, without asking for broad process access.
+    process_handle = kernel32.OpenProcess(0x0100 | 0x0001, False, pid)
+    if not process_handle:
+        kernel32.CloseHandle(job)
+        return None
+    try:
+        if not kernel32.AssignProcessToJobObject(job, process_handle):
+            kernel32.CloseHandle(job)
+            return None
+    finally:
+        kernel32.CloseHandle(process_handle)
+    return int(job)
+
+
+def _close_windows_job(job: int | None) -> None:
+    if job is not None and os.name == "nt":
+        import ctypes
+
+        ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(job)
+
+
 async def run_command(
     command: str,
     *,
@@ -234,6 +311,10 @@ async def run_command(
         # that spawns children otherwise leaves them running after a timeout.
         start_new_session=os.name != "nt",
     )
+    # Windows has no POSIX process-group equivalent that reliably contains a
+    # shell's descendants. A close-on-owner-exit job gives cancellation that
+    # ownership boundary; failures retain the existing taskkill fallback.
+    windows_job = _windows_kill_on_close_job(process.pid)
 
     out_chunks: list[bytes] = []
     err_chunks: list[bytes] = []
@@ -258,6 +339,28 @@ async def run_command(
         asyncio.create_task(drain(process.stderr, err_chunks)),
     ]
 
+    async def stop_and_reap() -> None:
+        """End an owned command and release its pipe-reader tasks.
+
+        The timeout path and parent-turn cancellation path intentionally share
+        this exact cleanup. The latter must re-raise its cancellation after
+        cleanup; turning it into a normal command result would let a cancelled
+        API request continue as though the user were still waiting.
+        """
+        nonlocal windows_job
+        _close_windows_job(windows_job)
+        windows_job = None
+        await _kill_tree(process)
+        for reader in readers:
+            reader.cancel()
+        # Reap it, so neither timeout nor caller cancellation leaves a zombie
+        # or a live pipe transport which emits unrelated errors at shutdown.
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except (asyncio.TimeoutError, ProcessLookupError):
+            pass
+        await asyncio.gather(*readers, return_exceptions=True)
+
     try:
         await asyncio.wait_for(
             asyncio.gather(*readers, process.wait()), timeout=timeout
@@ -265,17 +368,16 @@ async def run_command(
         timed_out = False
     except asyncio.TimeoutError:
         timed_out = True
-        await _kill_tree(process)
-        for reader in readers:
-            reader.cancel()
-        # Reap it, so the timeout leaves neither a zombie nor -- on Windows,
-        # where an unclosed pipe transport screams from __del__ at interpreter
-        # shutdown -- a stream of unrelated tracebacks in the log.
-        try:
-            await asyncio.wait_for(process.wait(), timeout=5)
-        except (asyncio.TimeoutError, ProcessLookupError):
-            pass
-        await asyncio.gather(*readers, return_exceptions=True)
+        await stop_and_reap()
+    except asyncio.CancelledError:
+        # An API disconnect, voice interruption or durable-job cancellation is
+        # not merely a stopped await: this process is ours, so it must not
+        # survive its owner. Cleanup first, then preserve cancellation for the
+        # caller to handle according to its own terminal-state policy.
+        await stop_and_reap()
+        raise
+
+    _close_windows_job(windows_job)
 
     def decode(chunks: list[bytes]) -> str:
         # errors="replace": a command emitting one bad byte must not fail the

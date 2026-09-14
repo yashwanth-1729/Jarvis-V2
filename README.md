@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Cancelled shell commands no longer leave Windows children.**
+  Owned commands now use a Windows kill-on-close job in addition to the existing
+  process-tree fallback; cancellation cleans up the job/readers then remains a
+  cancellation for the caller. The new child-process regression passes 3 checks
+  and the full offline system-tools suite passes 109. No live provider request,
+  build, installation or user-data mutation was performed.
+
 - **2026-09-14 — Computer searches now report honest failures.** Targeted UI
   and browser inspect/find operations return an error outcome for missing
   windows/tabs, invalid selectors or no match, rather than a success with an
