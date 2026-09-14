@@ -856,15 +856,69 @@ async def run_turn(
                 if not parse_error and outcome.refresh:
                     yield {"type": "refresh", "data": {"domains": sorted(outcome.refresh)}}
         else:
-            yield {
-                "type": "error",
-                "data": {
-                    "message": (
-                        f"Stopped after {settings.jarvis_max_tool_iterations} tool rounds "
-                        "to avoid a runaway loop. Ask me to continue if that was premature."
-                    )
-                },
+            # Every permitted round completed with at least one tool call. Do
+            # one final *tool-free* pass so the model can turn the receipts it
+            # already has into an answer instead of abandoning the user after
+            # the budget guard. Never execute a call from this pass: the guard
+            # remains a guard even if a provider ignores the empty tool list.
+            finalization = {
+                "role": "system",
+                "content": (
+                    "The tool-step budget has been reached. Do not call any tools. "
+                    "Use only the completed tool results already in this conversation "
+                    "to give the user a concise final answer, including any limits or "
+                    "unfinished work plainly."
+                ),
             }
+            final_request = list(messages)
+            if reminder is not None:
+                final_request.append(reminder)
+            final_request.append(finalization)
+
+            async for chunk in provider.stream(
+                final_request,
+                [],
+                model=model,
+                max_tokens=max_tokens,
+                incremental=voice or stream_typed,
+                reasoning_effort=reasoning_effort,
+            ):
+                if chunk.kind == "text":
+                    yield {"type": "text", "data": {"text": chunk.text}}
+                elif chunk.kind == "reasoning":
+                    yield {"type": "thinking", "data": {"text": chunk.text}}
+
+            result = provider.last_result()
+            finish_reason = result.finish_reason
+            for key, value in (result.usage or {}).items():
+                usage_total[key] = usage_total.get(key, 0) + value
+
+            final_text = result.content.strip()
+            if not final_text:
+                final_text = (
+                    "I completed the available tool steps, but could not generate a final "
+                    "answer after reaching the tool-step limit."
+                )
+                yield {"type": "text", "data": {"text": final_text}}
+            assistant_text_parts.append(final_text)
+
+            if result.tool_calls:
+                logger.warning("Tool-free finalization still requested %d tool(s)", len(result.tool_calls))
+                yield {
+                    "type": "error",
+                    "data": {
+                        "message": (
+                            "The model requested another action after the safety limit; "
+                            "that action was not run."
+                        )
+                    },
+                }
+
+            # Do not serialize unexpected finalization tool calls: there is no
+            # matching receipt because the safety budget forbids executing them.
+            final_assistant = _assistant_message(final_text, [])
+            await crud.append_chat_message("assistant", final_text, final_assistant)
+            messages.append(final_assistant)
 
     except ProviderError as exc:
         yield {"type": "error", "data": {"message": str(exc)}}

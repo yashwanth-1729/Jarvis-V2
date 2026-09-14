@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P06 bounded tool-loop finalization
+
+- Replaced the old post-limit error-only path with one tool-free finalization
+  request. It receives the completed receipts, cannot execute/serialize any new
+  tool call, and persists a normal final assistant turn; unexpected calls are
+  explicitly refused. The existing action-round cap remains intact.
+- Added an offline two-round fixture proving exactly two actions, one empty-tool
+  finalization call, normal terminal event and replay-safe transcript (5/5). No
+  provider call, build/install or user data touched. Next: P07 desktop readiness
+  semantics. Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · P05 cancellation-safe command ownership
 
 - Cancellation of `run_command` now cleans up before it propagates: Windows

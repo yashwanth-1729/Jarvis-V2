@@ -348,6 +348,13 @@ then uses the existing process-tree fallback and reaps pipe readers. POSIX keeps
 its detached process-group kill. Cancellation is re-raised after cleanup, so a
 request interruption cannot be mistaken for a completed command result.
 
+The synchronous agent loop has a hard cap on action rounds. If every allowed
+round asks for tools, it performs exactly one final provider pass with an empty
+tool list and a finalization instruction; no requested action from that pass is
+executed or serialized as a dangling call. This gives completed receipts a
+user-facing conclusion while preserving the runaway-loop guard. Longer work
+belongs to the later durable run/step runtime rather than increasing this cap.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

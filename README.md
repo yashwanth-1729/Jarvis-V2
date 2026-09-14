@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Tool-loop limits now produce a final answer.** When every
+  permitted tool round is used, JARVIS makes one final provider pass with no
+  tools, reports from completed receipts, and refuses any further requested
+  action. The offline bounded-loop regression passes 5 checks. No live provider
+  request, build, installation or user-data mutation was performed.
+
 - **2026-09-14 — Cancelled shell commands no longer leave Windows children.**
   Owned commands now use a Windows kill-on-close job in addition to the existing
   process-tree fallback; cancellation cleans up the job/readers then remains a
