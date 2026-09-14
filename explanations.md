@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P10 isolated runtime database
+
+- Added a separate version-1 runtime SQLite schema and owner for sessions, runs,
+  steps and ordered events. It uses WAL + synchronous FULL, foreign keys, useful
+  admission/replay indexes and refuses unsupported newer versions without wipe.
+- Added `JARVIS_RUNTIME_DB_PATH`; isolated tests derive a sibling runtime path
+  from an overridden personal DB. Offline database checks pass 7/7 and P09
+  contracts remain 6/6. No worker, API, provider call, install or personal data
+  touched. Next: P11 transactional repository and migrations. Untracked files
+  preserved.
+
 ### 2026-09-14 · Codex · P09 durable runtime contracts
 
 - Added `app.agent_runtime.contracts`: separate, versioned Pydantic contracts

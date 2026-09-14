@@ -175,6 +175,10 @@ class Settings(BaseSettings):
     # --- Storage -----------------------------------------------------------
     jarvis_db_path: str = Field(default="storage/jarvis_memory.db", alias="JARVIS_DB_PATH")
     jarvis_db_pool_size: int = Field(default=5, alias="JARVIS_DB_POOL_SIZE")
+    # Separate control-plane store for durable agent runs. An empty value
+    # derives a sibling path from JARVIS_DB_PATH, which keeps isolated tests
+    # isolated without requiring every fixture to know about this newer store.
+    jarvis_runtime_db_path: str = Field(default="", alias="JARVIS_RUNTIME_DB_PATH")
 
     #: True when the *client* owns the user's data and this backend is only
     #: the AI runtime -- IndexedDB is authoritative and SQLite is a disposable
@@ -243,6 +247,16 @@ class Settings(BaseSettings):
     def db_file(self) -> Path:
         path = Path(self.jarvis_db_path)
         return path if path.is_absolute() else BACKEND_ROOT / path
+
+    @property
+    def runtime_db_file(self) -> Path:
+        if self.jarvis_runtime_db_path.strip():
+            path = Path(self.jarvis_runtime_db_path)
+            return path if path.is_absolute() else BACKEND_ROOT / path
+        personal = self.db_file
+        if self.jarvis_db_path == "storage/jarvis_memory.db":
+            return BACKEND_ROOT / "storage" / "jarvis_runtime.db"
+        return personal.with_name(f"{personal.stem}_runtime{personal.suffix or '.db'}")
 
     @property
     def cors_origins(self) -> list[str]:

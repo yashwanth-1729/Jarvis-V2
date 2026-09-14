@@ -375,6 +375,14 @@ model proposals and host-issued receipts; it does not yet add a worker, API or
 runtime database. This prevents model text from carrying writable approval,
 verification or run-status claims before later storage/lease packets exist.
 
+Durable control state uses a separate `jarvis_runtime.db`, never the personal
+record database or client seed/drain mirror. Schema version 1 contains runtime
+sessions, runs, steps and per-run ordered events with foreign keys and admission,
+status and replay indexes. Connections use WAL with `synchronous=FULL`; opening a
+newer unsupported schema fails without downgrade or deletion. Tests which replace
+`JARVIS_DB_PATH` derive a sibling runtime fixture path unless an explicit
+`JARVIS_RUNTIME_DB_PATH` is supplied.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Separate durable runtime database added (P10).** Agent-control
+  state now has an isolated, versioned SQLite schema for sessions, runs, steps
+  and ordered events. It uses WAL, `synchronous=FULL`, foreign keys and refuses
+  newer unsupported schemas without wiping them. Seven offline isolation and
+  durability checks pass; the store is not yet connected to an execution worker.
+
 - **2026-09-14 — Durable agent-runtime contracts established (P09).** Added
   strict, versioned run-request, proposal and tool-receipt contracts under a
   separate control-plane package. Unknown authority claims, version coercion and
