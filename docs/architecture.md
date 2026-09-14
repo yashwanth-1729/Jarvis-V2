@@ -390,6 +390,14 @@ predicate and insert the corresponding monotonically ordered event in the same
 serialized `BEGIN IMMEDIATE` transaction. Events publish only after this layer
 returns from commit; restart fixtures reopen the file and replay the same facts.
 
+Runtime schema upgrades are independently versioned and execute under an
+exclusive transaction; a failed migration rolls back both DDL and `user_version`.
+Maintenance accepts only a disconnected (quiesced) runtime store. Backup uses
+SQLite's backup API, records SHA-256/size/schema, and runs `integrity_check`.
+Restore requires the expected manifest checksum, verifies a staged copy, then
+atomically replaces the exact runtime file and removes only its stale WAL/SHM
+sidecars. These helpers are not an automatic destructive startup behavior.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

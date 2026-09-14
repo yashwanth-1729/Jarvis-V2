@@ -1,4 +1,4 @@
--- JARVIS durable agent control plane, schema version 1.
+-- JARVIS durable agent control plane, schema version 2.
 -- This database is never part of client-owned personal-data seed/drain/sync.
 
 CREATE TABLE IF NOT EXISTS runtime_sessions (
@@ -71,4 +71,10 @@ CREATE INDEX IF NOT EXISTS idx_agent_steps_run_status
 CREATE INDEX IF NOT EXISTS idx_agent_events_replay
     ON agent_events (run_id, seq);
 
-PRAGMA user_version = 1;
+CREATE TABLE IF NOT EXISTS runtime_migration_history (
+    version     INTEGER PRIMARY KEY,
+    applied_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (2);
+
+PRAGMA user_version = 2;

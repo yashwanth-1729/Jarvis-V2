@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P11 runtime migrations and restoration
+
+- Added exclusive, transactional runtime migrations and advanced the isolated
+  schema to v2 with migration history. Interrupted DDL/version changes roll back;
+  newer schemas remain refused.
+- Added quiesced SQLite backup and restore with SHA-256 manifest, schema/integrity
+  checks, staged verification and atomic exact-file replacement. Temporary-only
+  fixtures pass: migration/restore 5/5, database 7/7, repository 6/6, contracts
+  6/6. No production DB, provider, install or personal data touched. Next: P12
+  read-only worker/state machine. Untracked files preserved.
+
 ### 2026-09-14 · Codex · P10 isolated runtime database
 
 - Added a separate version-1 runtime SQLite schema and owner for sessions, runs,

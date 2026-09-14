@@ -9,9 +9,10 @@ from typing import AsyncIterator
 
 import aiosqlite
 
+from app.agent_runtime import migrations
 from app.core.config import settings
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = migrations.TARGET_VERSION
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
@@ -33,13 +34,11 @@ class RuntimeDatabase:
         await connection.execute("PRAGMA synchronous = FULL")
         await connection.execute("PRAGMA foreign_keys = ON")
         await connection.execute("PRAGMA busy_timeout = 5000")
-        version = int((await (await connection.execute("PRAGMA user_version")).fetchone())[0])
-        if version > SCHEMA_VERSION:
+        try:
+            await migrations.apply(connection)
+        except BaseException:
             await connection.close()
-            raise RuntimeError(
-                f"Runtime database schema {version} is newer than supported {SCHEMA_VERSION}; "
-                "refusing to downgrade or wipe it."
-            )
+            raise
         await connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         await connection.commit()
         self._connection = connection

@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Runtime migrations and verified restoration added (P11).**
+  Runtime schema upgrades now hold an exclusive transaction, advance versions
+  monotonically and roll back interrupted DDL. Quiesced backups use SQLite's
+  backup API and produce checksum/version manifests; restore verifies checksum
+  and integrity before atomic replacement. All 24 runtime contract/storage/
+  migration checks pass against temporary files only.
+
 - **2026-09-14 — Separate durable runtime database added (P10).** Agent-control
   state now has an isolated, versioned SQLite schema for sessions, runs, steps
   and ordered events. It uses WAL, `synchronous=FULL`, foreign keys and refuses
