@@ -149,6 +149,22 @@ class GeminiChat:
         #: thoughtSignature note. Process-lifetime; a few hundred bytes per
         #: call, and this process does not run long enough for that to matter.
         self._signatures: dict[str, dict[str, str]] = {}
+        #: Gemini's streamed ``functionCall`` parts may omit a call id. Their
+        #: position is only local to one response, so using ``call_0`` again on
+        #: the next response overwrites the earlier call's thought signature.
+        #: The agent transcript needs an id unique for this provider instance,
+        #: including across tool rounds, not merely inside one SSE response.
+        self._next_tool_call_id = 0
+
+    def _allocate_tool_call_id(self) -> str:
+        """Return a provider-instance-unique transcript id for one call.
+
+        Gemini does not require us to replay an opaque call id, only the call
+        name, arguments and thought signature. Keeping our own stable id avoids
+        collisions when Gemini omits one or repeats an upstream value.
+        """
+        self._next_tool_call_id += 1
+        return f"gemini_call_{self._next_tool_call_id}"
 
     def last_result(self) -> ChatResult:
         return self._result
@@ -290,7 +306,6 @@ class GeminiChat:
         yielded, exactly like `SarvamChat.stream`'s own pre-consumption check.
         A search-related failure at this point costs nothing to retry.
         """
-        call_index = 0
         url = f"/models/{self.model}:streamGenerateContent"
         async with self._http().stream(
             "POST", url, params={"alt": "sse"}, json=payload
@@ -331,8 +346,7 @@ class GeminiChat:
 
                     function_call = part.get("functionCall")
                     if function_call:
-                        call_id = function_call.get("id") or f"call_{call_index}"
-                        call_index += 1
+                        call_id = self._allocate_tool_call_id()
                         signature = part.get("thoughtSignature", "")
                         if signature:
                             self._signatures[call_id] = {

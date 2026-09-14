@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P02 Gemini tool-call identity repair
+
+- Implemented the first playbook repair packet: `GeminiChat` now allocates a
+  backend-unique `gemini_call_N` transcript ID for every function call, including
+  calls with missing or reused upstream IDs. This prevents a later response from
+  overwriting earlier function-name/thought-signature replay metadata.
+- Added an offline two-response fixture to `tests/gemini_provider_test.py`; all
+  20 checks pass. Updated README and architecture docs. No provider call, runtime
+  build/install, real database mutation or user data was touched. Next: P03
+  receipt ordering/interruption regression. Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · Playbook-to-source implementation audit
 
 - User asked to check the complete codebase against the new agentic integration

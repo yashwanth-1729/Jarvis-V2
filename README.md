@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Gemini multi-round tool replay preserves missing-ID calls.**
+  Gemini function calls now receive backend-unique transcript IDs, so a later
+  response cannot overwrite an earlier call's name or required thought signature.
+  Added an offline two-round replay fixture; `gemini_provider_test.py` passes 20
+  checks. No live provider request, build, installation or user-data mutation was
+  performed.
+
 - **2026-09-14 — Detailed agentic integration playbook (documentation only).**
   Added [step-by-step implementation guidance](docs/agentic-integration-playbook.md)
   covering current bug repairs, durable jobs, approval enforcement, ownership-aware

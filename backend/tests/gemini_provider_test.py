@@ -160,6 +160,73 @@ async def main() -> int:
         contents[1],
     )
 
+    # Gemini often omits ``functionCall.id``. IDs must still stay unique across
+    # multiple responses in one tool loop: a response-local ``call_0`` used to
+    # overwrite the earlier thought signature and replay its arguments under
+    # the later function's name.
+    print("\n== Gemini missing-ID tool calls remain distinct across rounds ==")
+    response_parts = iter([
+        {"name": "web_search", "args": {"query": "alpha"}, "signature": "sig-alpha"},
+        {"name": "fetch_url", "args": {"url": "https://example.invalid"}, "signature": "sig-url"},
+    ])
+
+    class MissingCallIdTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            item = next(response_parts)
+            event = {
+                "candidates": [{
+                    "content": {"parts": [{
+                        "functionCall": {"name": item["name"], "args": item["args"]},
+                        "thoughtSignature": item["signature"],
+                    }]},
+                    "finishReason": "STOP",
+                }],
+            }
+            return httpx.Response(
+                200,
+                content=("data: " + json.dumps(event) + "\n\n").encode(),
+                request=request,
+            )
+
+    replay_chat = GeminiChat()
+    replay_chat._client = httpx.AsyncClient(
+        base_url="https://gemini.invalid", transport=MissingCallIdTransport()
+    )
+    replay_messages = [{"role": "user", "content": "research alpha"}]
+    async for _ in replay_chat.stream(replay_messages):
+        pass
+    first_call = replay_chat.last_result().tool_calls[0]
+    first_turn = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+            "id": first_call.id,
+            "type": "function",
+            "function": {"name": first_call.name, "arguments": first_call.arguments},
+        }],
+    }
+    replay_messages.extend([
+        first_turn,
+        {"role": "tool", "tool_call_id": first_call.id, "content": "fixture result"},
+    ])
+    async for _ in replay_chat.stream(replay_messages):
+        pass
+    second_call = replay_chat.last_result().tool_calls[0]
+    _, replayed_first = replay_chat._to_contents([first_turn])
+    check(
+        "missing-ID calls get distinct internal ids across responses",
+        first_call.id != second_call.id,
+        f"{first_call.id!r}, {second_call.id!r}",
+    )
+    check(
+        "later call cannot rewrite earlier function metadata on replay",
+        replayed_first[0]["parts"][0]["functionCall"]
+        == {"name": "web_search", "args": {"query": "alpha"}}
+        and replayed_first[0]["parts"][0]["thoughtSignature"] == "sig-alpha",
+        replayed_first[0],
+    )
+    await replay_chat.aclose()
+
     # ---------------------------------------------- EnglishChatProvider fallback
     print("\n== EnglishChatProvider: Gemini failure falls back to Sarvam ==")
 

@@ -424,6 +424,14 @@ first-contact call) before the carve-out existed, and it would have recurred
 identically for Gemini without generalizing the same rule to both keys
 rather than treating it as Sarvam-specific.
 
+Gemini tool-call replay uses a backend-issued `gemini_call_N` identity for every
+observed function call. Gemini's response-local position and optional upstream
+call ID are not transcript identities: reusing `call_0` on a later tool round
+would overwrite an earlier `thoughtSignature` and replay that earlier call under
+the later function name. The backend keeps its own unique ID with each call's
+name, arguments and signature; that ID is local to the provider instance, not an
+external action idempotency key.
+
 ## Remaining parts of the reference
 
 - **Continuous capture and partial ASR:** Still absent. ScriptProcessor captures
