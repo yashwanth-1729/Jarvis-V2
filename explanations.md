@@ -128,6 +128,31 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · Playbook-to-source implementation audit
+
+- User asked to check the complete codebase against the new agentic integration
+  playbook. Read source across agent/provider/tools/chat/voice/storage/desktop
+  bridge, inventory-searched the 36 packet areas, and ran offline
+  `gemini_provider_test.py` (18/18) plus `reasoning_routing_test.py` (20/20).
+- Finding: the playbook remains a proposed roadmap. No `agent_runtime` module,
+  durable run/step/approval/lease/artifact/domain-command store, run API, event
+  replay, workflow registry, evaluated model routing, or job UI exists. Do not
+  mark any P09+ runtime packet as implemented.
+- P00/P01 are partial only (standalone fixtures/environment notes, no universal
+  isolation/inventory gate). P02–P06 remain unimplemented and their audited bugs
+  are still in source: Gemini call index resets at `gemini.py:293`; tool receipt
+  follows result yield at `agent.py:834`/`:847`; computer queries default success
+  in `tools.py:2455`; command cancellation has no parent-cancellation cleanup;
+  the eighth round ends at `agent.py:855` without finalization. P07/P08 are
+  partial but faulty: TCP-only launcher readiness (`backend.rs:105`), discarded
+  child output (`:198`), spawn resets failure count (`:284`), and early bridge
+  seeded flag (`page.tsx:181`).
+- Existing browser/UI/scheduler/voice features are partial legacy foundations,
+  not fulfillment of P24–P30: browser is isolated, scheduler is reminders only,
+  and voice remains a 75-second request-bound turn. No source, dependencies,
+  provider calls, builds, installations or user data changed. Existing untracked
+  files preserved. Recommended implementation entry remains P00, then P02–P08.
+
 ### 2026-09-14 · Codex · Detailed agentic integration playbook
 
 - User requested a very long step-by-step Markdown guide that a less capable
