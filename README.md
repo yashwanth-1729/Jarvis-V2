@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Durable agent-runtime contracts established (P09).** Added
+  strict, versioned run-request, proposal and tool-receipt contracts under a
+  separate control-plane package. Unknown authority claims, version coercion and
+  model approval claims are rejected; the offline contract suite passes 6
+  checks. No worker, migration, provider request or personal-data mutation was
+  added.
+
 - **2026-09-14 — First-contact credential handoff is retryable.** Client-owned
   runtimes mark their first handshake complete only after both credentials and
   working-copy seed endpoints acknowledge it; a backend that is still starting

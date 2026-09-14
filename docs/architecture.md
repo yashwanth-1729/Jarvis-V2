@@ -368,6 +368,13 @@ or not-yet-started backend leaves this handshake retryable; it is not marked
 complete merely because the browser began a request. The acknowledgement means
 transport success, not that any specific optional provider key is configured.
 
+The initial durable-runtime boundary lives in `app.agent_runtime.contracts` and
+is intentionally separate from chat history and personal-record schemas. It
+currently defines versioned, extra-field-forbidden run requests, discriminated
+model proposals and host-issued receipts; it does not yet add a worker, API or
+runtime database. This prevents model text from carrying writable approval,
+verification or run-status claims before later storage/lease packets exist.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

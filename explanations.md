@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P09 durable runtime contracts
+
+- Added `app.agent_runtime.contracts`: separate, versioned Pydantic contracts
+  for run submission, discriminated tool/ask-user/completion/blocked proposals,
+  and host-issued tool receipts. Models forbid unknown fields and do not expose
+  writable approval, verification or run-state claims.
+- Added offline `agent_runtime_contracts_test.py` (6/6) plus syntax validation.
+  No runtime DB, worker, API, provider call, install or personal data was added.
+  Next: P10 separate runtime-store migration/design. Existing untracked files
+  preserved.
+
 ### 2026-09-14 · Codex · P08 acknowledged credential handshake
 
 - First-contact credentials/seed work now remains retryable until both endpoint
