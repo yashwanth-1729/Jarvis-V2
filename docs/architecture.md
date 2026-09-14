@@ -355,6 +355,13 @@ executed or serialized as a dangling call. This gives completed receipts a
 user-facing conclusion while preserving the runaway-loop guard. Longer work
 belongs to the later durable run/step runtime rather than increasing this cap.
 
+The desktop backend watchdog treats readiness as `GET /api/health` returning
+JARVIS's JSON `status: ok`, not merely a listening TCP port. A child process
+which does not pass that endpoint within the bounded health window is stopped
+and counted as a failed restart; the failure counter resets only after the
+health window, not on `Command::spawn`. This prevents a stale listener or
+crash-looping import from presenting a false-ready desktop app.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — Desktop backend readiness now uses the health endpoint.** The
+  native watchdog verifies JARVIS’s `/api/health` response rather than a bare
+  TCP connection, and counts starts that never become healthy as failures before
+  retrying. `backend.rs` passed targeted Rust formatting checks; no desktop
+  build/install was run, so packaged behavior still needs a later local test.
+
 - **2026-09-14 — Tool-loop limits now produce a final answer.** When every
   permitted tool round is used, JARVIS makes one final provider pass with no
   tools, reports from completed receipts, and refuses any further requested

@@ -30,6 +30,7 @@
 //!   surviving its window is a port conflict the next time the app opens, and
 //!   a mystery process holding the database.
 
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -100,14 +101,32 @@ const NO_WINDOW: u32 = 0x0800_0000;
 
 const PORT: u16 = 8000;
 
-/// Whether something is already serving. Cheap, and it is the difference
-/// between "start the backend" and "fight the one that is already running".
+/// Whether the local listener is the JARVIS backend and has finished starting.
+///
+/// A TCP accept alone is not readiness: a stale process, unrelated service, or
+/// Uvicorn process still importing the app can own the port. The desktop shell
+/// must only defer to an endpoint which answers JARVIS's health contract.
 pub fn already_running() -> bool {
-    TcpStream::connect_timeout(
-        &([127, 0, 0, 1], PORT).into(),
-        Duration::from_millis(300),
-    )
-    .is_ok()
+    let Ok(mut stream) =
+        TcpStream::connect_timeout(&([127, 0, 0, 1], PORT).into(), Duration::from_millis(300))
+    else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(600)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
+    if stream
+        .write_all(b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return false;
+    }
+
+    let mut response = [0_u8; 4096];
+    let Ok(size) = stream.read(&mut response) else {
+        return false;
+    };
+    let response = String::from_utf8_lossy(&response[..size]);
+    response.starts_with("HTTP/1.1 200") && response.contains("\"status\":\"ok\"")
 }
 
 /// Find `backend/` by walking up from the executable, then from the working
@@ -162,7 +181,13 @@ fn find_python(backend: &Path) -> Option<PathBuf> {
     candidates
         .into_iter()
         .find(|path| path.is_file())
-        .or_else(|| Some(PathBuf::from(if cfg!(windows) { "python" } else { "python3" })))
+        .or_else(|| {
+            Some(PathBuf::from(if cfg!(windows) {
+                "python"
+            } else {
+                "python3"
+            }))
+        })
 }
 
 /// Start the backend once and record the child, if one gets spawned.
@@ -219,21 +244,26 @@ fn try_start(state: &Backend) -> bool {
 /// as long as the window stays open.
 pub fn spawn(app: &AppHandle) {
     let state = app.state::<Backend>();
-    if already_running() {
+    let started_here = if already_running() {
         log::info!("backend already listening on {PORT}; leaving it alone");
+        false
     } else {
-        try_start(&state);
-    }
-    watch(app.clone());
+        try_start(&state)
+    };
+    watch(app.clone(), started_here);
 }
 
 /// Background loop: notice a dead backend and restart it, the way a normal
 /// app recovers from one of its own worker processes crashing instead of
 /// just going blank until relaunched.
-fn watch(app: AppHandle) {
+fn watch(app: AppHandle, initial_start_pending: bool) {
     std::thread::spawn(move || {
         let mut consecutive_failures = 0u32;
         let mut healthy_since: Option<std::time::Instant> = None;
+        // A successful spawn is only a start attempt, not a healthy backend.
+        // Keep it pending until it has survived the health window.
+        let mut restart_pending_health = initial_start_pending;
+        let mut restart_started_at = initial_start_pending.then(std::time::Instant::now);
 
         loop {
             std::thread::sleep(WATCHDOG_INTERVAL);
@@ -251,7 +281,7 @@ fn watch(app: AppHandle) {
                 .map(|status| matches!(status, Ok(None)))
                 .unwrap_or(false);
 
-            if child_alive {
+            if child_alive && already_running() {
                 // Reset the failure count once a restart has proven itself,
                 // not the instant it starts -- a backend that starts and
                 // immediately dies again should still count toward giving up.
@@ -260,10 +290,45 @@ fn watch(app: AppHandle) {
                 }
                 if healthy_since.is_some_and(|since| since.elapsed() >= WATCHDOG_HEALTHY_AFTER) {
                     consecutive_failures = 0;
+                    restart_pending_health = false;
+                    restart_started_at = None;
                 }
                 continue;
             }
             healthy_since = None;
+
+            if child_alive {
+                // A process that bound no healthy API endpoint is not ready.
+                // Give imports/migrations a bounded window, then restart the
+                // owned child instead of calling its PID a success forever.
+                if restart_pending_health
+                    && restart_started_at
+                        .is_some_and(|started| started.elapsed() >= WATCHDOG_HEALTHY_AFTER)
+                {
+                    if let Ok(mut guard) = state.child.lock() {
+                        if let Some(mut child) = guard.take() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                        }
+                    }
+                    consecutive_failures += 1;
+                    restart_pending_health = false;
+                    restart_started_at = None;
+                    log::warn!("backend never passed the health endpoint ({consecutive_failures}/{WATCHDOG_MAX_CONSECUTIVE_FAILURES})");
+                }
+                continue;
+            }
+
+            // A child which dies before proving it stayed up is a failed
+            // restart even when `Command::spawn` itself succeeded. The old
+            // code reset this counter immediately on spawn, allowing an
+            // endless crash/restart loop.
+            if restart_pending_health {
+                consecutive_failures += 1;
+                restart_pending_health = false;
+                restart_started_at = None;
+                log::warn!("backend exited before becoming healthy ({consecutive_failures}/{WATCHDOG_MAX_CONSECUTIVE_FAILURES})");
+            }
 
             // Our own child isn't running, but something else might be —
             // another instance, or a developer's own `run.ps1`. Leave it
@@ -281,7 +346,8 @@ fn watch(app: AppHandle) {
 
             log::warn!("backend is not responding; attempting to restart it");
             if try_start(&state) {
-                consecutive_failures = 0;
+                restart_pending_health = true;
+                restart_started_at = Some(std::time::Instant::now());
             } else {
                 consecutive_failures += 1;
             }

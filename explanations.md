@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P07 truthful desktop backend readiness
+
+- Replaced TCP-only desktop readiness with a bounded `GET /api/health` probe
+  requiring JARVIS's `{"status":"ok"}` response. Watchdog starts remain pending
+  until the health window passes; an alive-but-unhealthy owned child is stopped
+  and counted, fixing the prior immediate-counter-reset crash-loop behavior.
+- Ran targeted `rustfmt --check src/backend.rs` and `git diff --check`. No
+  desktop build, packaging, installation or live provider/user-data action was
+  run (and no build cache was placed on C:). Next: P08 credential handshake
+  acknowledgement. Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · P06 bounded tool-loop finalization
 
 - Replaced the old post-limit error-only path with one tool-free finalization
