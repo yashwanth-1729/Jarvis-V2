@@ -132,6 +132,11 @@ the silence timer. Unmuting resumes the same voice session.
 
 ## Current architecture
 
+For the proposed next-generation agent runtime, see the detailed
+[agentic integration playbook](docs/agentic-integration-playbook.md): 32 chapters,
+36 ordered implementation packets, smaller-model execution and coding handoffs,
+verification gates and rollback procedures. This is a plan, not shipped behavior.
+
 ```mermaid
 flowchart TD
     UI[Next.js / React UI] --> API[FastAPI API]
@@ -452,6 +457,13 @@ a boundary, protocol, dependency, provider, storage policy or platform behavior
 changes. Record checks actually run and distinguish source changes from installed
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
+
+- **2026-09-14 — Detailed agentic integration playbook (documentation only).**
+  Added [step-by-step implementation guidance](docs/agentic-integration-playbook.md)
+  covering current bug repairs, durable jobs, approval enforcement, ownership-aware
+  data changes, browser/desktop tools, voice, Android limits, evaluation and using
+  smaller coding/runtime models. Checked chapter links, packet references and JSON
+  examples. No runtime features, dependencies, builds or installations changed.
 
 - **2026-09-14 — Agentic reliability audit (diagnosis only).** Added
   [findings and staged upgrade plan](docs/agentic-audit-2026-09-14.md), including

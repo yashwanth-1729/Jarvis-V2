@@ -128,6 +128,26 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · Detailed agentic integration playbook
+
+- User requested a very long step-by-step Markdown guide that a less capable
+  coding model could follow while preserving quality. Created
+  `docs/agentic-integration-playbook.md` (about 19,000 words, 32 chapters and 36
+  dependency-scoped work packets); linked it from README.
+- Covers both smaller coding-model handoffs and smaller models inside JARVIS:
+  explicit contracts, deterministic checks, durable state, real approvals,
+  domain-owner ACKs, bounded recovery/escalation, capabilities, evaluation and
+  release/rollback. Future features are explicitly proposed, not implemented.
+- Important source-aligned decision: account for this configuration's desktop
+  client-owned data mode; new runtime records must not live in a replaceable
+  personal-data working copy. Do not infer ownership from the Android flag.
+- Verified 32 TOC targets, unique anchors, 36 packet definitions/references,
+  balanced code fences and four parseable JSON examples. Read official technical
+  references; no application tests, installs, provider calls or builds were needed
+  for documentation. Prior audit results remain separately labeled.
+- Next implementation packet is P00. No feature work has been authorized or
+  completed merely by writing this plan. Existing untracked files preserved.
+
 ### 2026-09-14 · Codex · Agentic reliability diagnosis, no implementation
 
 - User asked why agentic behavior is weak and how to reach/exceed OpenClaw-level
