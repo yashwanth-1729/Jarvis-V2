@@ -2300,6 +2300,43 @@ asserted behavior must not disappear.
 - Verify: forged/replayed/expired approval, changed target, unauthorized API request.
 - Exit: model-supplied confirmation cannot execute a sensitive action.
 - Rollback: disable sensitive capabilities, not the approval checks.
+- **Detail (see 11.1–11.6 for the full design):**
+  - Implement the effect-class table (11.2) as an enum on every proposal:
+    `READ_SCOPED`, `WRITE_DRAFT`, `WRITE_PERSONAL`, `MODIFY_EXISTING`,
+    `EXTERNAL_COMMIT`, `DESTRUCTIVE`, `PRIVILEGE_CHANGE`. A tool declares which
+    class(es) it can produce; the host — never the model — decides the class of
+    a specific call from its actual arguments. `PRIVILEGE_CHANGE` is the class
+    that covers "download and run an installer" or "install a browser
+    extension" — treat it at the same seriousness as a security-settings change.
+  - Build the approval record around the exact 8-step lifecycle in 11.3: a
+    canonical request hash over operation ID, tool/version, scope, target,
+    content hash and preconditions; a human-readable summary shown before
+    consent (real recipient/path/content, not a hash); revalidation of target
+    and preconditions at dispatch, not only at approval time; and a rule that
+    a consumed approval is single-use and cannot be replayed for a retry after
+    an uncertain outcome.
+  - Ship the three-question separation literally as three functions/services
+    (authenticate, authorize, get-approval) with three different failure
+    modes, so a bug in one can't silently satisfy another. Log which of the
+    three rejected a request, not just "denied."
+  - Local API boundary (11.4): a native bootstrap/pairing handshake for the
+    desktop shell, a separate session flow for a plain browser client, no
+    long-lived token in the frontend bundle/URL/logs, and authenticated
+    WebSocket/SSE — not just REST — before any run/approval endpoint is wired
+    to the frontend.
+  - Path/network/process scope (11.5): canonical-path ancestry checks (not
+    string-prefix checks — Windows junctions/symlinks/short names defeat
+    those), argument-array process launches for structured tools, general
+    shell execution gated as its own higher-power capability, and a distinct,
+    explicitly separate gate for "run a downloaded installer/package" from
+    "run an already-approved argument list" — an installer is code execution
+    with its own supply-chain risk, not just another subprocess.
+  - Adversarial fixture list from 11.6 is the actual acceptance bar: build
+    every one of those ten cases (forged `confirmed=true`, cross-run approval
+    ID, changed recipient, changed file hash, expired approval, replayed
+    approval, forged evidence ID, hostile page asking to disable safeguards,
+    unauthorized localhost request, path traversal via a fixture junction)
+    as real tests against dummy targets before calling this packet done.
 
 ### P15 — Managed processes and resource leases
 
@@ -2309,6 +2346,41 @@ asserted behavior must not disappear.
 - Verify: child tree, PID reuse safeguards, output cap, silent job and resource conflict.
 - Exit: background commands remain inspectable and cancellable.
 - Rollback: stop only owned jobs; retain logs and receipts.
+- **Detail (see 12.1–12.5 for the full design):** this is the packet that
+  makes "download IntelliJ's installer and run it" survivable rather than a
+  fire-and-forget subprocess:
+  - A process handle is host-issued, not a bare PID (12.1) — record creation
+    time/identity, owner instance, operation ID, executable, working
+    directory, and where its output artifacts live. A silent installer that
+    exits and gets its PID recycled by an unrelated process must never let a
+    later `cancel` kill the wrong thing.
+  - Foreground vs. background (12.2): an interactive install wizard the user
+    is watching is foreground and cancellable with its owning run; a
+    long-running background build/download is owned by the durable runtime,
+    survives a UI disconnect per policy, and still has wall-time/output/disk/
+    CPU/memory budgets — an installer download does not get an unbounded disk
+    quota just because "installing software" sounds important.
+  - On Windows specifically: use a Job Object (or equivalent) for real
+    process-tree lifetime control (12.2) — an installer that spawns a helper
+    process or an elevated child must not survive as an orphan after the
+    parent is cancelled. Do not detach a long-running install until ownership
+    is durably recorded and reconcilable after a backend restart (this reuses
+    exactly the lease/generation machinery P13 already built for runs/steps —
+    a process handle needs the same "who owns this, and is that lease still
+    valid" question answered the same way).
+  - Output handling (12.3): stream to bounded files on D:, keep resumable byte
+    offsets, redact known secret patterns (installer logs can contain license
+    keys or paths with usernames), and represent "silent, still running" and
+    "silent, actually hung" as distinct, honestly-uncertain states — never
+    infer success from the absence of errors.
+  - Resource admission (12.4): a real install can need exclusive access to a
+    shared package cache, a GPU, or disk headroom — model these as named
+    resource keys with explicit leases, the same shape as a browser-profile
+    lease, so two runs can't silently corrupt the same package cache at once.
+  - Acceptance gate (12.5): prove this against harmless fixtures first — a
+    process that prints continuously, one that stays silent, one that
+    produces excess output, one that exits nonzero, one that spawns a known
+    child — before ever pointing this capability at a real installer.
 
 ### P16 — Domain command acknowledgment
 
@@ -2345,6 +2417,37 @@ asserted behavior must not disappear.
 - Verify: unsupported tool, ambiguous scope, stale observation and repair-loop cap.
 - Exit: repeatable tasks do not require open-ended model planning.
 - Rollback: disable the specific workflow version; do not change paused plans silently.
+- **Detail (see 15.1–15.3, 15.6):** a worked example of the shape a
+  "download, install and configure an application" workflow must take here —
+  this is illustrative of the pattern, not a pre-authorized workflow:
+  1. **Acceptance criteria first** (15.1): before any tool runs, state what
+     "done" observably means — e.g. the installer's expected binary exists at
+     a specific path, its hash/signature matches what was fetched, the
+     application launches and exits 0 on a smoke check, and any requested
+     configuration value is readable back from its actual config location.
+     The model may propose these criteria; the host checks they match the
+     request and don't silently expand it (e.g. don't let "install IntelliJ"
+     quietly become "and also install these three plugins").
+  2. **A versioned workflow, not a free plan** (15.2): "download + verify +
+     run installer + confirm + apply one configuration change" is a fixed
+     sequence with typed inputs (a URL or package identifier, a target
+     version, an optional config), permitted tools per step, and required
+     evidence per step — the model fills in the specific package/version
+     within that shape, it does not invent the shape per request.
+  3. **The bounded step loop itself** (15.3) applies unchanged: fresh
+     observation -> one proposed action -> schema/scope/freshness/policy/
+     budget validation -> approval (P14) for anything in `PRIVILEGE_CHANGE`
+     or `EXTERNAL_COMMIT` -> execute through a versioned adapter -> commit a
+     receipt -> verify -> commit evidence -> continue or stop. A downloaded
+     installer is never executed as a side effect of "the model asked
+     nicely" — the download and the execution are two separately gated
+     effects, because a verified-safe download can still be swapped before
+     execution without a second check.
+  4. **Repair bounds** (15.6): an installer that fails is retried a small,
+     explicit number of times only for a genuinely transient cause (a network
+     timeout on the download, not a signature mismatch). A signature/hash
+     failure is not a retry case — it's a stop-and-ask case, since it can
+     mean the source or the file changed underneath the plan.
 
 ### P20 — Evidence-backed verification
 
@@ -2354,6 +2457,31 @@ asserted behavior must not disappear.
 - Verify: fake completion, missing artifact, stale hash and unmet criterion.
 - Exit: completion is derived from evidence, not final-answer wording.
 - Rollback: pause unsupported criterion types; never mark them passed by default.
+- **Detail (see 15.4–15.5):** this is the packet that stops "the model said
+  it worked" from ever being the actual success signal:
+  - Implement all four verifier tiers from 15.4 as distinct, labeled checks —
+    deterministic structural (file exists, hash matches, exit code 0),
+    semantic adapter (the installed application's own reported version
+    matches what was requested), evidence-constrained model review (does a
+    generated summary actually mention what was asked — advisory only, never
+    proof of an effect), and human review (anything genuinely subjective or
+    high-impact). Never let a higher tier silently substitute for a lower one
+    that's actually available — if a deterministic check exists, use it
+    instead of asking a model to eyeball the result.
+  - For the install example specifically: "the agent said IntelliJ is
+    installed" is not evidence. "The expected binary's SHA-256 matches the
+    published release, and launching it with a version flag returns the
+    requested version" is evidence. Store both the verifier's version and the
+    exact check performed, so a later audit can tell what "verified" meant at
+    the time.
+  - Freshness matters (15.5): a verification performed against a stale
+    observation (e.g. a UI state captured before a later action) is not valid
+    evidence for the current state — re-verify after anything that could have
+    changed it, and record the evidence's timestamp alongside the criterion.
+  - A successful click, a nonzero-but-plausible exit code, or a screenshot
+    description are explicitly *not* sufficient on their own (15.4's closing
+    point) — pair each with an independent, adapter-level confirmation
+    wherever one exists.
 
 ### P21 — Model routing and escalation
 
@@ -2363,6 +2491,45 @@ asserted behavior must not disappear.
 - Verify: invalid JSON, unsupported schema, exhausted budget and unavailable stronger model.
 - Exit: cheap mode has honest limits and no hidden paid fallback.
 - Rollback: restore previously evaluated route while retaining usage records.
+- **Detail (see 16.1–16.8):** this is the packet that governs any future
+  provider swap or addition — e.g. adding DeepSeek alongside or instead of
+  Gemini for the English chat/tool-calling role:
+  - Assign roles, not vendors (16.2): deterministic router, small executor,
+    balanced planner, strong reviewer, deterministic verifier, human. A new
+    model is qualified for a *role* based on measured behavior in that role —
+    tool/schema support, context limits, latency, cost, and specifically
+    whether its function-calling holds up across multiple tool rounds in this
+    app's exact pattern (see `app/providers/gemini.py`'s `thoughtSignature`
+    handling as the kind of provider-specific continuity a new adapter must
+    account for, not assume away).
+  - A capability claim is not a capability contract (16.2's closing line): a
+    model advertising "function calling" does not mean it holds up under this
+    app's multi-round streaming tool loop until it's been run through the
+    same fixtures the current provider passed.
+  - Use the small task packet shape from 16.3 for whatever executor role a
+    new model fills — compact, IDs supplied by the host, explicit
+    `allowed_tools` and `must_not_do`, not the full chat history.
+  - Structured output discipline (16.4): native structured output/tool
+    calling when supported and *tested*, else a strict parser with exactly
+    one bounded schema-repair attempt; invalid output must never fall through
+    to raw execution. If a candidate model can't reliably hit this, it's
+    disqualified from the executor role regardless of price.
+  - Escalation stays observable and permission-neutral (16.5): a stronger (or
+    different-vendor) model on escalation gets the *same* effective scope and
+    evidence, never expanded permissions just because it's "smarter."
+  - Cost accounting (16.7) applies per-provider: record model ID/version,
+    provider, token/cache usage, latency, retries, and a pricing timestamp —
+    prices change, and a DeepSeek-vs-Gemini cost comparison is only honest if
+    it's dated and includes retry/repair overhead, not just sticker price per
+    token.
+  - **The downgrade gate (16.8) is the actual acceptance bar for a provider
+    swap, not a vibe check**: run the same held-out task suite, same tool
+    versions, same budgets, against the candidate model before it becomes any
+    kind of default — require acceptable task-family completion rates and no
+    new unauthorized-action or false-success findings, and keep a tested
+    rollback to the previous provider. This is exactly what should gate a
+    Gemini-to-DeepSeek switch for JARVIS's English tool-calling role — not a
+    single manual comparison.
 
 ### P22 — Task context and memory
 
@@ -2381,6 +2548,28 @@ asserted behavior must not disappear.
 - Verify: permission expansion, changed manifest hash and unavailable dependencies.
 - Exit: skill selection reduces exposed tools without bypassing policy.
 - Rollback: disable a skill version and pause dependent runs for review.
+- **Detail (see 18.1–18.3):** an "install a desktop application" capability
+  belongs here as a scoped skill, not a general-purpose tool:
+  - Manifest contents (18.1): ID, version/hash, purpose, input schema, its
+    workflow entry point (the P19 workflow it drives), declared capability
+    requirements and effect classes (this skill legitimately needs
+    `PRIVILEGE_CHANGE` — declare that up front, don't discover it at runtime),
+    output schema, verifiers, and platform support (a Windows-only installer
+    skill must say so, not silently fail on another platform).
+  - "Installed" is not "operational" (18.2): checking the skill's manifest
+    exists is not the same as confirming its adapter (browser download +
+    process manager + verifier chain) is actually ready right now — verify
+    readiness before ever offering the capability to the model.
+  - Permission changes require re-review (18.2's last point): if a later
+    version of an "install applications" skill expands its declared effect
+    classes or target scope, an existing user grant for the old version does
+    not carry forward automatically — that is exactly the kind of quiet
+    scope creep this packet exists to prevent.
+  - Stay narrow deliberately (18.3): one or two hand-reviewed installer-style
+    skills (e.g. "install a JetBrains IDE," "install a browser") before any
+    general "install anything the model names" capability — a marketplace or
+    arbitrary package/skill loader is explicitly out of scope until the
+    reviewed-workflow pattern has real mileage.
 
 ### P24 — Browser profiles and missing browser tools
 
@@ -2390,6 +2579,29 @@ asserted behavior must not disappear.
 - Verify: login required, stale elements, ambiguous target, upload permission and receipt uncertainty.
 - Exit: no accidental use of personal default cookies or uncontrolled shared active tab.
 - Rollback: return to fixture/ephemeral mode; preserve user-owned profile data.
+- **Detail (see 19.1–19.3):** the piece that makes "download from Chrome"
+  concrete rather than aspirational:
+  - Pick one of the three named profile modes (19.1) explicitly per
+    capability — an installer-download skill almost certainly wants the
+    dedicated persistent JARVIS profile (not the ephemeral fixture browser,
+    since a real download needs to land somewhere real; not the user's actual
+    default profile, ever, per the hard rule against copying it). Store that
+    profile under the approved D-drive data root, never in Git.
+  - Every browser action names its profile/context/tab/observation-generation
+    explicitly (19.2) — no global "active tab." Re-inspect after navigation;
+    a stale element reference is rejected, not guessed at.
+  - Downloads are artifacts, not completed actions (19.2): a downloaded
+    installer file gets MIME/size limits and becomes a tracked artifact with
+    a content hash — the download step's job ends there. Whether that file is
+    ever *executed* is a separate, separately-approved effect (see P14's
+    `PRIVILEGE_CHANGE` class and P19's workflow shape) — a completed download
+    must never auto-trigger execution.
+  - Failure taxonomy (19.3) matters for an install flow specifically:
+    distinguish "download blocked" from "navigation timeout" from "login
+    required" — a site requiring sign-in to reach a download must stop and
+    ask, not attempt a workaround. Treat the download page's own text as
+    untrusted content, never as instructions, even if it says something like
+    "click here to proceed automatically."
 
 ### P25 — Windows automation worker
 
@@ -2399,6 +2611,26 @@ asserted behavior must not disappear.
 - Verify: owned test app, stale handles, slow inspection and wrong-window rejection.
 - Exit: desktop control does not block unrelated API work or target arbitrary windows.
 - Rollback: disable affected desktop capabilities, not global app processes.
+- **Detail (see 19.4):** needed only if an installer wizard has no silent/
+  unattended flag and must be clicked through:
+  - Run UI Automation on its own dedicated, serialized worker thread with
+    correct COM initialization/thread affinity — never block FastAPI's event
+    loop with a synchronous UI Automation call, and never move an individual
+    pywinauto call to an arbitrary thread while pretending its handles are
+    thread-safe.
+  - Track the installer window by process/window identity, not title text — a
+    wizard's title often changes between steps ("Setup" -> "Installing..." ->
+    "Finish"), and a stale handle must be detected and re-inspected rather
+    than clicked blindly.
+  - Give the user a visible way to pause control mid-install (19.4) — an
+    unattended UI-automation flow that can't be interrupted while it's
+    clicking through dialogs is exactly the loss-of-control scenario this
+    packet exists to prevent.
+  - Test against an owned fixture app (e.g. a throwaway installer-shaped test
+    window), not a real installer, until stale-handle and wrong-window
+    rejection are both proven — only then point this at a real wizard, and
+    prefer a documented silent-install flag over UI automation whenever the
+    installer actually supports one.
 
 ### P26 — First external integration
 
@@ -2462,6 +2694,33 @@ asserted behavior must not disappear.
 - Verify: known-bad fixture fails; skipped/unsupported tasks are not silently passed.
 - Exit: changes can be compared without relying on anecdotes.
 - Rollback: preserve old evaluation versions for comparable historical results.
+- **Detail (see 26.1–26.4):** this is the packet that turns "it worked when I
+  tried it" into an actual, repeatable answer — required before calling
+  anything here production-grade, and required before trusting any model
+  swap (e.g. DeepSeek replacing Gemini in the tool-calling role):
+  - Keep the eight test layers in 26.1 genuinely separate and say so in every
+    report: contract/unit/component/integration/fault-injection/security/
+    model-evaluation/installed-path. A mocked-provider test proves protocol
+    behavior, not model quality; a model-generated draft proves nothing about
+    whether browser control works; an APK build proves nothing about on-device
+    audio. Do not let a pass at one layer stand in for another in a summary.
+  - Build toward the concrete regression set in 26.2 — it already names the
+    exact tests this campaign needs (`test_stale_owner_cannot_commit` and
+    `test_stale_owner_cannot_dispatch_through_guarded_adapter` are P13-shaped;
+    the approval ones are P14-shaped) as explicit targets, not just
+    inspiration.
+  - Cover the ten fault-injection boundaries in 26.3 (before job commit,
+    after commit before response, after lease claim, before/after effect
+    preparation, after effect before receipt, after receipt before event
+    delivery, during artifact finalization, during client ACK, during
+    migration) — for each, record the expected durable state, whether a retry
+    is safe, whether an approval survives, and what the user actually sees.
+    One "restart test" does not cover these different windows.
+  - Runtime task families (26.4) should include, once the install capability
+    exists: a full download-verify-install-configure fixture run end to end,
+    scored the same way as every other task family, with an explicit
+    denominator (X of Y attempts met every acceptance criterion) — not a
+    single anecdotal success.
 
 ### P33 — Release controls and recovery
 
@@ -2490,6 +2749,30 @@ asserted behavior must not disappear.
 - Exit: the selected smaller model meets the owner's declared thresholds, or its
   limits are documented and a safer default retained.
 - Rollback: restore the last qualified model profile without losing job state.
+- **Detail:** this is the packet a Gemini-vs-DeepSeek (or any other provider)
+  decision should formally go through, using the P32 harness rather than a
+  one-off comparison:
+  - Run the identical held-out corpus (26.4's task families, plus whatever
+    install/browser/desktop task families exist by this point) through each
+    candidate model in the same executor role, with the same tool versions
+    and budgets — per 16.8's downgrade gate, this is the actual acceptance
+    bar, not an informal trial.
+  - Report per-task-family, not just an overall score: tool-calling
+    reliability across multi-round sequences specifically (this app's
+    `thoughtSignature`-style continuity requirements are a real
+    differentiator between providers), JSON/schema adherence rate, escalation
+    frequency, latency to first token and to completion (the README's own
+    measured 1.7s-vs-9s Gemini-model comparison is the right *shape* of
+    evidence to produce here — dated, task-specific, first-token and total),
+    and cost per *verified completed task* (16.7), not cost per token.
+  - No hidden fallback: if DeepSeek (or any candidate) is selected as a
+    default, the existing per-turn fallback pattern (English chat already
+    falls back to Sarvam on failure) must be preserved explicitly and tested,
+    not silently dropped or silently widened to routes the user didn't
+    approve.
+  - Document the outcome either way: a qualified swap with evidence, or an
+    explicit "does not yet meet threshold X" with the safer existing default
+    retained — both are valid outcomes of this packet, a shrug is not.
 
 <a id="release"></a>
 ## 30. Release, rollback and installation verification

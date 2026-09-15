@@ -128,6 +128,52 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Claude Code · Expanded 10 packets in the agentic-integration-playbook (no packets deleted)
+- User asked, after the P13 work: whether JARVIS can already do something like
+  "download IntelliJ from Chrome and install/set it up," whether the runtime
+  can realistically reach production-grade autonomy, and whether swapping
+  Gemini for DeepSeek is a good idea. Answered all three directly (no, not
+  yet -- listed the ~7 packets actually needed; be honest that "production
+  grade" needs more than finishing the packet list; DeepSeek would replace
+  Gemini's tool-calling role too, not just chat text, so route any swap
+  through the existing P21 downgrade-gate discipline instead of a manual
+  swap). User then asked to make the playbook itself more detailed based on
+  that conversation, explicitly: don't delete any packets, just add detail to
+  some.
+- Expanded the work-packet ledger (section 29) entries for the ten packets
+  that conversation actually touched: **P14** (approvals -- pulled the effect
+  classes, 8-step approval lifecycle, and full adversarial fixture list down
+  from section 11 into the ledger itself), **P15** (managed processes --
+  framed explicitly around surviving a real installer subprocess: Job
+  Objects, PID-reuse safety, resource leases for a shared package cache),
+  **P19** (workflows -- wrote out the concrete download-verify-install-
+  configure step shape as a worked example, explicit that download and
+  execution are two separately-approved effects), **P20** (evidence
+  verification -- concrete example of what "IntelliJ is installed" evidence
+  actually has to be: hash match + version-flag launch check, not the model's
+  say-so), **P21** (model routing -- this is the one that directly answers
+  the DeepSeek question: qualify by role not vendor, the 16.8 downgrade gate
+  is the actual acceptance bar for any provider swap), **P23** (skills --
+  framed an installer capability as a scoped, versioned skill declaring
+  `PRIVILEGE_CHANGE` up front), **P24**/**P25** (browser/Windows automation --
+  concrete profile-mode choice for a download skill, download-vs-execution
+  separation, UI-automation-as-last-resort framing), **P32** (evaluation
+  harness -- tied the existing test-layer table and fault-injection boundary
+  list to what "production grade" actually requires proving), **P35** (model
+  qualification -- the direct answer to "is it good to replace Gemini with
+  DeepSeek": run it through this packet's process, not informally).
+- Every addition is new sub-bullets under the existing Depends/Scope/Deliver/
+  Verify/Exit/Rollback lines, pulling forward and making concrete what
+  sections 11/12/15/16/18/19/26 already specified in the abstract -- nothing
+  in the existing narrative sections or any packet was removed or reworded.
+  Verified: `grep -c "^### P"` still returns 36 (P00-P35 all present) and the
+  packets adjacent to each edit (P16-18, P22, P26) are intact and correctly
+  delimited.
+- This is a planning-document change only, no application behavior changed --
+  no README maintenance entry needed (that rule covers app changes); this
+  explanations.md entry is so Codex knows why the playbook's packet entries
+  changed shape if it reads this file before picking up P14.
+
 ### 2026-09-15 · Claude Code · P13 ownership, recovery and cancellation for the durable worker
 - Continuation of Codex's P02–P12 agent-runtime campaign per
   `CODEX_CLAUDE_HANDOFF.md` (P12 was already committed/pushed at `4760301`
