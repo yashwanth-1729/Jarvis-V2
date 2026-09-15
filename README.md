@@ -458,6 +458,14 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Runtime scheduling/device/delegation/telemetry contracts added
+  (P27–P31).** New fixture-only contracts deduplicate runtime schedule occurrence
+  keys, preserve language in a submitted-job acknowledgement, explicitly report
+  Android’s foreground-only/no-desktop-control limits, bound read-only child-run
+  admission, and retain a bounded redacted diagnostic event buffer. Existing
+  reminders, realtime voice, Android lifecycle, execution and production logs
+  are unchanged.
+
 - **2026-09-15 — Mock account-scoped integration boundary added (P26).** The
   fixture adapter issues account-bound, idempotent draft receipts; rejects the
   wrong account and untrusted remote instruction text; and refuses every future

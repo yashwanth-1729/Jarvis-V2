@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P26, by Codex)
+**Last updated:** 2026-09-15 (P31, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -168,6 +168,11 @@ backend/app/agent_runtime/
   browser.py       P24 fixture profile/tab/observation identity
   desktop.py       P25 serialized fixture desktop identity/pause worker
   integrations.py  P26 mock account-scoped receipt/revocation adapter
+  scheduler.py     P27 fixture occurrence-key deduplication
+  voice_bridge.py  P28 language-preserving submitted-job acknowledgement
+  device.py        P29 explicit device capability limits
+  children.py      P30 bounded read-only child admission
+  telemetry.py     P31 bounded redacted diagnostic buffer
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -294,10 +299,17 @@ P26 proves account-bound idempotent draft receipts, hostile-content rejection an
 revocation using a mock adapter only. No transport, credentials or real account
 is configured.
 
-## Exact next work: P27
+## P27–P31: fixture scheduling/platform/delegation/telemetry — implemented, this push
 
-Read P27 and phase 16 before source changes. Add a general runtime scheduler with
-unique occurrence keys; preserve existing reminder semantics.
+P27 occurrence keys deduplicate; P28 preserves voice language in a job ACK; P29
+states Android foreground-only limits; P30 bounds read-only child admission; P31
+stores bounded redacted telemetry. No existing reminder, voice, Android or real
+execution path was activated.
+
+## Exact next work: P32
+
+Read P32 and phase 26 before source changes. Build an integrated held-out fixture
+harness with explicit denominators and known-bad cases that fail honestly.
 
 
 ## Useful verification commands

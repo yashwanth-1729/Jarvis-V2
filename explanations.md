@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P27–P31 fixture runtime contracts
+
+- Added five isolated boundaries: occurrence-key deduplication (P27), language-
+  preserving voice job acknowledgement (P28), explicit Android/device capability
+  limits (P29), bounded read-only child budget (P30), and bounded redacted
+  telemetry (P31). Existing reminders, realtime, Android and production logging
+  are intentionally untouched.
+- Batch fixture 5/5 and P26 integration fixture 5/5 pass. No scheduler loop,
+  voice turn, Android build, child process, provider, installer or user data ran.
+
 ### 2026-09-15 · Codex · P26 mock account-scoped integration
 
 - Added a fixture-only account-scoped adapter with durable-style idempotent

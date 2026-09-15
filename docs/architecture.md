@@ -532,6 +532,14 @@ within one explicit account, rejects cross-account calls and treats remote text 
 untrusted content rather than policy. Revocation blocks future calls. It has no
 transport, credential or live-account implementation.
 
+P27–P31 add isolated runtime contracts only. Runtime occurrence admission is
+idempotent by schedule/occurrence key and remains separate from existing reminder
+semantics. Voice acknowledgement preserves language without calling the realtime
+pipeline. Device capabilities explicitly keep Android foreground-only and without
+desktop control. Child admission is bounded to read-only budget units. Telemetry
+retains a bounded redacted buffer, never raw secret-bearing diagnostic text. None
+of these contracts starts background work or changes a production platform path.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally
