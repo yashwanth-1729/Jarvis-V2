@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Held-out runtime evaluation harness added (P32).** The
+  fixture harness reports total, supported, unsupported and matched expectations
+  by task family. It requires a known-bad expected failure and leaves unsupported
+  capabilities visible instead of silently passing/skipping them. This is not a
+  model benchmark or installed-path test.
+
 - **2026-09-15 — Runtime scheduling/device/delegation/telemetry contracts added
   (P27–P31).** New fixture-only contracts deduplicate runtime schedule occurrence
   keys, preserve language in a submitted-job acknowledgement, explicitly report

@@ -540,6 +540,12 @@ desktop control. Child admission is bounded to read-only budget units. Telemetry
 retains a bounded redacted buffer, never raw secret-bearing diagnostic text. None
 of these contracts starts background work or changes a production platform path.
 
+P32 adds a held-out fixture evaluation harness. Reports include total, supported,
+unsupported and expected-outcome matches, grouped by task family. A known-bad
+fixture must fail as expected, while unsupported capabilities remain visible rather
+than being counted as passes. It is not a live-provider, device or installed-path
+benchmark.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

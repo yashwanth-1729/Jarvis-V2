@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P31, by Codex)
+**Last updated:** 2026-09-15 (P32, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -173,6 +173,7 @@ backend/app/agent_runtime/
   device.py        P29 explicit device capability limits
   children.py      P30 bounded read-only child admission
   telemetry.py     P31 bounded redacted diagnostic buffer
+  evaluation.py    P32 held-out fixture report/denominator harness
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -306,10 +307,16 @@ states Android foreground-only limits; P30 bounds read-only child admission; P31
 stores bounded redacted telemetry. No existing reminder, voice, Android or real
 execution path was activated.
 
-## Exact next work: P32
+## P32: held-out evaluation harness — implemented, this push
 
-Read P32 and phase 26 before source changes. Build an integrated held-out fixture
-harness with explicit denominators and known-bad cases that fail honestly.
+P32 reports total/supported/unsupported/matched fixture outcomes by family; a
+known-bad expected failure is required and unsupported work is not hidden. It is
+not a provider benchmark or installed-path test.
+
+## Exact next work: P33
+
+Read P33 and phase 30 before source changes. Add explicit feature-flag/release
+controls while keeping unfinished runtime paths disabled by default.
 
 
 ## Useful verification commands

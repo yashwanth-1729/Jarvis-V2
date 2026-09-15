@@ -128,6 +128,14 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P32 held-out evaluation harness
+
+- Added held-out fixture evaluation reporting with explicit total/supported/
+  unsupported/matched denominators and per-family counts. A known-bad fixture's
+  expected failure is mandatory; unsupported work remains visible.
+- P32 fixture 3/3 and P27–P31 batch fixture 5/5 pass. No model benchmark,
+  provider call, installed-path test, package or user data action occurred.
+
 ### 2026-09-15 · Codex · P27–P31 fixture runtime contracts
 
 - Added five isolated boundaries: occurrence-key deduplication (P27), language-
