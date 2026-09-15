@@ -405,6 +405,38 @@ non-empty result, then atomically reaches COMPLETED. Missing/empty observations
 produce FAILED step and run events. Re-invoking a terminal run returns its stored
 state without re-executing the adapter. No production tool is connected yet.
 
+Admission (`RuntimeRepository.claim_run`) is what actually enforces single
+ownership: it atomically moves a run QUEUED -> RUNNING while incrementing
+`owner_generation`, so of any concurrent admission attempts exactly one
+succeeds — the rest get `TransitionConflict` and must not retry with a forced
+status. Every subsequent run/step write may pass that generation as
+`expected_generation`; for steps this additionally requires the parent run to
+still be in a specific status (`RUNNING` by default), which is also the entire
+cancellation mechanism — `request_cancel` needs no lease of its own and flips
+no in-memory flag, it just updates `status`, so the owning worker's own next
+fenced write fails on its own the moment it tries to progress. A worker that
+loses a write this way (`TransitionConflict`) never forces a different
+outcome: `ReadOnlyWorker._reconcile_lost_write` re-reads the run and either
+finds it CANCEL_REQUESTED (finalizes CANCELLED, marking any in-flight step
+UNCERTAIN with whatever was actually observed rather than dropping or
+verifying it) or finds a newer generation already owns it (does nothing
+further). `reclaim_stale_run` is the only legal takeover of a RUNNING run,
+and only once its `lease_expires_at` has passed — an active lease refuses
+takeover for any worker id. `ReadOnlyWorker.recover_stale_runs` is the
+startup reconciliation pass implementing the playbook's recovery matrix for
+this specific fixture-only worker: a step with no committed result is safe to
+re-run here because the adapter is read-only and deterministic (this
+justification does not transfer to a future adapter with an external,
+non-idempotent effect), while a step already VERIFIED before a crash only
+needs the run's own COMPLETED transition replayed, never the adapter itself.
+Thirteen fault-injection checks (`agent_runtime_lease_test.py`) cover
+competing admission, stale-generation writes, expired-vs-active lease
+reclaim, restart recovery, and both cancellation timings. Not built yet: an
+OS-level single-instance process lock (playbook 10.3) — there is no real
+background worker process for one to guard until a later packet adds a
+scheduler, so it would be untestable today; the generation fence above is
+what this packet actually proves.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

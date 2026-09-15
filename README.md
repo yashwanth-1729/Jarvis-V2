@@ -458,6 +458,33 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Ownership, recovery and cancellation added to the durable
+  worker (P13).** Admission now claims a run atomically (`RuntimeRepository.
+  claim_run`), bumping `owner_generation` so a stale or competing worker's
+  writes are rejected rather than merged — every run/step transition can be
+  fenced to that exact generation, and (for steps) to the run still being in
+  a specific status, which is also how cancellation works: `request_cancel`
+  needs no lease and no polled flag, it just flips `status` so the owning
+  worker's next fenced write fails on its own. A worker that loses a write
+  this way never forces a different outcome — it reconciles once (finalizing
+  CANCELLED, marking an in-flight step UNCERTAIN with whatever was actually
+  observed, never silently COMPLETED) and stops. `reclaim_stale_run` lets a
+  restarted worker take over a run whose lease expired, but only then — an
+  active lease refuses takeover outright. `ReadOnlyWorker.recover_stale_runs`
+  applies the playbook's recovery matrix for this fixture-only worker: resume
+  a queued step normally, safely re-run a step with no committed result
+  (read-only + deterministic, so this is the one case where a blind re-run is
+  actually correct), or just finalize a run whose step already verified
+  before the crash. Thirteen new fault-injection checks
+  (`agent_runtime_lease_test.py`) cover competing admission, stale
+  generation, expired-vs-active lease reclaim, restart recovery, and
+  cancellation both before any action and racing an in-flight one; all
+  existing P10–P12 checks (24) still pass unchanged. Deliberately out of
+  scope: an OS-level single-instance process lock (10.3) — there is no real
+  background worker process yet for one to guard, so building it now would be
+  untestable; the DB-generation fence is what's proven here. Still not wired
+  into chat/API/frontend/scheduler.
+
 - **2026-09-14 — First durable read-only worker completed (P12).** A bounded
   fixture workflow now durably queues, starts, creates one step, observes,
   verifies and finalizes through atomic state/event transitions. Missing evidence

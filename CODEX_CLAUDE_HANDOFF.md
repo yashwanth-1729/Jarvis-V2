@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-15 (P13, by Claude Code)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -68,16 +68,7 @@ while working on this runtime.
 | `c305531`, `cc0cdf9` | P10 | Separate local runtime SQLite file/schema plus `RuntimeRepository`. Personal data is excluded. Request hash + `(session_id, client_request_id)` enforce idempotency/conflict behavior. Run status/event changes commit atomically. 7 DB + 6 repository checks. |
 | `da084e5` | P11 | Versioned exclusive migrations to schema v2, rollback-on-interruption, quiesced SQLite backup, SHA-256 manifest, integrity verification, staged restore and atomic replacement. 5 migration + 7 DB + 6 repository + 6 contract checks. |
 
-### P12: read-only durable worker — implemented locally, awaiting this push
-
-Current working-tree P12 changes are intentionally limited to:
-
-- `backend/app/agent_runtime/repository.py`
-- `backend/app/agent_runtime/worker.py`
-- `backend/tests/agent_runtime_worker_test.py`
-- `README.md`
-- `docs/architecture.md`
-- `explanations.md`
+### P12: read-only durable worker — pushed (`4760301`)
 
 The `readonly-fixture-v1` worker is the first safe vertical slice:
 
@@ -96,10 +87,51 @@ run returns stored state and performs no action. Validation passed:
 - `backend/tests/agent_runtime_worker_test.py`: 5/5
 - `backend/tests/agent_runtime_repository_test.py`: 6/6
 
-The preceding `git` push was blocked by a transient model-capacity reviewer;
-this document is being added in the same P12 commit. Before beginning P13,
-stage only the six P12 files above plus this handoff document, run `git diff
---cached --check`, commit `feat: add durable read-only agent worker`, and push.
+### P13: ownership, recovery and cancellation — implemented, this push
+
+Picked up by Claude Code (2026-09-15): confirmed P12 was already pushed clean
+(nothing pending), read playbook §10 and the P13 packet entry, then extended
+the P12 files rather than adding new schema:
+
+- `backend/app/agent_runtime/repository.py`: `claim_run` (atomic
+  QUEUED->RUNNING admission, `owner_generation += 1` — exactly one concurrent
+  admitter wins), `reclaim_stale_run` (the only legal takeover of a RUNNING
+  run, gated on an actually-expired `lease_expires_at`), `renew_lease`,
+  `request_cancel` (no lease needed — flips `status` only, which is the whole
+  cancellation mechanism: the owning worker's next generation-fenced write
+  just fails on its own). `transition_with_event`, `create_step` and
+  `transition_step_with_event` gained an optional `expected_generation`
+  (plus `require_run_status` on the step variant — see the bug note below).
+- `backend/app/agent_runtime/worker.py`: `run()` claims before executing and
+  returns current state (no forced status) on any lease/generation conflict;
+  `recover_stale_runs`/`_resume` implement playbook 10.5's recovery matrix
+  for this worker's one real case — a step with no committed result is safe
+  to re-run (read-only + deterministic; this justification does **not**
+  transfer to a future non-idempotent adapter), a step already VERIFIED
+  before a crash only needs the run's own COMPLETED transition replayed.
+- Real bug caught by a test, not by inspection: the step-write fence
+  hardcoded `agent_runs.status = 'RUNNING'`, which also blocked
+  cancellation's own finalizer (which must write while the run sits in
+  CANCEL_REQUESTED) — a step could be left dangling in RUNNING forever after
+  a mid-flight cancel. Fixed with a `require_run_status` parameter instead of
+  a hardcoded literal. The test that caught it: a fixture adapter whose own
+  `observe()` calls `request_cancel` on itself mid-call — a deterministic way
+  to simulate the race without real concurrency.
+- New `backend/tests/agent_runtime_lease_test.py`: 13/13 (competing
+  admission, stale-generation write rejected not merged, active-vs-expired
+  lease reclaim, restart recovery re-running exactly once, cancellation
+  before any action with zero adapter calls, cancellation racing an
+  in-flight action landing on CANCELLED with the step UNCERTAIN — never
+  silently COMPLETED or dropped).
+- All P10–P12 tests re-verified unchanged: contracts 6/6, database 7/7,
+  repository 6/6, migration 5/5, worker 5/5 (same exact event sequence as
+  before — the claim folds into the existing `run.running` event).
+- **Deliberately not built:** an OS-level single-instance process lock
+  (playbook 10.3's other requirement, alongside the DB generation fence).
+  There is no real background worker process yet for a lock to guard —
+  building one now would be untestable infrastructure. Add it when a
+  scheduler/background process actually exists (likely alongside P15's
+  process manager, or whenever the worker first runs unattended).
 
 ## Current architecture and safety boundaries
 
@@ -120,8 +152,10 @@ backend/app/agent_runtime/
   schema.sql       v2 control-plane schema
   migrations.py    exclusive, monotonic runtime migrations
   maintenance.py   quiesced backup / restore helpers
-  repository.py    submissions, steps, atomic event/state transitions
-  worker.py        P12 fixture-only read-only worker
+  repository.py    submissions, steps, atomic event/state transitions,
+                   P13: lease claim/reclaim/renew, cancellation
+  worker.py        P12 fixture-only read-only worker,
+                   P13: generation-fenced execution + startup recovery
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -142,34 +176,49 @@ be included in client-owned seed/drain/reseed flows.
 ### Known limitations — do not misrepresent as complete
 
 - No runtime API/event replay endpoint yet (P17).
-- No lease/owner generation/cancellation recovery yet (P13).
 - No authenticated approval service or UI gate yet (P14).
-- No real browser/shell/domain adapter plugged into the durable worker.
+- No real browser/shell/domain adapter plugged into the durable worker —
+  lease/generation fencing and cancellation (P13) are proven only against the
+  read-only fixture adapter; a non-idempotent adapter needs its own review of
+  the recovery matrix before connecting (see 10.5's "external non-idempotent
+  operation" row, which this fixture worker never has to satisfy).
+- No OS-level single-instance process lock (playbook 10.3) — no real
+  background worker process exists yet for one to guard; add it alongside
+  whatever packet first runs the worker unattended.
 - No frontend run/status UI.
 - No background worker scheduler, artifacts, evidence store, operations/attempts,
   scoped capability discovery, model routing or evaluation harness yet.
 - No native desktop build or Android verification for this campaign.
 
-## Exact next work: P13
+## Exact next work: P14
 
-Read `docs/agentic-integration-playbook.md` sections 10.3–10.5 and packet P13
-before changing source.
+P13 is done (this push): generation-fenced writes, lease claim/reclaim,
+cancellation, and startup recovery all exist and are tested against the
+fixture worker. Read `docs/agentic-integration-playbook.md` section 11
+(permissions, approvals and local API security) and the P14 packet entry
+before changing source — it is an explicit hard gate before expanding
+autonomous writes, per the playbook's own framing.
 
 Recommended next implementation:
 
-1. Extend the runtime schema through a new reviewed migration (do not silently
-   alter existing v2 tables) with lease ownership/generation data where needed.
-2. Add repository admission/lease claim and renewal methods using expected owner
-   generation predicates.
-3. Add cancellation request handling. It must prevent new effects; it must not
-   pretend unknown effects were cancelled or completed.
-4. Add startup/recovery classification for safely queued/read-only work only.
-   Unknown/external effects must become `UNCERTAIN`/waiting, never blindly rerun.
-5. Add isolated fault-injection tests: competing owner, stale generation,
-   expired lease, cancellation before action, cancellation after an uncertain
-   action, and restart recovery.
-6. Keep P12's adapter read-only while proving recovery. Do not connect
-   `run_command`, browser, desktop control, tasks, schedules, or reminders yet.
+1. Separate authentication (who is calling), authorization (may this
+   principal/run use this capability on this target) and approval (did the
+   user authorize this exact effect) as three distinct checks — do not let a
+   localhost connection or a plausible-looking tool schema stand in for any
+   of them.
+2. Build exact-action approval binding: an approval must be scoped to the
+   precise proposed effect (arguments included, via a hash or equivalent) so
+   a changed target after approval is granted re-triggers a fresh approval,
+   not silent reuse.
+3. Add a minimal local authentication boundary for the runtime's future API
+   surface, and a minimal approval UI/flow — scope only what P14 needs to
+   prove the gate works, not the full API from section 12 onward.
+4. Fault-injection tests: forged approval, replayed approval, expired
+   approval, changed target after approval, unauthorized API request.
+5. Keep the P12/P13 fixture worker read-only. Do not connect `run_command`,
+   browser, desktop control, tasks, schedules, or reminders as a real effect
+   until P14's approval gate exists AND is tested — P13 explicitly proved
+   recovery/cancellation is safe, not that autonomous writes are safe.
 
 ## Useful verification commands
 
@@ -182,6 +231,7 @@ $env:PYTHONDONTWRITEBYTECODE='1'
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_repository_test.py
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_migration_test.py
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_worker_test.py
+& .\.venv\Scripts\python.exe -B tests\agent_runtime_lease_test.py
 ```
 
 Other already-validated targeted checks:
@@ -207,9 +257,13 @@ these source-level checks.
 ## Handoff checklist
 
 1. Inspect `git status --short`; preserve untracked logs/artifacts.
-2. Push the pending P12 + this bridge commit.
-3. Re-read P13 requirements and implement only ownership/recovery/cancellation.
+2. Push the pending P13 + this bridge commit.
+3. Re-read P14 requirements (playbook §11) before implementing anything —
+   it is a hard gate on autonomous writes, not a routine next packet.
 4. Add/update README, architecture, `explanations.md`, and this bridge after
    every material packet.
 5. Keep the user updated in concise commentary while working. Do not ask routine
-   questions; continue with the recommended safe path.
+   questions; continue with the recommended safe path. (This session's one
+   exception: asking whether to continue P13 at all, since picking up another
+   agent's safety-sensitive architecture without any confirmation was judged
+   worth one question — not "routine" in the sense this rule means.)

@@ -128,6 +128,66 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Claude Code · P13 ownership, recovery and cancellation for the durable worker
+- Continuation of Codex's P02–P12 agent-runtime campaign per
+  `CODEX_CLAUDE_HANDOFF.md` (P12 was already committed/pushed at `4760301`
+  when this session started -- confirmed via `git log`/`git status`, nothing
+  was pending). User was asked how to proceed given this is a different
+  agent's in-progress architecture; chose "continue P13 now."
+- Read `docs/agentic-integration-playbook.md` §10 (job state machine and
+  recovery) and the P13 packet entry (§ "P13 — Ownership, recovery and
+  cancellation") in full before writing anything, plus the existing
+  `contracts.py`/`repository.py`/`worker.py`/`schema.sql` to confirm
+  `owner_generation`/`lease_owner`/`lease_expires_at` columns already existed
+  on `agent_runs` (added ahead of time in P10/P11) but were never read or
+  written by anything -- P13's job was making them real.
+- `repository.py`: added `claim_run` (atomic QUEUED->RUNNING admission,
+  `owner_generation += 1`), `reclaim_stale_run` (the only legal takeover of a
+  RUNNING run, gated on `lease_expires_at < now` -- an active lease refuses
+  any takeover), `renew_lease`, `request_cancel` (needs no lease; flips
+  `status` only), and `list_runs_by_status`. `transition_with_event`,
+  `create_step` and `transition_step_with_event` gained an optional
+  `expected_generation` that fences the write -- for steps, via a subquery
+  requiring the parent run to still be at that generation AND a specific
+  status (see below), not just the generation number.
+- Hit a real bug while writing the mid-flight-cancellation test: the step
+  fence hardcoded `agent_runs.status = 'RUNNING'`, but cancellation's own
+  finalizer needs to write a step transition (RUNNING -> UNCERTAIN) precisely
+  while the run sits in CANCEL_REQUESTED -- so the default fence blocked the
+  very code path meant to resolve cancellation, and the step was left
+  dangling in RUNNING forever. Fixed by adding `require_run_status` (default
+  `"RUNNING"`, cancellation finalization passes `"CANCEL_REQUESTED"`) instead
+  of hardcoding it. Caught by a test that made the fixture adapter itself
+  call `request_cancel` mid-`observe()` -- deterministic race simulation
+  without real concurrency.
+- `worker.py`: `run()` now claims before executing and returns the current
+  row (no forced status) on any `TransitionConflict`; `_execute` threads the
+  claimed generation through every write; `_reconcile_lost_write` is the one
+  place that decides what a lost write means (cancelled -> finalize; newer
+  generation owns it -> do nothing); `recover_stale_runs` + `_resume`
+  implement playbook 10.5's matrix for this worker's one real case (a
+  read-only, deterministic step is safe to re-run; a VERIFIED step only needs
+  the run's own COMPLETED transition replayed).
+- Deliberately did not build: an OS-level single-instance process lock
+  (playbook 10.3's other requirement). No real background worker process
+  exists yet to guard, so a file/mutex lock right now would be untested
+  infrastructure with no way to prove it works; documented as an explicit gap
+  in README/architecture rather than silently skipped.
+- Verified: new `agent_runtime_lease_test.py`, 13/13 (competing admission,
+  stale-generation write rejected, active-vs-expired lease reclaim, restart
+  recovery re-running exactly once, cancellation before any action with zero
+  adapter calls, cancellation racing an in-flight action landing on
+  CANCELLED with the step UNCERTAIN not COMPLETED). All prior P10–P12 tests
+  re-run and still pass unchanged: `agent_runtime_contracts_test` 6/6,
+  `agent_runtime_database_test` 7/7, `agent_runtime_repository_test` 6/6,
+  `agent_runtime_migration_test` 5/5, `agent_runtime_worker_test` 5/5 (same
+  exact event-sequence assertions as P12 -- the claim is folded into the
+  existing `run.running` event, no new event type needed for the happy path).
+- Updated `CODEX_CLAUDE_HANDOFF.md` with the P13 status and P14 as next.
+- Left untouched, not mine: `.artifact_staging/`, `JARVIS_OVERVIEW_FOR_GEMINI.md`,
+  `android_tts_capture_final.log`, `backend/backend_live.log` (all untracked,
+  per the handoff's own list).
+
 ### 2026-09-14 · Codex · P12 read-only worker/state machine
 
 - Added durable step creation/transitions and a bounded `readonly-fixture-v1`
