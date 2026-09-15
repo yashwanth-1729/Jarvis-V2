@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Browser and desktop-control safety contracts added (P24–P25).**
+  Browser observations are scoped to a named profile/tab/generation and reject
+  stale targets, missing targets and any default user profile. The fixture
+  desktop worker serializes inspection, checks exact process/window identity
+  and supports a hard pause. Neither module launches a browser, attaches an
+  existing profile, performs UI Automation or runs an installer.
+
 - **2026-09-15 — Reviewed local skill registry added (P23).** Skills now have
   immutable manifest hashes, workflow/version references, declared effect
   classes, supported platforms and runtime-component requirements. The first

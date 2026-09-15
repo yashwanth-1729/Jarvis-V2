@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P23, by Codex)
+**Last updated:** 2026-09-15 (P25, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -165,6 +165,8 @@ backend/app/agent_runtime/
   routing.py       P21 offline capability routing / downgrade qualification
   context.py       P22 task-scoped packet/provenance compaction
   skills.py        P23 local reviewed manifest / readiness discovery
+  browser.py       P24 fixture profile/tab/observation identity
+  desktop.py       P25 serialized fixture desktop identity/pause worker
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -279,10 +281,16 @@ P23 adds manifest-hashed local skill discovery. A skill declares its workflow,
 effect classes, platform and required components; discovery hides it unless ready
 and a hash change needs review. Only the read-only fixture skill exists.
 
-## Exact next work: P24
+## P24/P25: fixture browser and desktop control contracts — implemented, this push
 
-Read P24 and phase 14 before source changes. Add fixture-only browser profile/
-tab observation contracts; never copy or attach the user's default profile.
+Browser observations require named non-default profile/tab/generation identities;
+stale/default targets reject. Desktop fixture inspection is serialized, identity
+checked and pausable. Neither starts a browser or controls a real window.
+
+## Exact next work: P26
+
+Read P26 and phase 15 before source changes. Add a mock account-scoped integration
+adapter with draft/receipt/revocation fixtures; do not connect an external account.
 
 
 ## Useful verification commands

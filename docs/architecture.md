@@ -519,6 +519,13 @@ list, component requirements and deterministic content hash. Discovery exposes a
 skill only when its required runtime components are ready. A changed hash is
 rejected pending review. This is not a plugin marketplace or remote code loader.
 
+P24/P25 add fixture-only automation identity boundaries. Browser observations are
+bound to a non-default profile, tab and monotonically increasing generation;
+actions must revalidate the exact observation/element and stale targets reject.
+Existing-session attachment is deliberately unsupported. The desktop fixture worker
+serializes work, requires exact process creation/window identity and honors pause;
+it does not call UI Automation or control real windows.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

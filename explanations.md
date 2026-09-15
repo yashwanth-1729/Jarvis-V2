@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P24/P25 browser and desktop ownership fixtures
+
+- Added fixture-only browser profile/tab observation contracts and serialized
+  desktop worker contracts. Browser actions require a named non-default profile
+  and exact fresh generation/target. Desktop inspection requires exact window/
+  process identity and honors pause. Existing profile attachment and real UI
+  Automation remain unsupported.
+- P24/P25 fixture 4/4 and P23 skill fixture 3/3 pass. No browser launch,
+  desktop-control action, installer, package, provider or user data was used.
+
 ### 2026-09-15 · Codex · P23 reviewed local skills
 
 - Added local `SkillRegistry`/`SkillManifest` contracts. Manifests bind a
