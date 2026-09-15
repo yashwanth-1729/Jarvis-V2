@@ -506,6 +506,13 @@ false-success observations. No provider is implicitly substituted if the route i
 unavailable; the caller receives an explicit unavailable outcome. Existing Gemini
 and Sarvam selection remains authoritative for live chat.
 
+P22 adds a pure task-context builder. Its packet contains explicit durable run,
+step and evidence references before optional personal-memory snippets. Snippets
+carry provenance and correction references, while deleted snippets are excluded
+and duplicate stable IDs compact to one entry. The builder never accesses or
+mutates the existing personal-memory store, so it cannot resurrect deleted facts
+or substitute a prose summary for operation/approval records.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

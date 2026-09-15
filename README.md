@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Task-scoped provenance context added (P22).** The runtime
+  context builder keeps durable run/step/evidence facts explicit and accepts
+  only provenance-labelled memory snippets. Deleted snippets are excluded,
+  corrections remain attributable, and compaction deduplicates by stable memory
+  identity. It does not query, mutate or restore the personal-memory database.
+
 - **2026-09-15 — Capability-based model qualification added (P21).** The
   runtime now has offline role/capability contracts and a downgrade gate:
   candidate routes must meet context/structured-output requirements, have a

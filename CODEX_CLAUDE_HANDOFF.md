@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P21, by Codex)
+**Last updated:** 2026-09-15 (P22, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -163,6 +163,7 @@ backend/app/agent_runtime/
   workflows.py     P19 reviewed fixture-only workflow definitions
   verification.py  P20 deterministic evidence and verifier records
   routing.py       P21 offline capability routing / downgrade qualification
+  context.py       P22 task-scoped packet/provenance compaction
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -265,10 +266,16 @@ qualification, sufficient context and required structured output; zero
 unauthorized actions and false-successes are hard gates. No route silently
 falls back, and no existing live provider choice was changed.
 
-## Exact next work: P22
+## P22: task-scoped provenance context — implemented, this push
 
-Read P22 and phase 12 before source changes. Add task-scoped context assembly
-with provenance; preserve existing memory ownership/deletion semantics.
+P22 adds a pure context builder: durable run/step/evidence facts are explicit;
+optional memory snippets preserve provenance/corrections, deleted items stay out
+and duplicate IDs compact. It never touches personal-memory storage.
+
+## Exact next work: P23
+
+Read P23 and phase 13 before source changes. Add a local reviewed skill registry
+with manifest hashing and declared scopes; do not implement a marketplace/loader.
 
 
 ## Useful verification commands

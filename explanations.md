@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P22 task-scoped provenance context
+
+- Added pure `ContextBuilder` / `MemorySnippet` contracts. It makes run/step/
+  evidence facts explicit, filters deleted memory, preserves correction
+  provenance and deduplicates by stable identity. It does not read/mutate the
+  personal-memory database or let prose reconstruct authority facts.
+- P22 fixture 4/4 and P21 routing fixture 3/3 pass. No user data, provider or
+  installation was touched.
+
 ### 2026-09-15 · Codex · P21 capability routing and downgrade gate
 
 - Added offline `ModelRouter` role/capability/qualification contracts. Selection
