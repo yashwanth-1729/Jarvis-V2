@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P25, by Codex)
+**Last updated:** 2026-09-15 (P26, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -167,6 +167,7 @@ backend/app/agent_runtime/
   skills.py        P23 local reviewed manifest / readiness discovery
   browser.py       P24 fixture profile/tab/observation identity
   desktop.py       P25 serialized fixture desktop identity/pause worker
+  integrations.py  P26 mock account-scoped receipt/revocation adapter
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -287,10 +288,16 @@ Browser observations require named non-default profile/tab/generation identities
 stale/default targets reject. Desktop fixture inspection is serialized, identity
 checked and pausable. Neither starts a browser or controls a real window.
 
-## Exact next work: P26
+## P26: mock account-scoped integration — implemented, this push
 
-Read P26 and phase 15 before source changes. Add a mock account-scoped integration
-adapter with draft/receipt/revocation fixtures; do not connect an external account.
+P26 proves account-bound idempotent draft receipts, hostile-content rejection and
+revocation using a mock adapter only. No transport, credentials or real account
+is configured.
+
+## Exact next work: P27
+
+Read P27 and phase 16 before source changes. Add a general runtime scheduler with
+unique occurrence keys; preserve existing reminder semantics.
 
 
 ## Useful verification commands

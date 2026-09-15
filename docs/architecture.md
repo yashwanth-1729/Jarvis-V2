@@ -526,6 +526,12 @@ Existing-session attachment is deliberately unsupported. The desktop fixture wor
 serializes work, requires exact process creation/window identity and honors pause;
 it does not call UI Automation or control real windows.
 
+P26 adds a mock account-scoped integration adapter to establish the receipt and
+revocation boundary before any external connection. Each operation is idempotent
+within one explicit account, rejects cross-account calls and treats remote text as
+untrusted content rather than policy. Revocation blocks future calls. It has no
+transport, credential or live-account implementation.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

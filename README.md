@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Mock account-scoped integration boundary added (P26).** The
+  fixture adapter issues account-bound, idempotent draft receipts; rejects the
+  wrong account and untrusted remote instruction text; and refuses every future
+  operation after revocation. It has no network transport, credentials or real
+  external-account connection.
+
 - **2026-09-15 — Browser and desktop-control safety contracts added (P24–P25).**
   Browser observations are scoped to a named profile/tab/generation and reject
   stale targets, missing targets and any default user profile. The fixture

@@ -128,6 +128,14 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P26 mock account-scoped integration
+
+- Added a fixture-only account-scoped adapter with durable-style idempotent
+  receipts, cross-account rejection, hostile remote-content rejection and
+  revocation. It deliberately has no network/client credential path.
+- P26 fixture 5/5 passes. No external service, browser, provider, installer or
+  personal data was used.
+
 ### 2026-09-15 · Codex · P24/P25 browser and desktop ownership fixtures
 
 - Added fixture-only browser profile/tab observation contracts and serialized
