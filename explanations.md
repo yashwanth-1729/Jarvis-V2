@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P23 reviewed local skills
+
+- Added local `SkillRegistry`/`SkillManifest` contracts. Manifests bind a
+  workflow, declared effect classes/platforms/requirements and deterministic
+  hash. Discovery requires component readiness; a changed hash rejects until
+  re-reviewed. The only registered skill is read-only `fixture-inspect`.
+- P23 fixture 3/3 and P22 context fixture 4/4 pass. No package installation,
+  marketplace, remote code, provider or user-data action occurred.
+
 ### 2026-09-15 · Codex · P22 task-scoped provenance context
 
 - Added pure `ContextBuilder` / `MemorySnippet` contracts. It makes run/step/

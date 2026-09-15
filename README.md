@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Reviewed local skill registry added (P23).** Skills now have
+  immutable manifest hashes, workflow/version references, declared effect
+  classes, supported platforms and runtime-component requirements. The first
+  `fixture-inspect` skill is read-only and appears only when its dependencies
+  are ready. A manifest change requires re-review. No remote marketplace,
+  downloaded executable skill, package install or installer skill exists.
+
 - **2026-09-15 — Task-scoped provenance context added (P22).** The runtime
   context builder keeps durable run/step/evidence facts explicit and accepts
   only provenance-labelled memory snippets. Deleted snippets are excluded,

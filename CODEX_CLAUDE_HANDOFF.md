@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P22, by Codex)
+**Last updated:** 2026-09-15 (P23, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -164,6 +164,7 @@ backend/app/agent_runtime/
   verification.py  P20 deterministic evidence and verifier records
   routing.py       P21 offline capability routing / downgrade qualification
   context.py       P22 task-scoped packet/provenance compaction
+  skills.py        P23 local reviewed manifest / readiness discovery
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -272,10 +273,16 @@ P22 adds a pure context builder: durable run/step/evidence facts are explicit;
 optional memory snippets preserve provenance/corrections, deleted items stay out
 and duplicate IDs compact. It never touches personal-memory storage.
 
-## Exact next work: P23
+## P23: reviewed local skills — implemented, this push
 
-Read P23 and phase 13 before source changes. Add a local reviewed skill registry
-with manifest hashing and declared scopes; do not implement a marketplace/loader.
+P23 adds manifest-hashed local skill discovery. A skill declares its workflow,
+effect classes, platform and required components; discovery hides it unless ready
+and a hash change needs review. Only the read-only fixture skill exists.
+
+## Exact next work: P24
+
+Read P24 and phase 14 before source changes. Add fixture-only browser profile/
+tab observation contracts; never copy or attach the user's default profile.
 
 
 ## Useful verification commands

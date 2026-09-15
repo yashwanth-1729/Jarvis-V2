@@ -513,6 +513,12 @@ and duplicate stable IDs compact to one entry. The builder never accesses or
 mutates the existing personal-memory store, so it cannot resurrect deleted facts
 or substitute a prose summary for operation/approval records.
 
+P23 adds a local `SkillRegistry` with reviewed immutable manifests. Each manifest
+has an ID/version/purpose, workflow entry point, declared effect classes, platform
+list, component requirements and deterministic content hash. Discovery exposes a
+skill only when its required runtime components are ready. A changed hash is
+rejected pending review. This is not a plugin marketplace or remote code loader.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally
