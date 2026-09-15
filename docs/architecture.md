@@ -483,6 +483,13 @@ working, approval/input-needed, completed, failed, cancelled and uncertain
 presentations. The currently mounted strip reports the truthful unpaired state;
 there is no endpoint/UI path that silently enables the runtime.
 
+P19 introduces `WorkflowRegistry` with exactly one fixture-only reviewed
+workflow. `fixture-inspect@v1` accepts only a bounded query, fixes its accepted
+tool set to `fixture.observe`, emits host-owned acceptance criteria and allows
+no repair loop. The registry refuses unknown workflow/version pairs and extra
+fields. It is intentionally not wired to an API submission or model planner;
+this establishes the reviewed-workflow boundary before any real task family.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

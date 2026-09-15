@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P19 reviewed workflow registry
+
+- Added host-owned `WorkflowRegistry` and one strict read-only
+  `fixture-inspect@v1` workflow. It accepts only a bounded query, fixes its
+  allowed tool to `fixture.observe`, records a non-empty-observation acceptance
+  criterion and has zero repair attempts. Unknown workflows and extra,
+  scope-expanding fields reject before any action.
+- Verified P19 boundary fixture 4/4 and P17 API fixture 5/5. No model,
+  provider, browser, command, package or personal-data action was run.
+
 ### 2026-09-15 · Codex · P17 run API and P18 honest status surface
 
 - Added a closed-by-default `/api/agent` router. Local pairing is unavailable

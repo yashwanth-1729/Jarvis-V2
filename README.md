@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — First reviewed workflow registry added (P19).**
+  `fixture-inspect@v1` is a host-owned, read-only workflow with one typed
+  `query`, fixed non-empty-observation acceptance criterion, a single allowed
+  fixture tool and zero repair attempts. Unsupported workflow names and
+  scope-expanding input fields are refused. It is not an arbitrary model plan,
+  shell installer, browser task or enabled API workflow.
+
 - **2026-09-15 — Closed-by-default durable run API and status surface added
   (P17–P18).** `/api/agent` is available only after explicit local pairing;
   without `JARVIS_AGENT_PAIRING_SECRET`, its pairing endpoint returns disabled.

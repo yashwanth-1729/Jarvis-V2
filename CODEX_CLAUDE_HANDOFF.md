@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P18, by Codex)
+**Last updated:** 2026-09-15 (P19, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -160,6 +160,7 @@ backend/app/agent_runtime/
   processes.py     P15 internal managed subprocess ownership and resource leases
   domain_commands.py P16 durable outbox / owner acknowledgement boundary
   api/agent_runs.py P17 closed-by-default authenticated runtime inspection API
+  workflows.py     P19 reviewed fixture-only workflow definitions
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -241,10 +242,17 @@ events by cursor and request cancellation. The mounted UI status strip reports
 that the runtime is unpaired; it does not imply autonomous work is enabled.
 P17 fixture 5/5 and frontend typecheck pass.
 
-## Exact next work: P19
+## P19: reviewed workflow registry — implemented, this push
 
-Read P19 and phase 10 before source changes. Add one reviewed, bounded workflow
-only after retaining the P14 approval and P16 owner-boundary guarantees.
+The first `fixture-inspect@v1` workflow accepts a bounded query and permits only
+the read-only fixture observation tool. Its criteria/tool list/repair budget are
+host-owned; unknown workflows and extra input are rejected. It is not exposed to
+models or API clients as a generic plan executor.
+
+## Exact next work: P20
+
+Read P20 and phase 10 before source changes. Add deterministic evidence and
+verification records so completion derives from checks, never a worker narrative.
 
 
 ## Useful verification commands
