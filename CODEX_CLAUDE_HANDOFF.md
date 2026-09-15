@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P16, by Codex)
+**Last updated:** 2026-09-15 (P18, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -159,6 +159,7 @@ backend/app/agent_runtime/
   approvals.py     P14 local pairing, authorization and exact-effect approvals
   processes.py     P15 internal managed subprocess ownership and resource leases
   domain_commands.py P16 durable outbox / owner acknowledgement boundary
+  api/agent_runs.py P17 closed-by-default authenticated runtime inspection API
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -181,7 +182,9 @@ be included in client-owned seed/drain/reseed flows.
 
 ### Known limitations — do not misrepresent as complete
 
-- No runtime API/event replay endpoint or approval UI yet (P17).
+- No real write-capable runtime worker, approval-decision UI or domain-command
+  delivery adapter yet. P17 only exposes fixture-safe submit/inspect/cancel/
+  replay after explicit local pairing.
 - No real browser/shell/domain adapter plugged into the durable worker —
   lease/generation fencing and cancellation (P13) are proven only against the
   read-only fixture adapter; a non-idempotent adapter needs its own review of
@@ -229,11 +232,19 @@ operation for BACKEND or CLIENT ownership and awaits a terminal owner
 acknowledgement. The fixture covers duplicate delivery and conflicting content.
 No bridge to real records is wired yet.
 
-## Exact next work: P17
+## P17–P18: closed local API and honest status UI — implemented, this push
 
-Read P17 and phase 9 before source changes. Add authenticated runtime submit,
-inspect, cancel and event-replay endpoints backed only by the fixture worker;
-test ownership, idempotency and event cursors. Do not admit real effects.
+`/api/agent` requires a bearer token from local pairing and pairing is disabled
+unless `JARVIS_AGENT_PAIRING_SECRET` is supplied. Endpoints create sessions,
+submit fixture-safe idempotent runs, inspect owner-scoped facts, replay ordered
+events by cursor and request cancellation. The mounted UI status strip reports
+that the runtime is unpaired; it does not imply autonomous work is enabled.
+P17 fixture 5/5 and frontend typecheck pass.
+
+## Exact next work: P19
+
+Read P19 and phase 10 before source changes. Add one reviewed, bounded workflow
+only after retaining the P14 approval and P16 owner-boundary guarantees.
 
 
 ## Useful verification commands

@@ -458,6 +458,18 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Closed-by-default durable run API and status surface added
+  (P17–P18).** `/api/agent` is available only after explicit local pairing;
+  without `JARVIS_AGENT_PAIRING_SECRET`, its pairing endpoint returns disabled.
+  Paired principals can create a runtime session, submit idempotent fixture-safe
+  runs, inspect only their own runs, replay ordered events by cursor and request
+  cancellation. The new compact chat-side status surface never shows a false
+  success state: it explicitly reports that the runtime is unpaired until a
+  configured local launcher enables it. API fixtures cover unauthenticated and
+  cross-principal rejection, duplicate submission, event cursor replay and
+  changed-request conflicts; TypeScript typecheck passes. No real tool,
+  personal-data command delivery, installer or background worker was enabled.
+
 - **2026-09-15 — Ownership-aware domain-command outbox added (P16).** Runtime
   schema v5 adds `domain_commands`, which is a durable handoff to the
   authoritative backend/client personal-data owner—not a shortcut around it.

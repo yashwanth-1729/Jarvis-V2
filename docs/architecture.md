@@ -472,6 +472,17 @@ idempotent; reuse of that operation ID for changed content is rejected. This doe
 not create a cross-store transaction and does not yet deliver to either backend
 SQLite or client IndexedDB—the fixture proves the outbox/ACK semantics only.
 
+P17 exposes a closed-by-default `/api/agent` control surface. Startup opens the
+separate runtime DB and initializes a local authenticator, but pairing is disabled
+unless `JARVIS_AGENT_PAIRING_SECRET` is intentionally provided. A bearer token
+establishes the principal; session creation, run submission, inspection, event
+replay and cancellation all verify ownership through `runtime_sessions`. Event
+replay is cursor-based and observes committed rows only, so reconnecting cannot
+repeat execution. P18 adds a small chat-side status strip with explicit queued,
+working, approval/input-needed, completed, failed, cancelled and uncertain
+presentations. The currently mounted strip reports the truthful unpaired state;
+there is no endpoint/UI path that silently enables the runtime.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

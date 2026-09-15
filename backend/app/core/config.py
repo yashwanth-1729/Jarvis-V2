@@ -179,6 +179,9 @@ class Settings(BaseSettings):
     # derives a sibling path from JARVIS_DB_PATH, which keeps isolated tests
     # isolated without requiring every fixture to know about this newer store.
     jarvis_runtime_db_path: str = Field(default="", alias="JARVIS_RUNTIME_DB_PATH")
+    #: Empty keeps the experimental durable runtime API closed. A local desktop
+    #: launcher may supply a one-time bootstrap secret to enable pairing.
+    jarvis_agent_pairing_secret: str = Field(default="", alias="JARVIS_AGENT_PAIRING_SECRET")
 
     #: True when the *client* owns the user's data and this backend is only
     #: the AI runtime -- IndexedDB is authoritative and SQLite is a disposable

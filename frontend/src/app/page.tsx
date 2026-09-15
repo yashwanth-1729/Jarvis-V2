@@ -4,6 +4,7 @@ import * as React from "react";
 import { transitionUi } from "@/lib/uiMotion";
 
 import { Chat } from "@/components/Chat";
+import { AgentRunStatus } from "@/components/AgentRunStatus";
 import { Dashboard } from "@/components/Dashboard";
 import { SurfaceLayer } from "@/components/surfaces/SurfaceLayer";
 import { MobileNav } from "@/components/MobileNav";
@@ -599,6 +600,7 @@ export default function CommandCenterPage() {
             <div className="min-h-0 flex-1">
               <Chat onRefresh={handleAgentRefresh} onSurface={setSurface} />
             </div>
+            <AgentRunStatus unavailable />
           </div>
 
           <div className={"min-h-0 overflow-hidden " + (chatOpen ? "hidden" : "block")}>

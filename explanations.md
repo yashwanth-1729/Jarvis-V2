@@ -128,6 +128,20 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P17 run API and P18 honest status surface
+
+- Added a closed-by-default `/api/agent` router. Local pairing is unavailable
+  until `JARVIS_AGENT_PAIRING_SECRET` is configured; bearer authentication and
+  runtime-session ownership guard all session/run/inspect/event/cancel routes.
+  Submissions stay fixture-only and replay returns committed events by cursor.
+- Added a deliberately compact chat-side `AgentRunStatus` component. It has
+  explicit non-success states and currently displays the unpaired-runtime state
+  rather than advertising unavailable autonomy. Design used the taste skill's
+  trust-first/low-density guidance and existing UI/icon system.
+- Verified P17 API fixture 5/5 and frontend TypeScript check. No real runtime
+  effect, personal record delivery, installer, package/cache or provider call
+  was enabled.
+
 ### 2026-09-15 · Codex · P16 ownership-aware domain command outbox
 
 - Added schema v5 `domain_commands` and an isolated `DomainCommandService`.

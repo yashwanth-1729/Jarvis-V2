@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api import (
+    agent_runs,
     announcements,
     chat,
     dashboard,
@@ -31,6 +32,9 @@ from app.api.schemas import HealthOut
 from app.core.config import settings
 from app.db import crud
 from app.db.database import db
+from app.agent_runtime.approvals import LocalAuthenticator
+from app.agent_runtime.database import runtime_db
+from app.agent_runtime.repository import RuntimeRepository
 from app.providers import close_providers
 from app.services import scheduler
 
@@ -45,6 +49,10 @@ logger = logging.getLogger("jarvis")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.connect()
+    await runtime_db.connect()
+    app.state.agent_pairing_enabled = bool(settings.jarvis_agent_pairing_secret)
+    app.state.agent_auth = LocalAuthenticator(settings.jarvis_agent_pairing_secret or 'runtime-api-disabled')
+    app.state.agent_repository = RuntimeRepository(runtime_db)
 
     # The board holds outstanding work only. Completing a task normally clears
     # it on the spot; this catches anything left behind by an older build or a
@@ -112,6 +120,7 @@ async def lifespan(_: FastAPI):
             with suppress(asyncio.CancelledError):
                 await scheduler_task
         await close_providers()
+        await runtime_db.disconnect()
         await db.disconnect()
 
 
@@ -137,6 +146,7 @@ app.add_middleware(
 )
 
 app.include_router(chat.router)
+app.include_router(agent_runs.router)
 app.include_router(dashboard.router)
 app.include_router(tasks.router)
 app.include_router(voice.router)
