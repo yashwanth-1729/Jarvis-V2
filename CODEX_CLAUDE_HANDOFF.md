@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P13, by Claude Code)
+**Last updated:** 2026-09-15 (P14, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -149,13 +149,14 @@ the P12 files rather than adding new schema:
 backend/app/agent_runtime/
   contracts.py     P09 input/proposal/receipt boundaries
   database.py      separate FULL-sync SQLite owner
-  schema.sql       v2 control-plane schema
+  schema.sql       v3 control-plane schema
   migrations.py    exclusive, monotonic runtime migrations
   maintenance.py   quiesced backup / restore helpers
   repository.py    submissions, steps, atomic event/state transitions,
                    P13: lease claim/reclaim/renew, cancellation
   worker.py        P12 fixture-only read-only worker,
                    P13: generation-fenced execution + startup recovery
+  approvals.py     P14 local pairing, authorization and exact-effect approvals
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -169,14 +170,14 @@ The runtime database currently owns:
 - `agent_steps`
 - `agent_events`
 - `runtime_migration_history`
+- `agent_approvals` (P14 exact human-decision records)
 
 It does **not** own personal tasks/schedules/memories/chat history and must not
 be included in client-owned seed/drain/reseed flows.
 
 ### Known limitations — do not misrepresent as complete
 
-- No runtime API/event replay endpoint yet (P17).
-- No authenticated approval service or UI gate yet (P14).
+- No runtime API/event replay endpoint or approval UI yet (P17).
 - No real browser/shell/domain adapter plugged into the durable worker —
   lease/generation fencing and cancellation (P13) are proven only against the
   read-only fixture adapter; a non-idempotent adapter needs its own review of
@@ -190,35 +191,29 @@ be included in client-owned seed/drain/reseed flows.
   scoped capability discovery, model routing or evaluation harness yet.
 - No native desktop build or Android verification for this campaign.
 
-## Exact next work: P14
+## P14: exact-effect approvals and local pairing — implemented, this push
 
-P13 is done (this push): generation-fenced writes, lease claim/reclaim,
-cancellation, and startup recovery all exist and are tested against the
-fixture worker. Read `docs/agentic-integration-playbook.md` section 11
-(permissions, approvals and local API security) and the P14 packet entry
-before changing source — it is an explicit hard gate before expanding
-autonomous writes, per the playbook's own framing.
+- Schema v3 adds `agent_approvals` outside the client-owned personal-data
+  store. Its states are PENDING, GRANTED, DENIED, EXPIRED, INVALIDATED and
+  CONSUMED.
+- `ApprovalRequest` hashes operation ID, tool/version, effect class, scope,
+  target, content and preconditions. Only `EXTERNAL_COMMIT`, `DESTRUCTIVE`
+  and `PRIVILEGE_CHANGE` require this gate; a changed request invalidates the
+  old grant and dispatch atomically consumes a grant exactly once.
+- `LocalAuthenticator` is an expiring in-memory pairing boundary. The service
+  separately authorizes the authenticated principal against the runtime
+  session. Unknown client fields such as `confirmed=true` cannot grant power.
+- Temporary-fixture checks pass 43/43 across P09-P14. There is deliberately
+  still no HTTP endpoint, frontend approval UI or write-capable adapter.
 
-Recommended next implementation:
+## Exact next work: P15
 
-1. Separate authentication (who is calling), authorization (may this
-   principal/run use this capability on this target) and approval (did the
-   user authorize this exact effect) as three distinct checks — do not let a
-   localhost connection or a plausible-looking tool schema stand in for any
-   of them.
-2. Build exact-action approval binding: an approval must be scoped to the
-   precise proposed effect (arguments included, via a hash or equivalent) so
-   a changed target after approval is granted re-triggers a fresh approval,
-   not silent reuse.
-3. Add a minimal local authentication boundary for the runtime's future API
-   surface, and a minimal approval UI/flow — scope only what P14 needs to
-   prove the gate works, not the full API from section 12 onward.
-4. Fault-injection tests: forged approval, replayed approval, expired
-   approval, changed target after approval, unauthorized API request.
-5. Keep the P12/P13 fixture worker read-only. Do not connect `run_command`,
-   browser, desktop control, tasks, schedules, or reminders as a real effect
-   until P14's approval gate exists AND is tested — P13 explicitly proved
-   recovery/cancellation is safe, not that autonomous writes are safe.
+Read P15 and section 13 of the playbook before source changes. Implement a
+fixture-backed process manager with durable process metadata, creation-identity
+or PID-reuse protection, Windows Job Object ownership, resource leases and
+cancellation/recovery tests. It must not launch a real installer, expose a model
+command path or install packages yet. Keep all new tools and caches on D:.
+
 
 ## Useful verification commands
 
@@ -232,6 +227,7 @@ $env:PYTHONDONTWRITEBYTECODE='1'
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_migration_test.py
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_worker_test.py
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_lease_test.py
+& .\.venv\Scripts\python.exe -B tests\agent_runtime_approval_test.py
 ```
 
 Other already-validated targeted checks:

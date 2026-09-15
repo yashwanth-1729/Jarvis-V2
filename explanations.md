@@ -128,6 +128,24 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P14 exact-effect approvals and local pairing
+
+- Continued from Claude's P13 handoff after `git pull origin main`; preserved
+  unrelated untracked artifacts/logs and audited the expanded P14 playbook.
+- Advanced the isolated runtime schema to v3 with `agent_approvals`. Approval
+  records bind a host-built canonical hash (operation, tool/version, class,
+  scope, target, content and preconditions) to one principal and run. They use
+  PENDING -> GRANTED/DENIED -> CONSUMED/EXPIRED/INVALIDATED states; changed
+  effects invalidate and consumed grants cannot replay.
+- Added in-memory local pairing plus a service that keeps authentication,
+  session-owner authorization and exact human approval separate. Strict
+  contracts reject model-provided `confirmed=true`. No HTTP endpoint or write
+  adapter is connected.
+- Corrected stale v2 test expectations and added expiry coverage. Temporary
+  fixtures passed: contracts 6/6, database 7/7, repository 6/6, migration 5/5,
+  worker 5/5, leases 13/13 and approvals 8/8. No provider, package install,
+  native build, C: cache write or personal data access occurred.
+
 ### 2026-09-15 · Claude Code · Expanded 10 packets in the agentic-integration-playbook (no packets deleted)
 - User asked, after the P13 work: whether JARVIS can already do something like
   "download IntelliJ from Chrome and install/set it up," whether the runtime

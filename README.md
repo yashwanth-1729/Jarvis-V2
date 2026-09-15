@@ -458,6 +458,21 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Exact-effect approval gate added to the durable runtime
+  (P14).** The control-plane schema is now v3 and stores pending/granted/
+  denied/expired/invalidated/consumed approvals independently of personal
+  records. An approval is bound to a canonical hash of the host-built operation
+  ID, tool/version, effect class, scope, target, content hash and
+  preconditions; it is principal- and run-scoped, expires, and is atomically
+  consumed once immediately before dispatch. A changed effect invalidates its
+  prior grant rather than silently reusing it. Local pairing tokens establish
+  the caller identity in memory; authorization to the owning runtime session
+  and human approval are distinct gates. The new offline approval fixture
+  covers grant/consume, replay, changed recipients, cross-run misuse, forged
+  `confirmed=true`, expired grants and pairing authentication. This packet adds
+  no runtime HTTP endpoint, approval screen, write-capable adapter, package
+  installation, native build or user-data access; those remain later packets.
+
 - **2026-09-15 — Ownership, recovery and cancellation added to the durable
   worker (P13).** Admission now claims a run atomically (`RuntimeRepository.
   claim_run`), bumping `owner_generation` so a stale or competing worker's

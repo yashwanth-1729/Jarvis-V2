@@ -437,6 +437,22 @@ background worker process for one to guard until a later packet adds a
 scheduler, so it would be untestable today; the generation fence above is
 what this packet actually proves.
 
+Schema v3 adds `agent_approvals`, a separate durable record for a human decision
+about one host-built effect. It deliberately distinguishes three questions:
+`LocalAuthenticator` establishes a local caller's principal from an expiring,
+memory-only pairing token; `ApprovalService` verifies that principal owns the
+run's session; then it records a human grant or denial for the canonical effect.
+The effect hash covers operation ID, tool and version, effect class, scope,
+target, content hash and preconditions—not merely a tool name or model claim.
+Only `EXTERNAL_COMMIT`, `DESTRUCTIVE`, and `PRIVILEGE_CHANGE` enter this hard
+gate today. Dispatch atomically checks the principal, run, exact request hash,
+grant and expiry, then marks the approval `CONSUMED`; replay is therefore
+rejected. A changed request is marked `INVALIDATED` and must obtain a new
+approval. No model field such as `confirmed=true` carries authority because the
+strict decision contract permits only an authenticated human `grant` or `deny`.
+This remains a control-plane boundary only: no HTTP endpoint or UI consumes it
+yet, and no write-capable adapter is connected.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

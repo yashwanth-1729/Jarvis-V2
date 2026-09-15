@@ -103,6 +103,44 @@ class ReceiptStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class EffectClass(str, Enum):
+    """Host-classified outcome risk; never an authority claim from a model."""
+
+    READ_SCOPED = "READ_SCOPED"
+    WRITE_DRAFT = "WRITE_DRAFT"
+    WRITE_PERSONAL = "WRITE_PERSONAL"
+    MODIFY_EXISTING = "MODIFY_EXISTING"
+    EXTERNAL_COMMIT = "EXTERNAL_COMMIT"
+    DESTRUCTIVE = "DESTRUCTIVE"
+    PRIVILEGE_CHANGE = "PRIVILEGE_CHANGE"
+
+
+class ApprovalDecision(str, Enum):
+    GRANT = "grant"
+    DENY = "deny"
+
+
+class ApprovalRequest(_StrictModel):
+    """Host-built exact effect displayed to a human before dispatch."""
+
+    schema_version: Literal[SCHEMA_VERSION]
+    operation_id: StrictStr = Field(min_length=8, max_length=160)
+    tool_name: StrictStr = Field(min_length=1, max_length=160)
+    tool_version: StrictStr = Field(min_length=1, max_length=80)
+    effect_class: EffectClass
+    scope: dict[str, Any] = Field(default_factory=dict)
+    target: dict[str, Any] = Field(default_factory=dict)
+    content_hash: StrictStr = Field(min_length=16, max_length=128)
+    preconditions: dict[str, Any] = Field(default_factory=dict)
+    summary: StrictStr = Field(min_length=1, max_length=2_000)
+
+
+class ApprovalDecisionRequest(_StrictModel):
+    """Authenticated human decision; no model-supplied confirmation field exists."""
+
+    decision: ApprovalDecision
+
+
 class ToolReceipt(_StrictModel):
     """Host-issued execution fact; distinct from a model's narrative claim."""
 
