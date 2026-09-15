@@ -458,6 +458,13 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Evidence-backed verification added (P20).** Runtime schema
+  v6 records evidence payload hashes/timestamps separately from verification
+  results. The first deterministic verifier accepts only a fresh non-empty
+  observation; a worker/model claim without that observation fails, and stale
+  evidence is explicitly marked stale. This is fixture-only verification, not
+  proof of any installer, browser, package or personal-data action.
+
 - **2026-09-15 — First reviewed workflow registry added (P19).**
   `fixture-inspect@v1` is a host-owned, read-only workflow with one typed
   `query`, fixed non-empty-observation acceptance criterion, a single allowed

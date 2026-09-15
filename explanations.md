@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P20 evidence-backed deterministic verification
+
+- Added schema v6 evidence and verification records plus a deterministic
+  `non-empty-observation-v1` verifier. Evidence has a canonical SHA-256 hash,
+  observed timestamp and source kind; verification records a criterion and its
+  result independently from any worker/model narrative.
+- Temporary fixture verification passes 3/3: real fresh observation passes,
+  model claim without an observation fails, stale evidence is `STALE` rather
+  than accepted. Database 7/7 and migration/restore 5/5 still pass. No model,
+  provider, browser, package, installer or personal-data action ran.
+
 ### 2026-09-15 · Codex · P19 reviewed workflow registry
 
 - Added host-owned `WorkflowRegistry` and one strict read-only

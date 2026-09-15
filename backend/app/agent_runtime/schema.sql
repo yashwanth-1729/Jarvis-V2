@@ -1,4 +1,4 @@
--- JARVIS durable agent control plane, schema version 5.
+-- JARVIS durable agent control plane, schema version 6.
 -- This database is never part of client-owned personal-data seed/drain/sync.
 
 CREATE TABLE IF NOT EXISTS runtime_sessions (
@@ -159,5 +159,19 @@ CREATE TABLE IF NOT EXISTS domain_commands (
 CREATE INDEX IF NOT EXISTS idx_domain_commands_delivery
     ON domain_commands (destination_owner, status, created_at);
 INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (5);
+CREATE TABLE IF NOT EXISTS evidence_records (
+ id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+ step_id TEXT REFERENCES agent_steps(id) ON DELETE SET NULL, source_kind TEXT NOT NULL,
+ observed_at TEXT NOT NULL, content_hash TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS verification_records (
+ id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+ step_id TEXT REFERENCES agent_steps(id) ON DELETE SET NULL, criterion_id TEXT NOT NULL,
+ verifier_version TEXT NOT NULL, result TEXT NOT NULL CHECK (result IN ('PASSED','FAILED','ADVISORY','STALE')),
+ evidence_id TEXT REFERENCES evidence_records(id), detail TEXT NOT NULL, verified_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence_records (run_id, observed_at);
+CREATE INDEX IF NOT EXISTS idx_verification_step ON verification_records (run_id, step_id, criterion_id);
+INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (6);
 
-PRAGMA user_version = 5;
+PRAGMA user_version = 6;

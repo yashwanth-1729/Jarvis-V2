@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 
 import aiosqlite
 
-TARGET_VERSION = 5
+TARGET_VERSION = 6
 Migration = Callable[[aiosqlite.Connection], Awaitable[None]]
 
 
@@ -133,6 +133,13 @@ async def _v5_domain_commands(conn: aiosqlite.Connection) -> None:
     await conn.execute("CREATE INDEX idx_domain_commands_delivery ON domain_commands (destination_owner, status, created_at)")
     await conn.execute("INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (5)")
 
+async def _v6_evidence(conn: aiosqlite.Connection) -> None:
+    await conn.execute("""CREATE TABLE evidence_records (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE, step_id TEXT REFERENCES agent_steps(id) ON DELETE SET NULL, source_kind TEXT NOT NULL, observed_at TEXT NOT NULL, content_hash TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL)""")
+    await conn.execute("""CREATE TABLE verification_records (id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE, step_id TEXT REFERENCES agent_steps(id) ON DELETE SET NULL, criterion_id TEXT NOT NULL, verifier_version TEXT NOT NULL, result TEXT NOT NULL CHECK (result IN ('PASSED','FAILED','ADVISORY','STALE')), evidence_id TEXT REFERENCES evidence_records(id), detail TEXT NOT NULL, verified_at TEXT NOT NULL)""")
+    await conn.execute("CREATE INDEX idx_evidence_run ON evidence_records (run_id, observed_at)")
+    await conn.execute("CREATE INDEX idx_verification_step ON verification_records (run_id, step_id, criterion_id)")
+    await conn.execute("INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (6)")
+
 
 MIGRATIONS: Mapping[int, Migration] = {
     1: _v1_initial_marker,
@@ -140,6 +147,7 @@ MIGRATIONS: Mapping[int, Migration] = {
     3: _v3_approvals,
     4: _v4_managed_processes,
     5: _v5_domain_commands,
+    6: _v6_evidence,
 }
 
 

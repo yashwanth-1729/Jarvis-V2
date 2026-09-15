@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P19, by Codex)
+**Last updated:** 2026-09-15 (P20, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -161,6 +161,7 @@ backend/app/agent_runtime/
   domain_commands.py P16 durable outbox / owner acknowledgement boundary
   api/agent_runs.py P17 closed-by-default authenticated runtime inspection API
   workflows.py     P19 reviewed fixture-only workflow definitions
+  verification.py  P20 deterministic evidence and verifier records
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -249,10 +250,17 @@ the read-only fixture observation tool. Its criteria/tool list/repair budget are
 host-owned; unknown workflows and extra input are rejected. It is not exposed to
 models or API clients as a generic plan executor.
 
-## Exact next work: P20
+## P20: evidence-backed verification — implemented, this push
 
-Read P20 and phase 10 before source changes. Add deterministic evidence and
-verification records so completion derives from checks, never a worker narrative.
+Schema v6 stores hashed/timestamped evidence separately from verifier results.
+The first deterministic verifier accepts a fresh non-empty observation only;
+model claims, missing evidence and stale evidence cannot establish completion.
+Fixture verification 3/3 plus schema/backup checks pass.
+
+## Exact next work: P21
+
+Read P21 and phase 11 before source changes. Add capability-based model routing
+contracts and offline downgrade-gate fixtures without changing the live provider.
 
 
 ## Useful verification commands

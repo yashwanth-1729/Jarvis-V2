@@ -490,6 +490,14 @@ no repair loop. The registry refuses unknown workflow/version pairs and extra
 fields. It is intentionally not wired to an API submission or model planner;
 this establishes the reviewed-workflow boundary before any real task family.
 
+P20 advances the isolated runtime schema to v6 with `evidence_records` and
+`verification_records`. Evidence stores an observed timestamp and canonical
+content hash; verification records name the criterion, verifier version, result
+and the exact supporting evidence. `VerificationService` presently has one
+deterministic non-empty-observation verifier. It rejects a model claim that lacks
+an observation and records stale evidence rather than treating it as current.
+Advisory/human/semantic adapters remain future distinct tiers.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally
