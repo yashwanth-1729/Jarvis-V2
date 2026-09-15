@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-14 · Codex · P12 read-only worker/state machine
+
+- Added durable step creation/transitions and a bounded `readonly-fixture-v1`
+  worker: QUEUED -> RUNNING -> one READY/RUNNING/VERIFIED step -> COMPLETED.
+  Missing evidence records FAILED honestly; terminal reruns execute nothing.
+- Worker lifecycle checks pass 5/5 and repository regressions 6/6 against temp
+  runtime DBs. No API/UI, real tool, provider, install or personal data touched.
+  Next: P13 ownership, leases, recovery and cancellation. Untracked files
+  preserved.
+
 ### 2026-09-14 · Codex · P11 runtime migrations and restoration
 
 - Added exclusive, transactional runtime migrations and advanced the isolated

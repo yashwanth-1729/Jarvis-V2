@@ -398,6 +398,13 @@ Restore requires the expected manifest checksum, verifies a staged copy, then
 atomically replaces the exact runtime file and removes only its stale WAL/SHM
 sidecars. These helpers are not an automatic destructive startup behavior.
 
+The first runtime executor is deliberately one-at-a-time and read-only. Its
+`readonly-fixture-v1` workflow admits a QUEUED run, creates one READY tool step,
+records RUNNING, executes a deterministic observation adapter, verifies a
+non-empty result, then atomically reaches COMPLETED. Missing/empty observations
+produce FAILED step and run events. Re-invoking a terminal run returns its stored
+state without re-executing the adapter. No production tool is connected yet.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

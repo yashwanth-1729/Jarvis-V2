@@ -126,22 +126,76 @@ class RuntimeRepository:
                 raise TransitionConflict(
                     f"run {run_id} is missing or no longer {expected_status}"
                 )
-            cursor = await conn.execute(
-                "SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_events WHERE run_id = ?",
-                (run_id,),
-            )
-            seq = int((await cursor.fetchone())[0])
-            await cursor.close()
+            await self._append_event(conn, run_id, event_type, payload, stamp)
+        return await self.get_run(run_id)
+
+    async def create_step(
+        self,
+        run_id: str,
+        *,
+        ordinal: int,
+        step_type: str,
+        acceptance: dict[str, Any],
+        workflow_version: str,
+    ) -> dict[str, Any]:
+        stamp = _now()
+        step_id = f"step_{uuid.uuid4().hex}"
+        async with self.database.transaction() as conn:
             await conn.execute(
-                """INSERT INTO agent_events
-                   (event_id, run_id, seq, event_type, payload_json, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO agent_steps
+                   (id, run_id, ordinal, step_type, status, acceptance_json,
+                    dependencies_json, workflow_version, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, 'READY', ?, '[]', ?, ?, ?)""",
                 (
-                    f"event_{uuid.uuid4().hex}", run_id, seq, event_type,
-                    _canonical_json(payload), stamp,
+                    step_id, run_id, ordinal, step_type,
+                    _canonical_json(acceptance), workflow_version, stamp, stamp,
                 ),
             )
-        return await self.get_run(run_id)
+            await self._append_event(
+                conn, run_id, "step.ready", {"step_id": step_id, "ordinal": ordinal}, stamp
+            )
+        return (await self.list_steps(run_id))[-1]
+
+    async def transition_step_with_event(
+        self,
+        run_id: str,
+        step_id: str,
+        *,
+        expected_status: str,
+        new_status: str,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        stamp = _now()
+        async with self.database.transaction() as conn:
+            cursor = await conn.execute(
+                """UPDATE agent_steps SET status = ?, updated_at = ?
+                   WHERE id = ? AND run_id = ? AND status = ?""",
+                (new_status, stamp, step_id, run_id, expected_status),
+            )
+            changed = cursor.rowcount
+            await cursor.close()
+            if changed != 1:
+                raise TransitionConflict(
+                    f"step {step_id} is missing or no longer {expected_status}"
+                )
+            await self._append_event(conn, run_id, event_type, payload, stamp)
+        return next(step for step in await self.list_steps(run_id) if step["id"] == step_id)
+
+    @staticmethod
+    async def _append_event(conn, run_id: str, event_type: str, payload: dict[str, Any], stamp: str) -> None:  # noqa: ANN001
+        cursor = await conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_events WHERE run_id = ?",
+            (run_id,),
+        )
+        seq = int((await cursor.fetchone())[0])
+        await cursor.close()
+        await conn.execute(
+            """INSERT INTO agent_events
+               (event_id, run_id, seq, event_type, payload_json, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (f"event_{uuid.uuid4().hex}", run_id, seq, event_type, _canonical_json(payload), stamp),
+        )
 
     async def get_run(self, run_id: str) -> dict[str, Any]:
         if self.database._connection is None:  # noqa: SLF001 - same package owner
@@ -161,6 +215,16 @@ class RuntimeRepository:
         cursor = await self.database._connection.execute(  # noqa: SLF001
             "SELECT * FROM agent_events WHERE run_id = ? AND seq > ? ORDER BY seq",
             (run_id, after),
+        )
+        rows = [dict(row) for row in await cursor.fetchall()]
+        await cursor.close()
+        return rows
+
+    async def list_steps(self, run_id: str) -> list[dict[str, Any]]:
+        if self.database._connection is None:  # noqa: SLF001
+            raise RuntimeError("RuntimeDatabase.connect() has not been awaited")
+        cursor = await self.database._connection.execute(  # noqa: SLF001
+            "SELECT * FROM agent_steps WHERE run_id = ? ORDER BY ordinal", (run_id,)
         )
         rows = [dict(row) for row in await cursor.fetchall()]
         await cursor.close()

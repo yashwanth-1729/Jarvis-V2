@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-14 — First durable read-only worker completed (P12).** A bounded
+  fixture workflow now durably queues, starts, creates one step, observes,
+  verifies and finalizes through atomic state/event transitions. Missing evidence
+  fails honestly and terminal reruns execute nothing. Five worker checks and six
+  repository regressions pass; this worker is not yet exposed through the UI/API.
+
 - **2026-09-14 — Runtime migrations and verified restoration added (P11).**
   Runtime schema upgrades now hold an exclusive transaction, advance versions
   monotonically and roll back interrupted DDL. Quiesced backups use SQLite's
