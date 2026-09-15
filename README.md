@@ -458,6 +458,14 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Capability-based model qualification added (P21).** The
+  runtime now has offline role/capability contracts and a downgrade gate:
+  candidate routes must meet context/structured-output requirements, have a
+  qualifying held-out completion rate, and show zero unauthorized actions or
+  false-success findings. Missing qualified routes fail honestly rather than
+  silently switching to a paid/cloud model. This does not alter Gemini, Sarvam
+  or any live provider configuration.
+
 - **2026-09-15 — Evidence-backed verification added (P20).** Runtime schema
   v6 records evidence payload hashes/timestamps separately from verification
   results. The first deterministic verifier accepts only a fresh non-empty

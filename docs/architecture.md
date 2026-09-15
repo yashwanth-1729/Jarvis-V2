@@ -498,6 +498,14 @@ deterministic non-empty-observation verifier. It rejects a model claim that lack
 an observation and records stale evidence rather than treating it as current.
 Advisory/human/semantic adapters remain future distinct tiers.
 
+P21 adds an offline capability router only. A candidate is addressed by
+provider/model/role and must have sufficient context, supported structured output
+when required, an enabled state and a held-out qualification result. Qualification
+requires at least the configured completion rate and zero unauthorized actions or
+false-success observations. No provider is implicitly substituted if the route is
+unavailable; the caller receives an explicit unavailable outcome. Existing Gemini
+and Sarvam selection remains authoritative for live chat.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

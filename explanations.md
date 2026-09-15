@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P21 capability routing and downgrade gate
+
+- Added offline `ModelRouter` role/capability/qualification contracts. Selection
+  requires declared context/structured-output support plus a measured
+  qualification with sufficient held-out completion and zero unauthorized action
+  or false-success findings. Missing routes raise an honest unavailable result;
+  no live provider fallback or configuration change was made.
+- P21 fixture 3/3 passes, as does P20 evidence verification 3/3. No provider
+  request, package installation or user data was touched.
+
 ### 2026-09-15 · Codex · P20 evidence-backed deterministic verification
 
 - Added schema v6 evidence and verification records plus a deterministic

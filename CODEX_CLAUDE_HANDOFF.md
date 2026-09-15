@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P20, by Codex)
+**Last updated:** 2026-09-15 (P21, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -162,6 +162,7 @@ backend/app/agent_runtime/
   api/agent_runs.py P17 closed-by-default authenticated runtime inspection API
   workflows.py     P19 reviewed fixture-only workflow definitions
   verification.py  P20 deterministic evidence and verifier records
+  routing.py       P21 offline capability routing / downgrade qualification
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -257,10 +258,17 @@ The first deterministic verifier accepts a fresh non-empty observation only;
 model claims, missing evidence and stale evidence cannot establish completion.
 Fixture verification 3/3 plus schema/backup checks pass.
 
-## Exact next work: P21
+## P21: capability routing and downgrade gate — implemented, this push
 
-Read P21 and phase 11 before source changes. Add capability-based model routing
-contracts and offline downgrade-gate fixtures without changing the live provider.
+P21 adds offline role/capability contracts. A route requires measured
+qualification, sufficient context and required structured output; zero
+unauthorized actions and false-successes are hard gates. No route silently
+falls back, and no existing live provider choice was changed.
+
+## Exact next work: P22
+
+Read P22 and phase 12 before source changes. Add task-scoped context assembly
+with provenance; preserve existing memory ownership/deletion semantics.
 
 
 ## Useful verification commands
