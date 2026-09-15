@@ -458,6 +458,17 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Managed runtime process handles added (P15).** Runtime schema
+  v4 adds durable managed-process and resource-lease records. The internal-only
+  process service accepts explicit host argv (never model text), records an
+  owner-generation, PID plus creation identity, working directory and bounded
+  D:-configurable output paths before starting. Named resource leases reject
+  concurrent users; cancellation refuses a changed PID identity and, on
+  Windows, retains a kill-on-close Job Object for the owned process tree. A
+  harmless fixture covers bounded output, resource contention, stale-identity
+  refusal and cancellation. No package/model installation, installer launch,
+  HTTP endpoint or legacy-tool wiring was added.
+
 - **2026-09-15 — Exact-effect approval gate added to the durable runtime
   (P14).** The control-plane schema is now v3 and stores pending/granted/
   denied/expired/invalidated/consumed approvals independently of personal

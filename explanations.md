@@ -128,6 +128,22 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P15 managed process and resource-lease fixture
+
+- Added schema v4 `managed_processes` and `resource_leases`, plus an
+  internal-only `ManagedProcessService`. It reserves a durable handle and
+  named resource before spawn, records PID + psutil creation identity after
+  spawn, bounds output to owned artifact files and releases the lease only at a
+  durable terminal result. Cancellation refuses an identity mismatch so PID
+  reuse cannot signal an unrelated process.
+- The Windows service retains the existing audited P05 kill-on-close Job Object
+  for its owned tree; a harmless fixture also exposed that sandboxed `taskkill`
+  can be denied, so its direct owned-child fallback is used only after the
+  creation-identity check. No real installer/package/model process was started.
+- Verified temporary fixtures only: new process suite 5/5 and P09-P14 runtime
+  suites still pass (48 checks total). No provider, native build, personal data
+  or installation/cache write occurred.
+
 ### 2026-09-15 · Codex · P14 exact-effect approvals and local pairing
 
 - Continued from Claude's P13 handoff after `git pull origin main`; preserved

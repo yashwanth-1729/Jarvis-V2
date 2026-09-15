@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 
 import aiosqlite
 
-TARGET_VERSION = 3
+TARGET_VERSION = 4
 Migration = Callable[[aiosqlite.Connection], Awaitable[None]]
 
 
@@ -64,10 +64,59 @@ async def _v3_approvals(conn: aiosqlite.Connection) -> None:
     )
 
 
+async def _v4_managed_processes(conn: aiosqlite.Connection) -> None:
+    await conn.execute(
+        """CREATE TABLE managed_processes (
+               id TEXT PRIMARY KEY,
+               run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+               operation_id TEXT NOT NULL,
+               owner_generation INTEGER NOT NULL,
+               pid INTEGER,
+               creation_identity TEXT,
+               executable_json TEXT NOT NULL,
+               working_directory TEXT NOT NULL,
+               resource_key TEXT,
+               status TEXT NOT NULL CHECK (status IN (
+                   'RESERVED', 'RUNNING', 'EXITED', 'FAILED_TO_START',
+                   'CANCEL_REQUESTED', 'CANCELLED', 'UNKNOWN'
+               )),
+               stdout_path TEXT NOT NULL,
+               stderr_path TEXT NOT NULL,
+               output_bytes INTEGER NOT NULL DEFAULT 0,
+               output_truncated INTEGER NOT NULL DEFAULT 0 CHECK (output_truncated IN (0, 1)),
+               exit_code INTEGER,
+               created_at TEXT NOT NULL,
+               started_at TEXT,
+               finished_at TEXT,
+               UNIQUE (run_id, operation_id)
+           )"""
+    )
+    await conn.execute(
+        """CREATE TABLE resource_leases (
+               resource_key TEXT PRIMARY KEY,
+               process_id TEXT NOT NULL REFERENCES managed_processes(id) ON DELETE CASCADE,
+               run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+               owner_generation INTEGER NOT NULL,
+               expires_at TEXT NOT NULL,
+               created_at TEXT NOT NULL
+           )"""
+    )
+    await conn.execute(
+        "CREATE INDEX idx_managed_processes_run_status ON managed_processes (run_id, status, created_at)"
+    )
+    await conn.execute(
+        "CREATE INDEX idx_resource_leases_expiry ON resource_leases (expires_at)"
+    )
+    await conn.execute(
+        "INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (4)"
+    )
+
+
 MIGRATIONS: Mapping[int, Migration] = {
     1: _v1_initial_marker,
     2: _v2_migration_history,
     3: _v3_approvals,
+    4: _v4_managed_processes,
 }
 
 

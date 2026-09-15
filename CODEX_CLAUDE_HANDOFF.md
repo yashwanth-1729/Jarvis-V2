@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P14, by Codex)
+**Last updated:** 2026-09-15 (P15, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -157,6 +157,7 @@ backend/app/agent_runtime/
   worker.py        P12 fixture-only read-only worker,
                    P13: generation-fenced execution + startup recovery
   approvals.py     P14 local pairing, authorization and exact-effect approvals
+  processes.py     P15 internal managed subprocess ownership and resource leases
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -171,6 +172,7 @@ The runtime database currently owns:
 - `agent_events`
 - `runtime_migration_history`
 - `agent_approvals` (P14 exact human-decision records)
+- `managed_processes` / `resource_leases` (P15 process facts and named locks)
 
 It does **not** own personal tasks/schedules/memories/chat history and must not
 be included in client-owned seed/drain/reseed flows.
@@ -206,13 +208,23 @@ be included in client-owned seed/drain/reseed flows.
 - Temporary-fixture checks pass 43/43 across P09-P14. There is deliberately
   still no HTTP endpoint, frontend approval UI or write-capable adapter.
 
-## Exact next work: P15
+## P15: managed processes and resource leases — implemented, this push
 
-Read P15 and section 13 of the playbook before source changes. Implement a
-fixture-backed process manager with durable process metadata, creation-identity
-or PID-reuse protection, Windows Job Object ownership, resource leases and
-cancellation/recovery tests. It must not launch a real installer, expose a model
-command path or install packages yet. Keep all new tools and caches on D:.
+P15 adds a schema-v4, internal-only process manager. It accepts explicit host
+argv only, reserves a durable handle/resource lease before spawn, records the
+PID plus psutil creation identity after spawn, captures bounded output and
+releases its lease at durable terminal state. Cancellation refuses a mismatched
+identity; Windows holds P05's kill-on-close Job Object for descendants. Fixture
+tests cover output cap, resource conflict, stale identity and cancellation.
+There is no model command path, HTTP endpoint, real installer, package install
+or linkage to legacy `run_command`.
+
+## Exact next work: P16
+
+Read P16 and phase 8 before source changes. Implement an ownership-aware,
+fixture-only domain command outbox and acknowledgment flow; do not write directly
+to personal data from the runtime. Test duplicate delivery, crash-before-ACK,
+revision conflict and reseed behavior. Keep all caches/tools on D:.
 
 
 ## Useful verification commands
@@ -228,6 +240,7 @@ $env:PYTHONDONTWRITEBYTECODE='1'
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_worker_test.py
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_lease_test.py
 & .\.venv\Scripts\python.exe -B tests\agent_runtime_approval_test.py
+& .\.venv\Scripts\python.exe -B tests\agent_runtime_process_test.py
 ```
 
 Other already-validated targeted checks:

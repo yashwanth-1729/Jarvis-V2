@@ -453,6 +453,17 @@ strict decision contract permits only an authenticated human `grant` or `deny`.
 This remains a control-plane boundary only: no HTTP endpoint or UI consumes it
 yet, and no write-capable adapter is connected.
 
+Schema v4 adds the internal managed-process boundary. Each host-issued handle
+records its run, operation, owner generation, argv, working directory, bounded
+output artifact paths, PID and OS creation identity. A PID alone is never enough
+to signal a process: cancellation compares the live process identity and refuses
+if it changed. Named resource leases serialize shared package-cache/GPU/profile
+style resources before subprocess start. On Windows the service retains the
+existing P05 kill-on-close Job Object handle so closing/cancelling a managed
+process also ends its owned descendants; `taskkill` remains a fallback and the
+direct asyncio child handle is used only after identity validation. This is an
+internal fixture service, not an HTTP/model command path or installer adapter.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

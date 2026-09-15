@@ -1,4 +1,4 @@
--- JARVIS durable agent control plane, schema version 3.
+-- JARVIS durable agent control plane, schema version 4.
 -- This database is never part of client-owned personal-data seed/drain/sync.
 
 CREATE TABLE IF NOT EXISTS runtime_sessions (
@@ -103,4 +103,42 @@ CREATE INDEX IF NOT EXISTS idx_agent_approvals_pending
     ON agent_approvals (run_id, status, expires_at);
 INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (3);
 
-PRAGMA user_version = 3;
+CREATE TABLE IF NOT EXISTS managed_processes (
+    id                 TEXT PRIMARY KEY,
+    run_id             TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+    operation_id       TEXT NOT NULL,
+    owner_generation   INTEGER NOT NULL,
+    pid                INTEGER,
+    creation_identity  TEXT,
+    executable_json    TEXT NOT NULL,
+    working_directory  TEXT NOT NULL,
+    resource_key       TEXT,
+    status             TEXT NOT NULL CHECK (status IN (
+        'RESERVED', 'RUNNING', 'EXITED', 'FAILED_TO_START',
+        'CANCEL_REQUESTED', 'CANCELLED', 'UNKNOWN'
+    )),
+    stdout_path        TEXT NOT NULL,
+    stderr_path        TEXT NOT NULL,
+    output_bytes       INTEGER NOT NULL DEFAULT 0,
+    output_truncated   INTEGER NOT NULL DEFAULT 0 CHECK (output_truncated IN (0, 1)),
+    exit_code          INTEGER,
+    created_at         TEXT NOT NULL,
+    started_at         TEXT,
+    finished_at        TEXT,
+    UNIQUE (run_id, operation_id)
+);
+CREATE TABLE IF NOT EXISTS resource_leases (
+    resource_key       TEXT PRIMARY KEY,
+    process_id         TEXT NOT NULL REFERENCES managed_processes(id) ON DELETE CASCADE,
+    run_id             TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+    owner_generation   INTEGER NOT NULL,
+    expires_at         TEXT NOT NULL,
+    created_at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_managed_processes_run_status
+    ON managed_processes (run_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_resource_leases_expiry
+    ON resource_leases (expires_at);
+INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (4);
+
+PRAGMA user_version = 4;
