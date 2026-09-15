@@ -128,6 +128,18 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P16 ownership-aware domain command outbox
+
+- Added schema v5 `domain_commands` and an isolated `DomainCommandService`.
+  The runtime enqueues a stable operation ID for the authoritative BACKEND or
+  CLIENT owner; it does not write tasks/schedules/memories itself. Repeated
+  delivery with identical content is idempotent, changed content under the same
+  operation ID conflicts, and only an owner terminal acknowledgement can mark
+  the result applied/already-applied/conflict/rejected/unavailable.
+- Verified against temporary runtime databases: P16 4/4, database 7/7 and
+  migration/backup 5/5. No personal record, provider, installer, package/cache
+  or native build was touched.
+
 ### 2026-09-15 · Codex · P15 managed process and resource-lease fixture
 
 - Added schema v4 `managed_processes` and `resource_leases`, plus an

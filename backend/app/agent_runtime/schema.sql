@@ -1,4 +1,4 @@
--- JARVIS durable agent control plane, schema version 4.
+-- JARVIS durable agent control plane, schema version 5.
 -- This database is never part of client-owned personal-data seed/drain/sync.
 
 CREATE TABLE IF NOT EXISTS runtime_sessions (
@@ -141,4 +141,23 @@ CREATE INDEX IF NOT EXISTS idx_resource_leases_expiry
     ON resource_leases (expires_at);
 INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (4);
 
-PRAGMA user_version = 4;
+CREATE TABLE IF NOT EXISTS domain_commands (
+    operation_id       TEXT PRIMARY KEY,
+    run_id             TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+    destination_owner  TEXT NOT NULL CHECK (destination_owner IN ('BACKEND', 'CLIENT')),
+    target_uid         TEXT,
+    expected_revision  TEXT,
+    command_json       TEXT NOT NULL,
+    approval_id        TEXT REFERENCES agent_approvals(id),
+    status             TEXT NOT NULL CHECK (status IN (
+        'PENDING', 'DELIVERED', 'APPLIED', 'ALREADY_APPLIED', 'CONFLICT', 'REJECTED', 'UNAVAILABLE'
+    )),
+    result_json        TEXT,
+    created_at         TEXT NOT NULL,
+    acknowledged_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_domain_commands_delivery
+    ON domain_commands (destination_owner, status, created_at);
+INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (5);
+
+PRAGMA user_version = 5;

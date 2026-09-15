@@ -464,6 +464,14 @@ process also ends its owned descendants; `taskkill` remains a fallback and the
 direct asyncio child handle is used only after identity validation. This is an
 internal fixture service, not an HTTP/model command path or installer adapter.
 
+Schema v5 adds `domain_commands` as the only P16 bridge shape for future runtime
+changes to personal data. The runtime records a stable operation ID, destination
+owner, target UID/revision, command payload and optional approval reference, then
+waits for an owner acknowledgement. Duplicate delivery of the same command is
+idempotent; reuse of that operation ID for changed content is rejected. This does
+not create a cross-store transaction and does not yet deliver to either backend
+SQLite or client IndexedDB—the fixture proves the outbox/ACK semantics only.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 
 import aiosqlite
 
-TARGET_VERSION = 4
+TARGET_VERSION = 5
 Migration = Callable[[aiosqlite.Connection], Awaitable[None]]
 
 
@@ -112,11 +112,34 @@ async def _v4_managed_processes(conn: aiosqlite.Connection) -> None:
     )
 
 
+async def _v5_domain_commands(conn: aiosqlite.Connection) -> None:
+    await conn.execute(
+        """CREATE TABLE domain_commands (
+               operation_id TEXT PRIMARY KEY,
+               run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+               destination_owner TEXT NOT NULL CHECK (destination_owner IN ('BACKEND', 'CLIENT')),
+               target_uid TEXT,
+               expected_revision TEXT,
+               command_json TEXT NOT NULL,
+               approval_id TEXT REFERENCES agent_approvals(id),
+               status TEXT NOT NULL CHECK (status IN (
+                   'PENDING', 'DELIVERED', 'APPLIED', 'ALREADY_APPLIED', 'CONFLICT', 'REJECTED', 'UNAVAILABLE'
+               )),
+               result_json TEXT,
+               created_at TEXT NOT NULL,
+               acknowledged_at TEXT
+           )"""
+    )
+    await conn.execute("CREATE INDEX idx_domain_commands_delivery ON domain_commands (destination_owner, status, created_at)")
+    await conn.execute("INSERT OR IGNORE INTO runtime_migration_history(version) VALUES (5)")
+
+
 MIGRATIONS: Mapping[int, Migration] = {
     1: _v1_initial_marker,
     2: _v2_migration_history,
     3: _v3_approvals,
     4: _v4_managed_processes,
+    5: _v5_domain_commands,
 }
 
 

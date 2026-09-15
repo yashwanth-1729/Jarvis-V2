@@ -36,7 +36,7 @@ async def main() -> int:
         ("WAL is enabled", str(journal).lower() == "wal"),
         ("critical writes use synchronous FULL", synchronous == 2),
         ("foreign keys are enforced", foreign_keys == 1),
-        ("schema version is explicit", version == 4),
+        ("schema version is explicit", version == 5),
     ]
 
     newer = root / "newer.db"

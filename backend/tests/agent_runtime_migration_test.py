@@ -54,7 +54,7 @@ async def main() -> int:
     repo = RuntimeRepository(source)
     await repo.create_session(session_id="session-backup-0001", principal_id="owner", device_id="device")
     await source.disconnect()
-    manifest = await backup_quiesced(source, root / "backups" / "runtime-v4.db")
+    manifest = await backup_quiesced(source, root / "backups" / "runtime-v5.db")
 
     target = RuntimeDatabase(root / "restored.db")
     await restore_quiesced(target, manifest.path, expected_sha256=manifest.sha256)
@@ -70,9 +70,9 @@ async def main() -> int:
         checksum_rejected = True
 
     checks = [
-        ("v1 upgrades exclusively to current schema", version == 4 and [row[0] for row in history] == [2, 3, 4]),
+        ("v1 upgrades exclusively to current schema", version == 5 and [row[0] for row in history] == [2, 3, 4, 5]),
         ("interrupted migration rolls back DDL and version", rolled_back),
-        ("backup has verified manifest", manifest.schema_version == 4 and manifest.bytes > 0),
+        ("backup has verified manifest", manifest.schema_version == 5 and manifest.bytes > 0),
         ("restored database retains durable records", [row[0] for row in restored] == ["session-backup-0001"]),
         ("restore rejects wrong checksum", checksum_rejected),
     ]

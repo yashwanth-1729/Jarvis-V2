@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P15, by Codex)
+**Last updated:** 2026-09-15 (P16, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -158,6 +158,7 @@ backend/app/agent_runtime/
                    P13: generation-fenced execution + startup recovery
   approvals.py     P14 local pairing, authorization and exact-effect approvals
   processes.py     P15 internal managed subprocess ownership and resource leases
+  domain_commands.py P16 durable outbox / owner acknowledgement boundary
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -173,6 +174,7 @@ The runtime database currently owns:
 - `runtime_migration_history`
 - `agent_approvals` (P14 exact human-decision records)
 - `managed_processes` / `resource_leases` (P15 process facts and named locks)
+- `domain_commands` (P16 personal-data owner outbox, schema v5)
 
 It does **not** own personal tasks/schedules/memories/chat history and must not
 be included in client-owned seed/drain/reseed flows.
@@ -219,12 +221,19 @@ tests cover output cap, resource conflict, stale identity and cancellation.
 There is no model command path, HTTP endpoint, real installer, package install
 or linkage to legacy `run_command`.
 
-## Exact next work: P16
+## P16: ownership-aware domain commands — implemented, this push
 
-Read P16 and phase 8 before source changes. Implement an ownership-aware,
-fixture-only domain command outbox and acknowledgment flow; do not write directly
-to personal data from the runtime. Test duplicate delivery, crash-before-ACK,
-revision conflict and reseed behavior. Keep all caches/tools on D:.
+Schema v5 adds a runtime-only outbox for future personal-record effects. The
+runtime does not mutate personal SQLite or IndexedDB; it queues an idempotent
+operation for BACKEND or CLIENT ownership and awaits a terminal owner
+acknowledgement. The fixture covers duplicate delivery and conflicting content.
+No bridge to real records is wired yet.
+
+## Exact next work: P17
+
+Read P17 and phase 9 before source changes. Add authenticated runtime submit,
+inspect, cancel and event-replay endpoints backed only by the fixture worker;
+test ownership, idempotency and event cursors. Do not admit real effects.
 
 
 ## Useful verification commands

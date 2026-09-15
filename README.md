@@ -458,6 +458,15 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Ownership-aware domain-command outbox added (P16).** Runtime
+  schema v5 adds `domain_commands`, which is a durable handoff to the
+  authoritative backend/client personal-data owner—not a shortcut around it.
+  Commands are keyed by a stable operation ID, retain target/revision/approval
+  references, reject changed duplicate content, and remain pending until the
+  owner records a terminal applied/already-applied/conflict/rejected/unavailable
+  acknowledgement. The isolated fixture verifies idempotent delivery and ACK
+  behavior only. It does not mutate tasks, schedules, memories or IndexedDB.
+
 - **2026-09-15 — Managed runtime process handles added (P15).** Runtime schema
   v4 adds durable managed-process and resource-lease records. The internal-only
   process service accepts explicit host argv (never model text), records an
