@@ -546,6 +546,12 @@ fixture must fail as expected, while unsupported capabilities remain visible rat
 than being counted as passes. It is not a live-provider, device or installed-path
 benchmark.
 
+P33 adds an explicit `RuntimeReleaseFlags` policy. All unfinished runtime
+capabilities default disabled: admission, domain writes, sensitive effects,
+background jobs, persistent browser profiles, parallel runs and Android execution.
+Disabling admission does not remove read/inspect/cancel access to existing run
+facts, which is required for a safe pause or rollback.
+
 An audio message has `seq` (monotonically increasing within its generation),
 `text`, and base64 `data`. PCM messages add `format: "pcm16"` and `sample_rate`.
 PCM is mono signed little-endian 16-bit; each packet is sample-aligned and normally

@@ -1,6 +1,6 @@
 # Codex ↔ Claude Continuity Bridge
 
-**Last updated:** 2026-09-15 (P32, by Codex)
+**Last updated:** 2026-09-15 (P33, by Codex)
 
 This is a durable handoff for either Codex or Claude Code. Read it with
 `AGENTS.md`, `explanations.md`, `README.md`, `docs/architecture.md`, and
@@ -174,6 +174,7 @@ backend/app/agent_runtime/
   children.py      P30 bounded read-only child admission
   telemetry.py     P31 bounded redacted diagnostic buffer
   evaluation.py    P32 held-out fixture report/denominator harness
+  release.py       P33 closed-by-default rollout policy
 ```
 
 `JARVIS_RUNTIME_DB_PATH` can select the runtime database. If it is empty,
@@ -313,10 +314,16 @@ P32 reports total/supported/unsupported/matched fixture outcomes by family; a
 known-bad expected failure is required and unsupported work is not hidden. It is
 not a provider benchmark or installed-path test.
 
-## Exact next work: P33
+## P33: release controls — implemented, this push
 
-Read P33 and phase 30 before source changes. Add explicit feature-flag/release
-controls while keeping unfinished runtime paths disabled by default.
+P33 adds closed-by-default feature flags. Admission may pause independently of
+inspection/cancellation; all unfinished runtime capabilities remain off unless a
+reviewed release enables them.
+
+## Exact next work: P34
+
+P34 requires an explicitly selected installed artifact/device. Do not claim it
+from source tests; record a pending installed-path checklist until one is selected.
 
 
 ## Useful verification commands

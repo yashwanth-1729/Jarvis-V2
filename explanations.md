@@ -128,6 +128,14 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-15 · Codex · P33 closed-by-default release policy
+
+- Added explicit runtime release flags. Every unfinished capability defaults off;
+  new admission is separate from inspection/cancellation, so pausing rollout does
+  not erase operational visibility or force an unsafe legacy path.
+- P33 fixture 3/3 and P32 fixture 3/3 pass. No feature was enabled, no build,
+  provider, package or user-data action occurred.
+
 ### 2026-09-15 · Codex · P32 held-out evaluation harness
 
 - Added held-out fixture evaluation reporting with explicit total/supported/

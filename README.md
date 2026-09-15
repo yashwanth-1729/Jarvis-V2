@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-15 — Runtime release controls added (P33).** A closed-by-default
+  feature-flag policy now distinguishes new-run admission from existing-run
+  inspection/cancellation. Domain writes, sensitive effects, background jobs,
+  persistent browser profiles, parallel work and Android execution are all off
+  unless a reviewed release explicitly enables them.
+
 - **2026-09-15 — Held-out runtime evaluation harness added (P32).** The
   fixture harness reports total, supported, unsupported and matched expectations
   by task family. It requires a known-bad expected failure and leaves unsupported
