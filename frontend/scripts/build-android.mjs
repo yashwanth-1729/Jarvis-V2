@@ -21,7 +21,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -119,6 +119,13 @@ const env = {
   // tries to create wrapper locks at the drive root and packaging fails after
   // the expensive web/Rust stages have already completed.
   GRADLE_USER_HOME: join(process.env.USERPROFILE ?? process.env.HOME ?? FRONTEND, ".gradle"),
+  // The phone build uses Cargo's dev profile (`tauri android build --debug`),
+  // which embeds full debug info: libapp_lib.so shipped at 130.6 MB. Nobody
+  // symbolizes a crash from the phone, so drop it -- for this build only, via
+  // env, so desktop `tauri dev` keeps its debug info. Same package name, so
+  // on-device data survives, unlike switching to a release build.
+  CARGO_PROFILE_DEV_DEBUG: "false",
+  CARGO_PROFILE_DEV_STRIP: "true",
   PATH: [
     join(javaHome, "bin"),
     join(androidHome, "platform-tools"),
@@ -196,6 +203,12 @@ step(3, total, "Packaging the APK (Chaquopy + Gradle)");
 // directory the way a POSIX shell resolves `./gradlew`, so a bare name here
 // fails with "not recognized" even though the file is right there.
 const gradlew = join(ANDROID, process.platform === "win32" ? "gradlew.bat" : "gradlew");
+// Delete the previous APK first. Debug packaging patches the old file in place,
+// and entries that were removed or shrunk are left behind as dead space rather
+// than cut out: after dropping ~200 MB of voice models the APK was still
+// 162 MB on disk with only 44 MB of actual content. A fresh file is ~44 MB.
+const previousApk = join(ANDROID, "app", "build", "outputs", "apk", "arm64", "debug", "app-arm64-debug.apk");
+rmSync(previousApk, { force: true });
 run(gradlew, ["assembleArm64Debug", "-x", "rustBuildArm64Debug", "--console=plain"], {
   cwd: ANDROID,
   env,

@@ -458,6 +458,22 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-18 — Android APK cut from 529 MB to 44 MB.** Measured breakdown:
+  the UI was ~2 MB; ~206 MB was the on-device Piper/sherpa-onnx voice
+  (models, espeak data, onnxruntime), disabled since the cloud-only switch but
+  still bundled -- and `MainActivity` still loaded the 106 MB model into memory
+  at every launch. Removed `JarvisTts.kt`, its `MainActivity` bridge and the
+  sherpa-onnx AAR dependency; the `assets/piper` models were moved (not
+  deleted) to `D:	tscachendroid_piper_backup`. `window.JarvisTts` is now
+  absent, which `nativeTts.ts` already treats as unavailable. The Rust library
+  was a dev build with full debug info (130.6 MB); `build-android.mjs` now sets
+  `CARGO_PROFILE_DEV_DEBUG=false`/`CARGO_PROFILE_DEV_STRIP=true` for the phone
+  build only (12.6 MB; desktop `tauri dev` unaffected; same package name so
+  on-device data survives). The script also deletes the previous APK before
+  packaging: debug packaging patches the old file in place and left ~118 MB of
+  dead space. Verified: fresh APK 44.4 MB, installed, app launches, backend
+  healthy (`/api/health` ok) with the existing database.
+
 - **2026-09-18 — Voice mode now wakes speech recognition too; Wikipedia UA.**
   Live check of the hedging build: once warm, simple turns reached first audio
   in 2.4-3.0s and action turns in 4.5-5.9s (STT 1.3-2.3s, TTS ~1-1.9s), every

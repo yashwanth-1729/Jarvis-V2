@@ -55,14 +55,11 @@ class MainActivity : TauriActivity() {
       null,
     )
     Log.i(TAG, "native notification bridge ready")
-
-    // On-device English TTS (Piper via sherpa-onnx) -- see JarvisTts.kt. Runs
-    // evaluateJavascript back on the WebView's own thread, since the bridge's
-    // synthesis worker calls this from a background pool.
-    val ttsBridge = JarvisTtsBridge(applicationContext) { js -> webView.post { webView.evaluateJavascript(js, null) } }
-    webView.addJavascriptInterface(ttsBridge, "JarvisTts")
-    ttsBridge.warm()
-    Log.i(TAG, "native tts bridge ready")
+    // The on-device Piper/sherpa-onnx voice (JarvisTts.kt) was removed
+    // 2026-09-18: speech runs in the cloud, and it added ~206 MB to the APK
+    // plus a 106 MB model loaded into memory at every launch for nothing.
+    // `window.JarvisTts` is now simply absent; nativeTts.ts treats that as
+    // "unavailable", which realtime.ts already assumed.
   }
 
   private fun findWebView(view: View): WebView? {
