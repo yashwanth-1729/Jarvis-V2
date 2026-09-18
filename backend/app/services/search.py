@@ -194,7 +194,13 @@ async def fetch(url: str) -> tuple[str, str]:
 #: Wikipedia refuses browser-shaped user agents outright — the generic `_UA`
 #: used for scraping search pages gets a flat 403 from the API. Their policy
 #: asks for a descriptive agent naming the tool, so this one does.
-WIKI_UA = "JARVIS-PersonalAssistant/2.1 (personal project; contact via github)"
+#: Wikimedia's User-Agent policy wants real contact info (a URL or email).
+#: "contact via github" had none, and the phone -- on a carrier's shared
+#: mobile IP -- got 403 Forbidden live (2026-09-18) while desktop got 200.
+WIKI_UA = (
+    "JARVIS-PersonalAssistant/3.0 "
+    "(https://github.com/yashwanth-1729/Jarvis-V2; personal single-user assistant)"
+)
 
 WIKI_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 WIKI_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/"

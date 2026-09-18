@@ -458,6 +458,20 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-18 — Voice mode now wakes speech recognition too; Wikipedia UA.**
+  Live check of the hedging build: once warm, simple turns reached first audio
+  in 2.4-3.0s and action turns in 4.5-5.9s (STT 1.3-2.3s, TTS ~1-1.9s), every
+  action real. The first minute after opening voice mode was still slow across
+  the board (TTS warm-up 7.3s, first STT 11.2s) and hedged duplicates were just
+  as slow -- a cold upstream, not random spikes. `app/api/realtime.py` now warms
+  STT (0.5s of silence) alongside TTS when voice mode opens. Separately, the
+  phone got 403 from Wikipedia while desktop got 200 with the same identifier;
+  `WIKI_UA` in `app/services/search.py` now carries a real contact URL per
+  Wikimedia's policy (not verified to clear the phone's 403). A raw null byte
+  briefly written into `realtime.py` during this edit was caught before build
+  (the file would not have imported); all source was scanned clean. Offline
+  suite unchanged (48 + 2 known harness-only). Installed on device.
+
 - **2026-09-18 — Voice audio no longer stalls for 13s on a slow TTS call.**
   Live after switching to gpt-4.1-nano: the reminder was saved for real, but
   the spoken reply sat silent while one Kokoro `/audio/speech` call took 13.0s

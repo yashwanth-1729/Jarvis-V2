@@ -1024,15 +1024,34 @@ async def _keep_openrouter_warm(language: str) -> None:
     from app.providers.openrouter import warm_connection
 
     await warm_connection()
-    # One throwaway synthesis while the user is still getting ready to speak.
-    # Both 13-14s TTS stalls seen live on 2026-09-18 were the *first* speech
-    # of a session, and direct probes showed a first-request-after-idle
-    # penalty on Kokoro, so the voice model is woken here rather than on the
-    # first real reply. A few characters; the audio is discarded.
-    try:
-        await asyncio.wait_for(speech.speak("Okay.", language), 20)
-    except Exception as exc:  # noqa: BLE001 - warming must never break a session
-        logger.info("TTS warm-up skipped (%s: %s)", type(exc).__name__, exc)
+    # Wake the upstream speech models while the user is still getting ready to
+    # speak. Measured live (2026-09-18): the first minute after opening voice
+    # mode was slow across the board -- a 7.3s TTS, an 11.2s STT on a normal
+    # clip -- and a hedged duplicate was just as slow, i.e. the upstream was
+    # cold, not randomly slow. After that, STT settled at 1.3-2.3s and TTS at
+    # ~1-1.9s. Both are warmed at once; results are discarded, cost is a word
+    # of TTS and half a second of silence of STT.
+    results = await asyncio.gather(
+        asyncio.wait_for(speech.speak("Okay.", language), 20),
+        asyncio.wait_for(_warm_stt(), 20),
+        return_exceptions=True,
+    )
+    for name, result in zip(("TTS", "STT"), results):
+        if isinstance(result, BaseException):
+            logger.info("%s warm-up skipped (%s: %s)", name, type(result).__name__, result)
     while True:
         await asyncio.sleep(KEEP_WARM_INTERVAL_SECONDS)
         await warm_connection()
+
+
+async def _warm_stt() -> None:
+    """Transcribe half a second of silence to wake the upstream STT model."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as clip:
+        clip.setnchannels(1)
+        clip.setsampwidth(2)
+        clip.setframerate(16000)
+        clip.writeframes(bytes(16000))  # 0.5s of 16-bit silence
+    await get_stt_provider().transcribe(
+        buffer.getvalue(), filename="warmup.wav", content_type="audio/wav"
+    )
