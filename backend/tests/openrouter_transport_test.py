@@ -149,6 +149,44 @@ async def main() -> int:
     check("STT stalled connect is retried", transcript.text == "remind me at nine" and len(seen) == 2,
           f"{transcript.text!r}, {len(seen)} calls")
 
+    # 6b. TTS hedge: a stuck first request is beaten by the duplicate.
+    import time as _time
+    from app.providers.openrouter import OpenRouterTTS
+
+    settings.openrouter_tts_hedge_seconds = 0.2
+
+    async def slow_first(request, n):
+        if n == 1:
+            await asyncio.sleep(3.0)
+            return httpx.Response(200, content=b"slow-audio")
+        return httpx.Response(200, content=b"fast-audio")
+
+    seen = install(lambda r, n: slow_first(r, n))
+    t0 = _time.perf_counter()
+    speech = await OpenRouterTTS().synthesize("Got it, boss.")
+    took = _time.perf_counter() - t0
+    check("a stuck TTS request is beaten by the hedge", speech.audio == b"fast-audio" and took < 1.5,
+          f"{speech.audio!r} in {took:.2f}s")
+    check("exactly one hedge was sent", len(seen) == 2, f"{len(seen)} calls")
+
+    # 6c. A normal-speed TTS answer never triggers a duplicate (no double billing).
+    seen = install(lambda r, n: httpx.Response(200, content=b"audio"))
+    await OpenRouterTTS().synthesize("Got it, boss.")
+    await asyncio.sleep(0.4)
+    check("a fast TTS answer sends no hedge", len(seen) == 1, f"{len(seen)} calls")
+
+    # 6d. STT hedge works the same way.
+    settings.openrouter_stt_hedge_seconds = 0.2
+
+    async def slow_first_stt(request, n):
+        if n == 1:
+            await asyncio.sleep(3.0)
+        return httpx.Response(200, json={"text": f"attempt {n}"})
+
+    seen = install(lambda r, n: slow_first_stt(r, n))
+    transcript = await OpenRouterSTT().transcribe(b"\x00" * 64, filename="a.wav")
+    check("a stuck STT request is beaten by the hedge", transcript.text == "attempt 2", transcript.text)
+
     # 7. One pool for every stage, with a real keep-alive.
     openrouter._test_transport = None
     openrouter._client = None

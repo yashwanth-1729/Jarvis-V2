@@ -227,6 +227,55 @@ async def _post_with_retry(
     return response
 
 
+async def _hedged(label: str, attempt, hedge_after: float) -> httpx.Response:
+    """Run `attempt()`; if it has not answered within `hedge_after`, fire an
+    identical second request and take whichever succeeds first.
+
+    For the audio endpoints only, where the tail is the problem: identical
+    requests measured 0.8s one moment and 13s the next (a live voice turn sat
+    silent 13s waiting on one TTS call while direct probes took ~1.5s). A
+    duplicate usually lands on a different, faster upstream instance. It costs
+    almost nothing -- Kokoro is ~$0.62 per million characters, Whisper-turbo
+    ~$0.04/hour -- and only fires on the slow tail, not every request.
+    Never used for chat: that stream drives tool calls and would double-bill
+    a large prompt.
+    """
+    tasks: list[asyncio.Task] = [asyncio.create_task(attempt())]
+    started = time.perf_counter()
+    try:
+        done, _ = await asyncio.wait(tasks, timeout=hedge_after)
+        if done:
+            return tasks[0].result()
+        logger.info("OpenRouter %s slow (>%.1fs); sending a hedge request", label, hedge_after)
+        tasks.append(asyncio.create_task(attempt()))
+        pending = set(tasks)
+        fallback: httpx.Response | None = None
+        error: BaseException | None = None
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if task.exception() is not None:
+                    error = task.exception()
+                    continue
+                response = task.result()
+                if response.status_code >= 400 and pending:
+                    fallback = response  # a real error answer; see if the other succeeds
+                    continue
+                logger.info(
+                    "OpenRouter %s answered by the %s request after %.2fs", label,
+                    "hedge" if task is tasks[1] else "original", time.perf_counter() - started,
+                )
+                return response
+        if fallback is not None:
+            return fallback
+        assert error is not None
+        raise error
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+
 def _extract_usage(raw: dict[str, Any] | None) -> dict[str, int]:
     """Flatten OpenRouter's usage block, including the nested cache fields.
 
@@ -560,8 +609,12 @@ class OpenRouterSTT:
         if language_code:
             payload["language"] = language_code.split("-")[0]
         try:
-            response = await _post_with_retry(
-                "/audio/transcriptions", payload, read_timeout=settings.openrouter_audio_timeout,
+            response = await _hedged(
+                "STT",
+                lambda: _post_with_retry(
+                    "/audio/transcriptions", payload, read_timeout=settings.openrouter_audio_timeout,
+                ),
+                settings.openrouter_stt_hedge_seconds,
             )
         except httpx.HTTPError as exc:
             raise ProviderUnavailable(
@@ -629,8 +682,12 @@ class OpenRouterTTS:
             "speed": settings.openrouter_tts_speed,
         }
         try:
-            response = await _post_with_retry(
-                "/audio/speech", payload, read_timeout=settings.openrouter_audio_timeout,
+            response = await _hedged(
+                "TTS",
+                lambda: _post_with_retry(
+                    "/audio/speech", payload, read_timeout=settings.openrouter_audio_timeout,
+                ),
+                settings.openrouter_tts_hedge_seconds,
             )
         except httpx.HTTPError as exc:
             raise ProviderUnavailable(

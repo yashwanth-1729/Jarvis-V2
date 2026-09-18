@@ -958,7 +958,7 @@ async def voice_session(websocket: WebSocket) -> None:
     # occasionally stalling on) a fresh mobile handshake. See
     # `openrouter.warm_connection` and the shared-client note there.
     keep_warm = (
-        asyncio.create_task(_keep_openrouter_warm())
+        asyncio.create_task(_keep_openrouter_warm(session.language))
         if settings.jarvis_voice_stack == "cloud"
         else None
     )
@@ -1020,9 +1020,19 @@ async def voice_session(websocket: WebSocket) -> None:
 KEEP_WARM_INTERVAL_SECONDS = 25.0
 
 
-async def _keep_openrouter_warm() -> None:
+async def _keep_openrouter_warm(language: str) -> None:
     from app.providers.openrouter import warm_connection
 
+    await warm_connection()
+    # One throwaway synthesis while the user is still getting ready to speak.
+    # Both 13-14s TTS stalls seen live on 2026-09-18 were the *first* speech
+    # of a session, and direct probes showed a first-request-after-idle
+    # penalty on Kokoro, so the voice model is woken here rather than on the
+    # first real reply. A few characters; the audio is discarded.
+    try:
+        await asyncio.wait_for(speech.speak("Okay.", language), 20)
+    except Exception as exc:  # noqa: BLE001 - warming must never break a session
+        logger.info("TTS warm-up skipped (%s: %s)", type(exc).__name__, exc)
     while True:
-        await warm_connection()
         await asyncio.sleep(KEEP_WARM_INTERVAL_SECONDS)
+        await warm_connection()

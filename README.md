@@ -458,6 +458,23 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-18 — Voice audio no longer stalls for 13s on a slow TTS call.**
+  Live after switching to gpt-4.1-nano: the reminder was saved for real, but
+  the spoken reply sat silent while one Kokoro `/audio/speech` call took 13.0s
+  (STT 2.2s, thinking + tool 3.5s). Direct probes of the same endpoint:
+  5.7s on the first request after a long idle, then 1-2s. Two fixes in
+  `app/providers/openrouter.py` / `app/api/realtime.py`: (1) hedged requests on
+  the audio endpoints -- if TTS hasn't answered in 2.5s (STT: 4.0s; normal
+  ranges from device logs are 0.8-2s and 2-3.8s), an identical second request
+  is sent and the first success wins (`OPENROUTER_TTS_HEDGE_SECONDS`,
+  `OPENROUTER_STT_HEDGE_SECONDS`); a normal-speed answer never sends a
+  duplicate; not used for chat. (2) Opening voice mode synthesizes one
+  throwaway word in the session language, so the voice model is awake before
+  the first real reply. Verified: `tests/openrouter_transport_test.py` now 20
+  checks (stuck TTS answered in 0.22s instead of 3s; fast TTS sends one
+  request); voice/audio/smoke tests pass. Installed on device; live timing to
+  be confirmed.
+
 - **2026-09-18 — Root-caused and fixed "OpenRouter stream failed ()"; found
   that qwen-2.5-7b fakes most actions.** Every live failure stopped at exactly
   ~10.0s: our own hardcoded 10s connect timeout on a stalled mobile TLS

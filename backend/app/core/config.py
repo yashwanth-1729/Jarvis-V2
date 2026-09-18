@@ -224,6 +224,13 @@ class Settings(BaseSettings):
     #: which is shorter than the gap between any two voice turns -- so almost
     #: every request paid a fresh handshake.
     openrouter_keepalive_seconds: float = Field(default=60.0, alias="OPENROUTER_KEEPALIVE_SECONDS")
+    #: When to fire a duplicate "hedge" request on the audio endpoints (see
+    #: `openrouter._hedged`). From real device logs: STT normally lands in
+    #: 2-3.8s with spikes to 7-19s; Kokoro TTS normally 0.8-2s with a live 13s
+    #: spike that left a voice turn silent. Just above each normal range, so the
+    #: hedge only fires on the slow tail.
+    openrouter_stt_hedge_seconds: float = Field(default=4.0, alias="OPENROUTER_STT_HEDGE_SECONDS")
+    openrouter_tts_hedge_seconds: float = Field(default=2.5, alias="OPENROUTER_TTS_HEDGE_SECONDS")
     #: Live-confirmed (2026-09-16) real model id on OpenRouter's
     #: /audio/transcriptions -- transcribed successfully and came back at
     #: ~44% of plain whisper-large-v3's cost for the same clip.

@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-18 · Claude Code · TTS tail latency: hedged audio requests
+
+- User chose gpt-4.1-nano; committed as ba51b74. Live on device the reminder
+  was saved for real (`set_reminder ok=True`), but one Kokoro TTS call took
+  13.0s. `_hedged()` in `providers/openrouter.py` now sends a duplicate audio
+  request after 2.5s (TTS) / 4.0s (STT) and takes the first success; chat is
+  deliberately not hedged. Voice-mode open also warms TTS once. 20 transport
+  checks pass.
+
 ### 2026-09-18 · Claude Code · OpenRouter reliability + the "fake actions" finding
 
 For Codex: the whole cloud voice stack (OpenRouter chat/STT/TTS,
