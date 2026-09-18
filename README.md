@@ -458,6 +458,17 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Audio timing instrumentation; desktop autonomy roadmap.**
+  Every OpenRouter STT/TTS call now logs time-to-first-byte vs complete, bytes
+  and generation id (`providers/openrouter.py`, `_post_timed`), separating a
+  slow provider from a slow download to the device. A live 29s TTS on the phone
+  was followed by a session where the phone and a concurrent desktop probe both
+  measured 1-2.5s (turns at 3.2-3.5s to first audio), consistent with a
+  transient upstream slowdown rather than the phone. Added
+  `docs/desktop-autonomy.md`: what desktop JARVIS can do today, where a
+  multi-step job like "install and set up an app" breaks, and a phased plan.
+  Planning doc only; no autonomy changes implemented.
+
 - **2026-09-18 — Android APK cut from 529 MB to 44 MB.** Measured breakdown:
   the UI was ~2 MB; ~206 MB was the on-device Piper/sherpa-onnx voice
   (models, espeak data, onnxruntime), disabled since the cloud-only switch but

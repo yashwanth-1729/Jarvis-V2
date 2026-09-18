@@ -211,20 +211,52 @@ async def _post_with_retry(
     the retry connects normally. A 4xx other than 429 is never retried: that
     is a stable rejection (bad payload/model/key) a retry cannot fix.
     """
-    kwargs = {"json": json_body, "headers": _headers(), "timeout": _timeout(read_timeout)}
     try:
-        response = await _http().post(url, **kwargs)
+        response = await _post_timed(url, json_body, read_timeout)
     except _TRANSPORT_ERRORS as exc:
         logger.warning("OpenRouter %s failed (%s); retrying once", url, _describe(exc))
-        return await _http().post(url, **kwargs)
+        return await _post_timed(url, json_body, read_timeout)
 
     if response.status_code == 429 or response.status_code >= 500:
         logger.warning(
             "OpenRouter %s returned %d; retrying once after backoff", url, response.status_code,
         )
         await asyncio.sleep(0.4)
-        return await _http().post(url, **kwargs)
+        return await _post_timed(url, json_body, read_timeout)
     return response
+
+
+async def _post_timed(url: str, json_body: dict[str, Any], read_timeout: float) -> httpx.Response:
+    """POST and read the whole body, recording time-to-first-byte separately.
+
+    The audio endpoints answer with a chunked body, so first-byte vs last-byte
+    tells "the provider was slow to start" apart from "the download to this
+    device was slow" -- the question a live 29s TTS on the phone raised while
+    the same request from desktop took ~1s. OpenRouter's generation lookup
+    does not cover audio (404), so this is the only way to see it.
+    """
+    client = _http()
+    request = client.build_request(
+        "POST", url, json=json_body, headers=_headers(), timeout=_timeout(read_timeout),
+    )
+    started = time.perf_counter()
+    response = await client.send(request, stream=True)
+    first_byte = time.perf_counter() - started
+    try:
+        await response.aread()
+    finally:
+        await response.aclose()
+    response.extensions["jarvis_timing"] = (first_byte, time.perf_counter() - started)
+    return response
+
+
+def _log_audio_timing(label: str, response: httpx.Response) -> None:
+    first_byte, total = response.extensions.get("jarvis_timing", (0.0, 0.0))
+    logger.info(
+        "OpenRouter %s timing: first-byte %.2fs, complete %.2fs, %d bytes, gen=%s",
+        label, first_byte, total, len(response.content),
+        response.headers.get("x-generation-id", "-"),
+    )
 
 
 async def _hedged(label: str, attempt, hedge_after: float) -> httpx.Response:
@@ -620,6 +652,7 @@ class OpenRouterSTT:
             raise ProviderUnavailable(
                 f"OpenRouter STT request failed ({_describe(exc)})."
             ) from exc
+        _log_audio_timing("STT", response)
         if response.status_code >= 400:
             _raise_for_status(response, response.content)
         body = response.json()
@@ -693,6 +726,7 @@ class OpenRouterTTS:
             raise ProviderUnavailable(
                 f"OpenRouter TTS request failed ({_describe(exc)})."
             ) from exc
+        _log_audio_timing("TTS", response)
         if response.status_code >= 400:
             _raise_for_status(response, response.content)
         return Speech(audio=response.content, content_type="audio/mpeg")

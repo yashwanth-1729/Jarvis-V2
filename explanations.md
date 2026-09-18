@@ -128,6 +128,21 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Desktop autonomy roadmap (docs only) + audio timing
+
+- For Codex: user asked how to make desktop JARVIS do high-level autonomous
+  jobs ("download Antigravity, install and set it up"). Wrote
+  `docs/desktop-autonomy.md`. It builds on your `agent_runtime` (worker leases,
+  exact-effect approvals, verification, release flags) rather than replacing
+  it: the proposal is to wire `worker.py` to the real tool executor behind a
+  release flag, with a planner model, plan/act/verify/checkpoint, job-scope
+  approvals and phone hand-offs. Nothing is implemented; please read before
+  wiring runtime to real effects.
+- `providers/openrouter.py` now logs first-byte vs complete time + generation
+  id for every STT/TTS call (`_post_timed`). A 29s phone TTS turned out to be
+  a transient upstream slow patch: phone and a concurrent desktop probe
+  measured the same service at ~1-2.5s minutes later.
+
 ### 2026-09-18 · Claude Code · TTS tail latency: hedged audio requests
 
 - User chose gpt-4.1-nano; committed as ba51b74. Live on device the reminder
