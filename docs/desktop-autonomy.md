@@ -1,263 +1,333 @@
-# Desktop JARVIS: from tool-caller to autonomous operator
+# JARVIS Autonomy Blueprint (desktop)
 
-*Written 2026-09-19 after reading the current code. Goal: make requests like
-"download Antigravity, install it and set it up" or "do X on my PC while I'm
-away" actually work end to end, safely.*
+*2026-09-19. Replaces the first-pass version of this file. Grounded in the
+current code and in research on the strongest agents (OpenClaw, Hermes Agent,
+Microsoft UFO², OSWorld leaders, long-horizon harness work). Sources are at the end.*
 
----
+**The goal:** you tell JARVIS an **outcome**, not steps. "Download Antigravity,
+install it and set it up." "Every Friday clean my Downloads folder and tell me
+what you archived." "Get my project running on this machine." Then you walk
+away, and JARVIS comes back when it's done or when it genuinely needs you.
 
-## TL;DR
+**What "better than OpenClaw" means here:**
+- **Match** OpenClaw's reach: an always-on runtime, skills loaded on demand,
+  long-term memory, scheduled work, and chat/phone control.
+- **Beat it** where it is measurably weak:
+  - **Safety.** Independent audits put OpenClaw at 58.9% safe behavior, 0%
+    on ambiguous requests, and 57% on injection tests.
+  - **Proof of completion.** No "done" without evidence.
+  - **Being Windows-native.**
+  - **Voice-first control** from the phone in English, Hindi and Telugu.
 
-Desktop JARVIS already has most of the **hands** it needs (35 real computer
-tools: shell, files, Windows UI automation, its own browser, apps, clipboard).
-Codex has also built most of the **skeleton** for long-running work (durable
-runs, approvals, verification, leases, recovery) in `app/agent_runtime/`.
-
-What is missing is the **brain and the plumbing between them**:
-
-1. Work today is confined to **one chat turn**: at most 8 tool calls and 240
-   seconds. An install-and-setup job needs dozens of steps and several minutes.
-2. The chat model (gpt-4.1-nano) is chosen for fast voice replies. It is too
-   small to plan and recover across a 30-step job.
-3. The agent runtime is **fixture-only and closed by default**. None of it
-   drives real tools yet.
-4. There is no plan → act → verify → checkpoint loop, no "resume after
-   failure", and no way to ask for your approval mid-job from your phone.
-5. JARVIS can only "see" apps through the Windows accessibility tree. Many
-   modern apps (Electron, custom UIs, installers) expose little there.
-
-Closing those five gaps, in the phased order below, gets you to reliable
-high-level autonomous tasks. Nothing needs to be rewritten.
+Capability that isn't safe is just a faster way to wreck a machine. So here,
+safety is part of the capability, not a tax on it.
 
 ---
 
-## 1. What desktop JARVIS can do today (verified in code)
+## Part 1: Where JARVIS stands today
 
-Tool registry: `backend/app/llm/tools.py`. The 35 `capability="system"` tools are
-enabled on desktop only (`system_tools_enabled` is forced off on Android).
+### Hands (already built, desktop only)
+There are 35 system tools in `backend/app/llm/tools.py`:
+- **Shell:** `run_command` (asks before running).
+- **Files:** read, write, edit, list, search, find, disk usage.
+- **Apps and OS:** launch, close (asks first), open path, list processes, hotkeys, clipboard.
+- **Windows UI Automation (pywinauto):** list/focus windows, inspect, find, click,
+  set text, get text, press key, toggle, select.
+- **An isolated Playwright Chromium:** open, navigate, inspect, find, click, type,
+  submit, read text, URL, title.
+- **Web:** search and page fetch.
 
-| Area | Tools | Notes |
+### Skeleton (built by Codex, all switched off)
+`backend/app/agent_runtime/`:
+
+| Module | Status |
+|---|---|
+| `worker.py` | Durable worker: leases, cancellation, crash recovery. Runs only a side-effect-free `observe()`. |
+| `approvals.py` | Exact-effect approvals plus pairing tokens. |
+| `verification.py` | Deterministic evidence; "no self-attested success". |
+| `workflows.py` | Reviewed, host-owned workflows; "never executable model plans". |
+| `skills.py` | Reviewed skill manifests; no remote loading. |
+| `evaluation.py` | Held-out evaluation with explicit denominators. |
+| `processes.py`, `children.py`, `scheduler.py`, `telemetry.py`, `domain_commands.py`, `voice_bridge.py` | Contracts for subprocesses, sub-agents, scheduling, event logging, cross-device commands and voice hand-off. |
+| `release.py` | Every switch is **off**: `admit_new_runs`, `background_jobs`, `domain_writes`, `sensitive_effects`, `persistent_browser_profiles`, `parallel_runs`, `android_execution`. |
+
+### Brain (the limiting factor)
+- All work happens inside **one chat turn**: at most **8 tool steps** and **240s**.
+- The model is **gpt-4.1-nano**. It's right for fast voice replies and wrong
+  for planning a 40-step job.
+- **No plan, no checkpoints, no verification, no resume.**
+- **Sight is limited to the accessibility tree.** Electron apps, installers
+  and custom UIs are often invisible to it.
+- The tool `risk` field exists but is **not enforced** (`run_command` is even
+  tagged `low`).
+
+**Honest verdict:** JARVIS is a strong *single-turn* desktop assistant today and
+has no autonomy yet. Nearly every part needed to get there exists in some form.
+The work is connecting them under a planner, with a safety kernel in front.
+
+---
+
+## Part 2: Lessons from the best agents
+
+| Source | Lesson | What JARVIS takes |
 |---|---|---|
-| Shell | `run_command` | Two-step: describes the command, runs only with `confirmed=true`. |
-| Files | `read_file`, `write_file`, `edit_file`, `list_dir`, `search_files`, `find_files`, `disk_usage` | Full filesystem reach. |
-| Apps & OS | `launch_app`, `close_app` (two-step), `open_path`, `list_processes`, `send_hotkey`, `clipboard_get/set` | `tools_os_control.py`. |
-| Windows UI | `ui_list_windows`, `ui_focus_window`, `ui_inspect`, `ui_find_element`, `ui_click`, `ui_set_text`, `ui_get_text`, `ui_press_key`, `ui_toggle`, `ui_select` | pywinauto / UI Automation tree, elements addressed as `[eN]`. |
-| Browser | `browser_open`, `browser_navigate`, `browser_inspect`, `browser_find`, `browser_click`, `browser_type`, `browser_submit`, `browser_get_text`, `browser_current_url`, `browser_title` | Playwright, a **separate isolated Chromium** (not your logged-in Chrome). |
-| Web | `web_search`, `fetch_url` (core tools) | DuckDuckGo + Wikipedia. |
-
-**Agent loop limits** (`app/llm/agent.py`, `core/config.py`):
-- `JARVIS_MAX_TOOL_ITERATIONS = 8` model↔tool rounds per turn.
-- `JARVIS_CHAT_TURN_TIMEOUT = 240s` for a typed turn. A voice turn is capped at 75s.
-- History sent to the model is the last 6 messages.
-
-**Safety today:** two-step confirmation on `run_command`, `close_app`, and the
-delete tools. Each `ToolSpec` has a `risk` field (`low`/`medium`/`high`), but
-**nothing enforces it yet**. Its own comment says it is informational. Oddly,
-`run_command` is tagged `low`.
-
-**What a single turn can already do well:** "what's using my RAM", "open VS
-Code", "find the PDF I downloaded yesterday", "rename these files", "search
-the web for X and summarize". These are short, one to eight steps.
+| **OpenClaw** | An always-on loop; skills listed as metadata and read on demand; searchable memory; scheduled tasks; messaging channels. Huge adoption. | The runtime shape and on-demand skills. **Not** its trust model: untrusted web and file content can steer it (ClawHavoc, repeated CVEs). |
+| **Hermes Agent** | A closed learning loop: a successful multi-step task becomes a reusable skill; SQLite FTS5 memory; periodic consolidation. | Self-improving skills. JARVIS adds a **review gate** before a learned skill is trusted, matching `skills.py`. |
+| **Microsoft UFO²** | A HostAgent splits the task, per-app AppAgents act; **UI Automation plus vision** hybrid detection; **API calls before GUI clicks**; several actions planned per model call; a **separate virtual desktop** so the agent never fights you for the mouse. | The Windows-native core of this plan. |
+| **OSWorld-Verified (Sep 2026)** | Top systems finish **85–86%** of 369 real desktop tasks. Leader: **Qwen3.8-Max, 86.1%**, **$2 / $6 per M tokens** on OpenRouter. Claude Fable 5 scores 85% at $10 / $50. | Qwen3.8-Max is the best capability per dollar and stays in the Qwen family. |
+| **Long-horizon harnesses** | Recover the goal and verified state, do one bounded step with **fresh context**, check the real result, **checkpoint**, and feed failures into the next round. Context editing alone gave +29%, memory +39%, and cut tokens 84%. Sub-agents with separate context return short summaries. | The execution loop and context hygiene. |
 
 ---
 
-## 2. What the agent runtime already provides (Codex, P12–P34)
-
-`backend/app/agent_runtime/` is a careful foundation for long-running work.
-Every module states it is fixture-only, and `release.py` keeps every
-capability off unless explicitly enabled:
-
-| Module | What it is | Status |
-|---|---|---|
-| `worker.py` | Durable worker: lease claim/renewal, safe cancellation, crash recovery | Runs only a side-effect-free `observe()` |
-| `approvals.py` | Exact-effect approvals ("approve *this* command, not a category") + pairing tokens | Built |
-| `verification.py` | Deterministic evidence; "no self-attested success" | Skeleton |
-| `workflows.py` | Reviewed, host-owned workflow definitions; "never executable model plans" | Skeleton |
-| `skills.py` | Reviewed local skill manifests; no remote loading | Skeleton |
-| `processes.py` | Managed subprocess ownership (argv from host code, never model text) | Fixture-safe |
-| `children.py` | Bounded read-only child runs (sub-agents) | Read-only |
-| `desktop.py` / `browser.py` | Serialized desktop/browser workers | "No UI Automation calls registered" |
-| `release.py` | Closed-by-default rollout flags | All closed |
-| `scheduler.py`, `telemetry.py`, `domain_commands.py`, `voice_bridge.py` | Scheduling, redacted event buffer, cross-device commands, voice hand-off | Contracts |
-
-This is the right shape. It just isn't connected to the real tools or to a
-planner yet.
-
----
-
-## 3. Walkthrough: "download Antigravity, install it and set it up"
-
-Traced against today's code, step by step:
-
-| Step | What's needed | Today |
-|---|---|---|
-| 1. Find the official download | `web_search` → confirm the vendor's own domain | ✅ Works. No check that the source is official. |
-| 2. Download the installer | `run_command` (`curl`/`Invoke-WebRequest`) or the browser | ⚠️ Works, but each command needs your yes. No signature check on the file. |
-| 3. Prefer a package manager | `winget search/install` handles download + silent install + version | ⚠️ Possible via `run_command`, but nothing tells the model to prefer it. |
-| 4. Run the installer | Silent flags, or click through the wizard | ⚠️ UI clicks work if the wizard exposes accessibility info. Many don't. |
-| 5. **UAC elevation prompt** | Windows shows it on the secure desktop | ❌ **No app can click it, by design.** A human must approve (or install per-user). |
-| 6. First-run setup / sign-in | Wizard clicks; account login | ⚠️ Clicks maybe. ❌ JARVIS must never type your password. This is a hand-off to you. |
-| 7. Verify it's installed | `winget list`, registry, exe exists, app launches | ❌ Nothing does this; success is whatever the model says. |
-| 8. Whole job | 20–40 tool calls, 3–10 minutes | ❌ The loop stops at 8 calls / 240s. |
-| 9. Report back | Notify you (phone) when done or when it needs you | ❌ No job notifications. |
-
-So the verdict today: **steps 1–4 can partly work in one sitting, and the job
-reliably dies at step 5 or at the 8-call limit.**
-
----
-
-## 4. The gaps, ranked by how much they block autonomy
-
-### G1. Jobs must outlive a chat turn (the biggest blocker)
-Autonomous work needs a **background job** with its own lifetime: started by a
-request, running for minutes, surviving an app restart, cancellable.
-`agent_runtime/worker.py` already solves lease/recovery/cancellation. Connect it
-to the real tool executor behind a release flag.
-
-### G2. A planner model for jobs (keep nano for voice)
-gpt-4.1-nano was picked because it is fast and follows tool calls for short
-turns. Planning, recovering from errors, and judging "is this done?" over 30
-steps needs a stronger model. Use **two models**: nano for chat/voice, a
-stronger one (e.g. gpt-4.1, or a comparable model on OpenRouter) only inside
-background jobs. Jobs are rare, so the extra cost stays small.
-*Decision for you: which model, and a per-job budget cap.*
-
-### G3. A plan → act → verify → checkpoint loop
-Every job should:
-1. **Plan**: write explicit steps with a success condition for each.
-2. **Act**: one step at a time through the existing tools.
-3. **Verify**: check the success condition with a *deterministic* probe
-   (`verification.py`'s principle: no self-attested success). Examples:
-   "installed" means `winget list` shows it or the exe exists; "running" means
-   `list_processes`.
-4. **Checkpoint**: persist progress, so a crash or restart resumes at the step
-   that failed, not from zero.
-5. **Replan** on failure, with a bounded number of retries.
-
-### G4. Approvals that fit autonomy
-Asking "yes?" before every command defeats autonomy; approving nothing is
-unsafe. Proposed policy:
-- You approve the **job scope once** ("install Antigravity: allowed to
-  download from its official domain, run its installer, use winget").
-- Inside that scope, low/medium-risk steps run without asking.
-- The job **pauses and pings your phone** for anything outside the scope or
-  high-risk: UAC, payments, passwords, deleting outside the job's folders,
-  sending messages.
-- `approvals.py` (exact-effect approvals) is the right primitive.
-- Make the `ToolSpec.risk` field actually enforced, and re-tag `run_command`.
-
-### G5. Installs done the robust way
-Teach the planner an install playbook:
-1. `winget install --id <verified id> --silent --accept-package-agreements`.
-   Search first; never guess an id.
-2. Else the vendor's official installer with its documented silent flags.
-3. Else the wizard via UI automation.
-4. Always verify the download: official domain, and
-   `Get-AuthenticodeSignature` shows a valid publisher.
-5. Prefer per-user installs to avoid UAC. When UAC is unavoidable, pause and
-   ping you.
-
-### G6. Seeing apps that hide from UI Automation
-Add a **screenshot + vision** fallback for when `ui_inspect` returns nothing
-useful: capture the window, have a vision-capable model locate the control,
-then click by coordinates, and re-verify with a fresh screenshot. Use it only
-as a fallback, since the accessibility tree is faster and more reliable when
-present.
-
-### G7. Hand-offs, progress, and notifications
-- Job status on screen: steps done / current / next.
-- Phone notification on "needs you" (UAC, sign-in, approval) and on
-  finish/fail. `domain_commands.py` + `voice_bridge.py` are the cross-device
-  hooks.
-- A spoken summary when done: "Antigravity is installed and opens; sign-in is
-  waiting for you."
-
-### G8. Guardrails (must exist before any real autonomy ships)
-- Never type passwords, card numbers or 2FA codes. Always hand these off.
-- Never approve UAC, never disable Defender/firewall, never change security
-  settings.
-- Downloads only from official vendor domains; verify signatures before
-  running anything.
-- Hard caps per job: steps, wall-clock, money spent on model calls.
-- Everything logged (the telemetry buffer), and a one-tap "stop job".
-- Destructive file operations limited to the job's own working folder unless
-  you approved otherwise.
-
----
-
-## 5. Target architecture (reuses what exists)
+## Part 3: Target architecture
 
 ```
- You (voice/phone/desktop)
-   │  "install Antigravity and set it up"
-   ▼
- Job intake ──► Scope approval (once, on your phone)          approvals.py
-   │
-   ▼
- Background job (durable, resumable, cancellable)              worker.py
-   │
-   ├─► Planner (strong model) ── writes steps + success checks
-   │
-   ├─► Executor ── existing 35 tools, risk-gated               tools.py
-   │     └─► Vision fallback when UIA sees nothing (new)
-   │
-   ├─► Verifier ── deterministic post-conditions               verification.py
-   │
-   ├─► Checkpoint store ── resume after crash                  database.py
-   │
-   └─► Hand-off / notify ── phone push for UAC, sign-in,       domain_commands.py
-                            approval, done/failed               voice_bridge.py
+ You ── voice (phone/desktop) · chat · schedule · trigger
+  │
+  ▼
+┌──────────────── Job Intake ────────────────┐
+│ outcome → scope proposal (what may be touched, budget, risk ceiling)      │
+│ you approve the scope ONCE (phone tap / voice "yes")      approvals.py    │
+└────────────────────────────┬──────────────────────────────┘
+                             ▼
+┌──────────────── Supervisor (planner model) ───────────────┐
+│ writes the plan as TYPED STEPS from an allowlisted vocabulary             │
+│   e.g. winget.install(id), download(url), verify.file_signature(path),    │
+│        gui.complete_dialog(window, goal), shell(cmd, cwd=job_dir) …      │
+│ never raw code; the host validates every step against scope + policy      │
+└────────────────────────────┬──────────────────────────────┘
+                             ▼
+┌──────────────── Safety Kernel (host code, not the model) ─────────────────┐
+│ scope check · risk enforcement · taint tracking of untrusted content ·    │
+│ budget/step/time caps · kill switch · audit log            release.py     │
+└──────────┬───────────────────────────────┬──────────────────────────────┘
+           ▼                               ▼
+┌──── Executor (fresh context per step) ─────┐   ┌──── Hand-off ────────────┐
+│ API-first: winget / PowerShell / app CLIs /│   │ UAC · sign-in · payment · │
+│   COM (Office) / config files              │   │ out-of-scope → push to    │
+│ GUI fallback: UIA tree → vision marks →    │   │ phone + voice; job pauses │
+│   click; optional separate virtual desktop │   │ and resumes on your reply │
+└──────────┬─────────────────────────────────┘   └───────────────────────────┘
+           ▼
+┌──── Verifier (independent) ───────┐    ┌──── Memory & Skills ──────────────┐
+│ deterministic post-conditions:     │    │ episodic job log · facts (existing │
+│  winget list · file hash/signature │    │ memory service) · learned skills   │
+│  · process running · screenshot    │    │ (Hermes-style, reviewed before     │
+│  diff · a separate model audits    │    │ trusted)              skills.py    │
+│  fuzzy goals     verification.py   │    └────────────────────────────────────┘
+└──────────┬─────────────────────────┘
+           ▼
+ Checkpoint (durable, resumable)  worker.py + database.py  →  next step or replan
 ```
 
+### Key design decisions (and why)
+
+1. **Plans are typed data, not code.** The model picks from an allowlisted
+   action vocabulary, and host code validates each step before running it.
+   This keeps Codex's "never executable model plans" principle while still
+   letting a model plan. It's also the core defense OpenClaw lacks: a
+   poisoned web page can't make up a new action, because the action has to
+   exist in the vocabulary *and* be inside the scope you approved.
+
+2. **Taint tracking.** Anything read from the web, a file, a download or an
+   app's screen is *untrusted*. It can fill in values (a version number, a
+   file path the job created). It can never add a step, widen the scope, or
+   change a destination. In the CaMeL style, the plan comes from trusted
+   input (you and the host), and data flows through it.
+
+3. **API before GUI** (UFO²). `winget install --id …` beats clicking through
+   an installer on every count: reliability, speed, cost and verifiability.
+   GUI automation is the fallback, not the default.
+
+4. **Fresh context per step** (long-horizon research). Each step's executor
+   sees only the goal, the verified state so far, and the step to do, not
+   the whole history. The supervisor keeps the big picture. Accuracy stays
+   up and cost stays down.
+
+5. **No self-attested success.** Every step has a success condition checked by
+   host code or a separate audit. A job is "done" only when its final
+   post-conditions pass. This is the direct fix for the 11-of-12 fake actions
+   we found in voice mode: the same failure, at desktop scale.
+
+6. **Two-level sight** (UFO²). The accessibility tree comes first: fast,
+   exact, cheap. If a window exposes nothing useful, take a screenshot,
+   overlay numbered marks on candidate controls, and have the vision model
+   pick a mark. Then verify with a fresh screenshot.
+
+7. **Your mouse stays yours.** GUI jobs run on a separate Windows virtual
+   desktop where possible (UFO²'s picture-in-picture idea), so JARVIS can
+   install something while you keep working.
+
 ---
 
-## 6. Phased roadmap (each phase ships something usable)
+## Part 4: The safety kernel (how JARVIS beats OpenClaw)
 
-**Phase 1: background jobs + winget installs (the first real autonomous task)**
-- Connect `worker.py` to the real tool executor behind a release flag.
-- Plan/act/verify/checkpoint loop with a planner model.
-- Job-scope approval, enforced `risk` levels, and a hard step/time/cost cap.
-- Acceptance test: "install 7-Zip" end to end via winget, verified by
-  `winget list`, surviving an app restart mid-job, with no per-step prompts
-  inside the approved scope.
+**Hard never-list.** Enforced in code, not in the prompt:
+- Typing passwords, card numbers or 2FA codes, and solving CAPTCHAs. These are always handed off to you.
+- Approving UAC, or turning off Defender, the firewall or SmartScreen.
+- Sending messages, email, posts or payments without an explicit per-action yes.
+- Deleting or overwriting outside the job's own folder unless the scope
+  explicitly names the path.
+- Running a downloaded binary unless it came from the vendor's official
+  domain **and** `Get-AuthenticodeSignature` shows a valid publisher.
 
-**Phase 2: installers and setup wizards**
-- Official-installer path with a signature check; UI automation through
-  wizards; pause-and-ping on UAC and sign-in.
-- Acceptance test: install one app that has no winget package and a
-  multi-page wizard.
+**Scope grants.** You approve once per job, for example:
+"Antigravity install: may download from antigravity.google / official
+mirrors, run its signed installer, use winget, write under
+`%LOCALAPPDATA%\Programs`, budget $0.50, 30 min."
 
-**Phase 3: vision fallback**
-- Screenshot + vision locate-and-click when the accessibility tree is empty.
-- Acceptance test: complete a setup screen in an Electron app.
+Inside the scope, steps run without asking. Anything outside pauses the job
+and asks you.
 
-**Phase 4: from your phone**
-- Start a desktop job by voice on the phone, approve from the phone, get
-  progress and "needs you" pushes, and hear a spoken summary when done.
+**Risk enforcement.** The existing `risk` tag becomes binding:
+- `low`: runs inside any active scope.
+- `medium`: must be covered by the scope.
+- `high`: always needs an exact-effect approval (`approvals.py`).
+- Re-tag `run_command`, which is currently `low`.
 
-**Phase 5: reusable skills**
-- Save a successful job as a reviewed skill (`skills.py`), e.g. "set up a new
-  Python project", so the next run skips planning and uses the proven steps.
+**Budgets and kill switch:**
+- Per-job caps on steps, wall-clock time and model dollars.
+- A global monthly cap.
+- One tap or "JARVIS stop" cancels safely (the `worker.py` cancellation already
+  handles in-flight work).
+
+**Audit.** Every step, what it saw, what it did, and what verified it goes
+into the telemetry buffer. The job report can be replayed.
+
+**Measured, not claimed.** Build an injection and misuse test suite:
+poisoned pages, malicious READMEs, "ignore previous instructions" inside
+downloads, and ambiguous requests. The release gate is **≥95% blocked**,
+against OpenClaw's audited 57%.
 
 ---
 
-## 7. Decisions needed from you
+## Part 5: Models and budget
 
-1. **Planner model** for background jobs, and a per-job cost cap.
-2. **Default approval scope**: what JARVIS may do inside an approved job
-   without asking.
-3. **Where jobs may run**: only when the desktop app is open, or also started
-   remotely from the phone?
-4. **UAC policy**: always hand off to you, or prefer per-user installs even
-   when a system-wide install exists?
+| Role | Model | Why | Price (per M tokens, in / out) |
+|---|---|---|---|
+| Voice and chat | gpt-4.1-nano (current) | Fast; 11/12 real actions in our tests | $0.10 / $0.40 |
+| Supervisor, vision GUI steps, final audit | **Qwen3.8-Max** (recommended) | #1 on OSWorld-Verified (86.1%); 1M context; Qwen family | $2 / $6 |
+| Simple deterministic steps (shell/API) | gpt-4.1-nano or qwen3-30b-a3b | Cheap; no judgment needed | ≤ $0.10 / $0.40 |
 
-## 8. Notes and caveats
+**Rough cost per job (estimate, not measured).** A typical "install and set
+up an app" job might take:
+- about 5 supervisor calls,
+- about 10 GUI steps with screenshots,
+- a final audit.
 
-- This plan builds on Codex's `agent_runtime` rather than replacing it. Its
-  closed-by-default, no-self-attested-success design is exactly what
-  autonomy needs. Coordinate through `explanations.md` before wiring it to
-  real effects.
-- Nothing here has been implemented yet. This document describes the gap
-  and the path.
-- The Antigravity example was traced against the code, not run. Its exact
-  winget id (if any) must be looked up with `winget search`, never guessed.
+That comes to about 200–300k input tokens and ~10k output, so **~$0.40–0.70 per job**
+at list price. Prompt caching and API-first steps bring it lower. Budget
+controls:
+- a per-job cap (default $0.50, asks before exceeding),
+- a monthly cap,
+- smaller screenshots,
+- the cheap model on deterministic steps,
+- learned skills that skip re-planning jobs it has already done.
+
+---
+
+## Part 6: Walkthrough of the target design: "download Antigravity, install it, set it up"
+
+1. **Intake.** JARVIS proposes a scope (official domain + winget + signed
+   installer + per-user install path, $0.50, 30 min). You say "yes" on the phone.
+2. **Plan.** `winget.search("Antigravity")`, then `winget.install(<verified id>)`
+   if a package exists. Otherwise `web.find_official_download`,
+   `download`, `verify.signature`, `run_installer(silent flags)`. Then
+   `launch`, `gui.complete_first_run`, `verify.app_running`.
+3. **Act and verify, step by step.** Each step checkpoints. If the PC restarts
+   mid-download, the job resumes at the download.
+4. **UAC appears.** The job pauses and your phone buzzes: "Antigravity needs
+   admin approval on your desktop." You click Yes, and the job continues.
+5. **First run asks you to sign in.** It hands off: "It's installed and open;
+   sign in when you're ready." JARVIS never types your password.
+6. **Done**, with evidence: winget lists it, the exe is signed by the
+   expected publisher, the process launches. Spoken summary on your phone.
+7. **Learning.** The successful trace becomes a draft skill, "install app X via
+   winget". Once you (or a review step) approve it, the next install skips
+   planning.
+
+---
+
+## Part 7: Roadmap (each phase ships something you can use)
+
+### Phase 0: Foundations (safety kernel first)
+- Enforce `risk`, add scope grants, set per-job caps, add the kill switch.
+- Define the typed action vocabulary; the host validator rejects anything off-list.
+- Wire `worker.py` to the real tool executor behind `background_jobs` and `admit_new_runs`.
+- **Done when:** a job runs in the background, survives an app restart,
+  can be cancelled mid-step, and an off-scope step is refused by code, not by the model.
+
+### Phase 1: Plan → act → verify, API-first
+- Qwen3.8-Max supervisor, fresh-context executor, deterministic verifier, checkpoints.
+- The winget/PowerShell action set, plus signature verification.
+- **Done when:** "install 7-Zip", "install VLC" and "install Python 3.12"
+  each complete end to end with no per-step prompts inside scope, verified by
+  `winget list` and a signature check.
+
+### Phase 2: Hand-offs and phone control
+- Scope approval from the phone.
+- UAC, sign-in and out-of-scope pauses pushed to the phone, with a voice summary when done.
+- Start desktop jobs from the phone by voice (`domain_commands.py`, `voice_bridge.py`).
+- **Done when:** you start a desktop install from your phone by voice,
+  approve UAC when pinged, and hear the result.
+
+### Phase 3: Sight
+- A vision fallback with numbered marks on screenshots, plus screenshot-diff verification.
+- A separate virtual desktop for GUI jobs.
+- **Done when:** the Antigravity walkthrough (Part 6) completes, including a
+  first-run screen that UI Automation can't see.
+
+### Phase 4: Injection-proof
+- Taint tracking and the injection/misuse test suite.
+- **Done when:** the suite shows ≥95% blocked.
+
+### Phase 5: Skills that grow
+- Hermes-style: turn successful traces into draft skills, a review gate, and a skill library.
+- Skills are listed as metadata and loaded on demand (OpenClaw-style), so
+  prompts stay small.
+- **Done when:** the second run of a learned job uses the skill and is at least
+  50% cheaper and faster than the first.
+
+### Phase 6: Standing jobs
+- Schedules and triggers: "every Friday…", "when a PDF lands in Downloads…",
+  "when the build fails…". The scheduler contract exists.
+- **Done when:** a weekly job runs unattended for a month with a report each time.
+
+### Phase 7: JARVIS-Bench (keeps us honest)
+- About 40 real Windows tasks with deterministic checkers: installs, settings,
+  file organization, browser forms, Office edits, dev setup. It runs on
+  `evaluation.py` with explicit denominators, nightly.
+- Track success rate, steps, dollars and injection block rate.
+- **Target:** ≥80% task success at ≤$0.50 per task average, alongside the
+  ≥95% injection block rate.
+
+---
+
+## Part 8: Decisions needed from you
+
+1. **Supervisor model.** Qwen3.8-Max (recommended: best score, cheapest of
+   the top tier) or a Claude/OpenAI model.
+2. **Budget.** Default per-job cap (proposed $0.50) and monthly cap.
+3. **Default scope.** What may run without asking inside an approved job.
+4. **UAC policy.** Always hand off, or prefer per-user installs to avoid it.
+5. **Remote start.** May jobs be started from the phone while you're away from the PC?
+6. **Coordination.** The runtime is Codex's work. Decide who builds which phase,
+   and log it in `explanations.md` before switching on any release flag.
+
+## Caveats
+- Nothing in this document is implemented yet.
+- Benchmark scores are for model + harness on test tasks. Real-world success
+  will be lower until JARVIS-Bench says otherwise.
+- Some things no agent should or can do alone: UAC, CAPTCHAs, 2FA, payments.
+  The goal is to make those one-tap hand-offs, not to remove them.
+- The cost per job is an estimate until Phase 1 measures it.
+- Antigravity's winget id, if one exists, must be looked up with `winget search`, never guessed.
+
+## Sources
+- OpenClaw architecture: https://bibek-poudel.medium.com/how-openclaw-works-understanding-ai-agents-through-a-real-architecture-5d59cc7a4764 · memory docs: https://docs.openclaw.ai/concepts/memory
+- OpenClaw safety audits: https://arxiv.org/pdf/2603.11619 · https://arxiv.org/pdf/2604.27464 · https://www.giskard.ai/knowledge/openclaw-security-vulnerabilities-include-data-leakage-and-prompt-injection-risks
+- Hermes Agent: https://github.com/nousresearch/hermes-agent · https://mranand.substack.com/p/inside-hermes-agent-how-a-self-improving
+- Microsoft UFO²: https://arxiv.org/abs/2504.14603 · https://microsoft.github.io/UFO/ufo2/overview/
+- OSWorld-Verified: https://benchlm.ai/benchmarks/osworld-verified · https://leaderboard.steel.dev/leaderboards/osworld/
+- Qwen3.8-Max pricing: https://openrouter.ai/qwen/qwen3.8-max-0902 · https://www.datacamp.com/blog/qwen3-8-max
+- Long-horizon harness: https://github.com/AMAP-ML/LongHorizon-Harness · https://www.digitalapplied.com/blog/context-engineering-agent-reliability-playbook-2026

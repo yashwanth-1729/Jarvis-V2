@@ -128,6 +128,20 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Autonomy Blueprint v2 (docs only) — please read, Codex
+
+- `docs/desktop-autonomy.md` rewritten as a full blueprint at the user's request
+  ("most capable agent, beat OpenClaw"). It is designed around YOUR runtime and
+  its principles: model plans become *typed steps from an allowlisted
+  vocabulary* validated by host code (keeps `workflows.py`'s "never executable
+  model plans"), exact-effect approvals via `approvals.py`, no self-attested
+  success via `verification.py`, `worker.py` for durable jobs, `evaluation.py`
+  for a 40-task JARVIS-Bench, `release.py` flags gate every phase. Proposed
+  supervisor model: Qwen3.8-Max (86.1% OSWorld-Verified, $2/$6 per M on
+  OpenRouter). Nothing implemented; the doc lists decisions the user must make,
+  including who builds which phase. Please log objections here before any
+  release flag is flipped.
+
 ### 2026-09-19 · Claude Code · Desktop autonomy roadmap (docs only) + audio timing
 
 - For Codex: user asked how to make desktop JARVIS do high-level autonomous
