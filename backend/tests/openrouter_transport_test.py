@@ -187,6 +187,41 @@ async def main() -> int:
     transcript = await OpenRouterSTT().transcribe(b"\x00" * 64, filename="a.wav")
     check("a stuck STT request is beaten by the hedge", transcript.text == "attempt 2", transcript.text)
 
+    # 6e. Primary voice down (5xx after its retry) -> backup voice speaks.
+    def grok_down(request, n):
+        body = json.loads(request.content)
+        if body["model"].startswith("x-ai/"):
+            return httpx.Response(502, json={"error": {"message": "bad gateway"}})
+        return httpx.Response(200, content=b"backup-audio")
+
+    seen = install(grok_down)
+    tts = OpenRouterTTS(model="x-ai/grok-voice-tts-1.0", default_voice="eve",
+                        fallback=("hexgrad/kokoro-82m", "hf_alpha"))
+    speech = await tts.synthesize("ठीक है बॉस")
+    models = [json.loads(r.content)["model"] for r in seen]
+    check("a Grok outage falls back to the backup voice", speech.audio == b"backup-audio", str(models))
+    check("the backup used its own voice", json.loads(seen[-1].content)["voice"] == "hf_alpha")
+
+    # 6f. A 4xx is a real rejection -> no fallback, the error surfaces.
+    seen = install(lambda r, n: httpx.Response(400, json={"error": {"message": "bad voice"}}))
+    try:
+        await tts.synthesize("ठीक है बॉस")
+        check("a 400 does not fall back", False, "no error raised")
+    except Exception:  # noqa: BLE001
+        check("a 400 does not fall back", all(json.loads(r.content)["model"].startswith("x-ai/") for r in seen),
+              str([json.loads(r.content)["model"] for r in seen]))
+
+    # 6g. Gemini fallback: asks for PCM, sends no speed, returns playable WAV.
+    seen = install(lambda r, n: httpx.Response(502) if json.loads(r.content)["model"].startswith("x-ai/")
+                   else httpx.Response(200, content=b"\x00\x00" * 2400))
+    tts_te = OpenRouterTTS(model="x-ai/grok-voice-tts-1.0", default_voice="eve",
+                           fallback=("google/gemini-3.1-flash-tts-preview", "Kore"))
+    speech = await tts_te.synthesize("సరే బాస్")
+    gem = json.loads(seen[-1].content)
+    check("Gemini fallback asks for pcm without speed", gem["response_format"] == "pcm" and "speed" not in gem, str(gem))
+    check("Gemini audio is wrapped as WAV", speech.content_type == "audio/wav" and speech.audio[:4] == b"RIFF",
+          speech.content_type)
+
     # 7. One pool for every stage, with a real keep-alive.
     openrouter._test_transport = None
     openrouter._client = None

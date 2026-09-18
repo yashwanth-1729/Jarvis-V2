@@ -458,6 +458,21 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Hindi now speaks with Grok Voice; backup voices for Hindi and
+  Telugu.** A native speaker said Hindi sounded "Englishish": the cause was
+  Kokoro's American `af_sky` voice reading Hindi with English pronunciation
+  rules (the same line took 13.9s vs 6-7s with a Hindi voice). Samples from
+  Kokoro's four Hindi voices, Gemini 3.1 Flash TTS, Fish Audio and Grok were
+  put in a blind listening test; the user picked Grok "eve" for both Hindi and
+  Telugu. `get_hindi_tts_provider` (`providers/__init__.py`) now returns Grok.
+  Grok returned 502 on every request twice the same day while healthy minutes
+  later, so `OpenRouterTTS` gained a `fallback` voice used on server errors or
+  unreachable service (not on 4xx): Hindi falls back to Kokoro `hf_alpha`,
+  Telugu to Gemini `Kore` (PCM wrapped as WAV; Gemini rejects mp3). Cost:
+  Hindi rises from ~$0.05 to ~$1.23 per 1,000 replies. Verified: 25 transport
+  checks (fallback on 502, none on 400, Gemini WAV), live synthesis of both
+  voices and both fallbacks, smoke/voice/audio tests pass.
+
 - **2026-09-19 — Audio timing instrumentation; desktop autonomy roadmap.**
   Every OpenRouter STT/TTS call now logs time-to-first-byte vs complete, bytes
   and generation id (`providers/openrouter.py`, `_post_timed`), separating a

@@ -663,25 +663,31 @@ class OpenRouterSTT:
 class OpenRouterTTS:
     """``TTSProvider`` over OpenRouter's own ``/audio/speech``.
 
-    Parameterized by model/default-voice so one class serves two distinct
-    roles in the registry: Kokoro-82M for English/Hindi (its 8 languages
-    don't include Telugu), and OpenAI's ``gpt-4o-mini-tts`` for Telugu.
+    One class, configured per language in ``providers/__init__.py``:
+    English is Kokoro; Hindi and Telugu are Grok Voice ("eve"), picked by the
+    user in a blind listening test on 2026-09-19 (Kokoro's American voice had
+    been reading Hindi with English pronunciation rules -- the "Englishish
+    Hindi" a native speaker noticed).
 
-    The Telugu case is a real caveat, not a confirmed fit: OpenAI documents
-    "50+ languages" for this model without an exhaustive list, and Telugu is
-    not explicitly named one way or the other in their public docs (unlike
-    Grok TTS, which explicitly excludes it). This is the best available
-    option given no separate XAI_API_KEY and Soniox deferred by choice, but
-    it has not been confirmed against real Telugu output quality -- listen
-    to the first few real Telugu replies before trusting it unattended.
+    ``fallback`` is a second (model, voice) used when the first answers with
+    a server error or cannot be reached. Grok returned 502 on every request
+    twice on 2026-09-19 while showing 100% uptime minutes later, and Telugu
+    has no other voice in this stack -- a brief outage would otherwise mean a
+    silent JARVIS. A 4xx is a real rejection and is not retried elsewhere.
     """
 
     name = "openrouter"
     max_chars = 4000
 
-    def __init__(self, model: str = "hexgrad/kokoro-82m", default_voice: str = "af_sky") -> None:
+    def __init__(
+        self,
+        model: str = "hexgrad/kokoro-82m",
+        default_voice: str = "af_sky",
+        fallback: tuple[str, str] | None = None,
+    ) -> None:
         self.model = model
         self._default_voice = default_voice
+        self._fallback = fallback
 
     async def aclose(self) -> None:
         await close_shared_client()
@@ -696,24 +702,32 @@ class OpenRouterTTS:
         clean = (text or "").strip()
         if not clean:
             raise ProviderError("Nothing to speak.")
-        # `speaker` here is the app's own voice id (Sarvam names like
-        # "priya") from `current_voice()` -- a different namespace from this
-        # model's own voices (Kokoro's "af_sky" etc., Grok's "eve"). Passing
-        # it through was a real, 100%-reproducing bug: OpenRouter rejected
-        # every request with a 400 ("Provider returned 400") because
-        # "priya"/etc. isn't a voice this model knows, which is what was
-        # actually behind every "speech was interrupted by a synthesis
-        # error" in the field, not a network issue. There is also no UI path
-        # to choose a real voice for these languages under the cloud stack
-        # (VoiceMode hides "Speaking voice" for English/Hindi/Telugu), so
-        # this model's own default is always correct here.
+        # `speaker` is the app's own voice id (Sarvam names like "priya"),
+        # a different namespace from these models' voices; passing it through
+        # made OpenRouter 400 every request. Each model's own voice is used.
+        try:
+            return await self._speak(self.model, self._default_voice, clean)
+        except (ProviderUnavailable, ProviderRateLimited) as exc:
+            if self._fallback is None:
+                raise
+            model, voice = self._fallback
+            logger.warning(
+                "TTS %s failed (%s); speaking with fallback %s/%s", self.model, exc, model, voice,
+            )
+            return await self._speak(model, voice, clean)
+
+    async def _speak(self, model: str, voice: str, text: str) -> Speech:
+        # Gemini TTS only returns raw PCM (it rejects mp3 with a 400) and is
+        # not sent `speed`; everything else here takes mp3 at the tuned pace.
+        gemini = model.startswith("google/gemini")
         payload: dict[str, Any] = {
-            "model": self.model,
-            "input": clean[: self.max_chars],
-            "voice": self._default_voice,
-            "response_format": "mp3",
-            "speed": settings.openrouter_tts_speed,
+            "model": model,
+            "input": text[: self.max_chars],
+            "voice": voice,
+            "response_format": "pcm" if gemini else "mp3",
         }
+        if not gemini:
+            payload["speed"] = settings.openrouter_tts_speed
         try:
             response = await _hedged(
                 "TTS",
@@ -729,4 +743,19 @@ class OpenRouterTTS:
         _log_audio_timing("TTS", response)
         if response.status_code >= 400:
             _raise_for_status(response, response.content)
+        if gemini:
+            return Speech(audio=_pcm_to_wav(response.content, 24000), content_type="audio/wav")
         return Speech(audio=response.content, content_type="audio/mpeg")
+
+
+def _pcm_to_wav(pcm: bytes, rate: int) -> bytes:
+    import io
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as clip:
+        clip.setnchannels(1)
+        clip.setsampwidth(2)
+        clip.setframerate(rate)
+        clip.writeframes(pcm)
+    return buffer.getvalue()

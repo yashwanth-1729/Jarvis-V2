@@ -130,15 +130,20 @@ def get_english_tts_provider() -> TTSProvider:
 
 @lru_cache(maxsize=1)
 def get_hindi_tts_provider() -> TTSProvider:
-    """Hindi TTS under the cloud stack: also Kokoro (one of its 8 languages,
-    same engine and model as English -- Kokoro's voice choice per-language is
-    just a different `speaker` value, not a different model). Not used by the
-    legacy stack, where Hindi is plain Sarvam via `get_tts_provider` like
-    every other language Kokoro doesn't cover."""
+    """Hindi TTS under the cloud stack: Grok Voice "eve", chosen by the user in
+    a blind test (2026-09-19) over Kokoro's four Hindi voices and Gemini.
+    Previously this returned plain Kokoro with its American ``af_sky`` voice,
+    which reads Hindi with English pronunciation rules -- a native speaker
+    called it "Englishish Hindi", and the clip ran twice as long as a Hindi
+    voice's. Falls back to Kokoro's own Hindi voice (``hf_alpha``, female like
+    "eve") when Grok is down. Not used by the legacy stack (plain Sarvam)."""
     if settings.jarvis_voice_stack == "cloud":
         from app.providers.openrouter import OpenRouterTTS
 
-        return OpenRouterTTS()
+        return OpenRouterTTS(
+            model="x-ai/grok-voice-tts-1.0", default_voice="eve",
+            fallback=("hexgrad/kokoro-82m", "hf_alpha"),
+        )
     return get_tts_provider()
 
 
@@ -174,7 +179,12 @@ def get_telugu_tts_provider() -> TTSProvider:
     if settings.jarvis_voice_stack == "cloud":
         from app.providers.openrouter import OpenRouterTTS
 
-        return OpenRouterTTS(model="x-ai/grok-voice-tts-1.0", default_voice="eve")
+        # Kokoro has no Telugu, so the fallback is Gemini's "Kore" (female,
+        # like "eve"): slower (~5s per clip) but only used during a Grok outage.
+        return OpenRouterTTS(
+            model="x-ai/grok-voice-tts-1.0", default_voice="eve",
+            fallback=("google/gemini-3.1-flash-tts-preview", "Kore"),
+        )
     from app.providers.piper import PiperTTS
 
     return PiperTTS(
