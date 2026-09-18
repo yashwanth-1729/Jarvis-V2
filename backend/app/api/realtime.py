@@ -705,6 +705,14 @@ class VoiceSession:
                 elif kind == "refresh":
                     await emit({"type": "refresh", "domains": data["domains"]})
                 elif kind == "error":
+                    # Was silent before -- a provider failure (chat timeout,
+                    # rate limit, etc.) reached the user's screen with zero
+                    # trace in the backend log, which is exactly what made a
+                    # live "it just failed" report undiagnosable after the
+                    # fact (2026-09-16: a turn went stt-succeeded -> 10s of
+                    # nothing -> ended, no log line explaining why). Logged
+                    # now so the *next* one is captured instead of guessed at.
+                    logger.warning("Voice turn error surfaced to client: %s", data["message"])
                     await emit({"type": "error", "message": data["message"]})
 
             # Anything left after the stream ends is a final, unterminated line.
@@ -922,7 +930,17 @@ class VoiceSession:
 async def voice_session(websocket: WebSocket) -> None:
     await websocket.accept()
 
-    if not settings.jarvis_voice_enabled or not settings.has_api_key:
+    # Same condition as `/api/voice/config`: the cloud stack needs an
+    # OpenRouter key, not a Sarvam one. This gate used to check the Sarvam key
+    # unconditionally, so voice mode only opened because a stale (zero-credit)
+    # Sarvam key happened to still be saved -- clearing it would have
+    # disabled voice entirely while every stage actually runs on OpenRouter.
+    has_key = (
+        settings.has_openrouter_key
+        if settings.jarvis_voice_stack == "cloud"
+        else settings.has_api_key
+    )
+    if not settings.jarvis_voice_enabled or not has_key:
         await websocket.send_json(
             {"type": "error", "message": "Voice is not configured on this server."}
         )
@@ -934,6 +952,16 @@ async def voice_session(websocket: WebSocket) -> None:
     await session.send({"type": "language", "value": session.language})
     await session.send({"type": "voice", "value": session.voice})
     await session.send({"type": "state", "value": "listening"})
+
+    # Keep one TLS connection to OpenRouter open while the HUD is up, so the
+    # first STT/chat/TTS request of a turn reuses it instead of paying (and
+    # occasionally stalling on) a fresh mobile handshake. See
+    # `openrouter.warm_connection` and the shared-client note there.
+    keep_warm = (
+        asyncio.create_task(_keep_openrouter_warm())
+        if settings.jarvis_voice_stack == "cloud"
+        else None
+    )
 
     try:
         while True:
@@ -981,5 +1009,20 @@ async def voice_session(websocket: WebSocket) -> None:
     except Exception:  # noqa: BLE001
         logger.exception("Voice session error")
     finally:
+        if keep_warm is not None:
+            keep_warm.cancel()
         await session.reset_input()
         await session.cancel_turn()
+
+
+#: Comfortably under the 60s pooled keep-alive, so the connection never ages
+#: out between turns while the user is still in voice mode.
+KEEP_WARM_INTERVAL_SECONDS = 25.0
+
+
+async def _keep_openrouter_warm() -> None:
+    from app.providers.openrouter import warm_connection
+
+    while True:
+        await warm_connection()
+        await asyncio.sleep(KEEP_WARM_INTERVAL_SECONDS)

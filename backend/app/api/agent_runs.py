@@ -43,6 +43,9 @@ async def submit(payload: RunRequest, request: Request, principal: Annotated[str
     if owner is None or owner['principal_id'] != principal: raise HTTPException(403, 'Session is not owned by this principal')
     try: run,created=await request.app.state.agent_repository.submit_run(payload,policy_snapshot={'api':'fixture-only-v1'},budget_snapshot={'effects':'none'})
     except RequestConflict as exc: raise HTTPException(409,str(exc)) from exc
+    worker=getattr(request.app.state,'agent_worker',None)
+    if created and worker is not None:
+        run=await worker.run(run['id'])
     return {'run':run,'created':created}
 
 @router.get('/runs/{run_id}')

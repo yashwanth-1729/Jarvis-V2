@@ -56,9 +56,18 @@ private val VOICES = mapOf(
  * ever provisioned and loaded once regardless of how many voices are used.
  */
 object SherpaTts {
-  // One loaded engine per voice id, built lazily and cached -- a session
-  // that never touches Telugu never pays to load its model.
-  private val engines = mutableMapOf<String, OfflineTts>()
+  // Only ONE native engine resident at a time, keyed by which voice it is.
+  // Was a map holding every voice ever used concurrently ("a session that
+  // never touches Telugu never pays to load its model") -- crashed the whole
+  // native process the moment a second voice (e.g. Telugu, on top of an
+  // already-loaded English) was loaded: confirmed live via logcat, no Java
+  // exception, just "Process ... has died" seconds after the second
+  // OfflineTts() construction. Two resident VITS models is apparently not
+  // safe (or not affordable memory-wise) in this sherpa-onnx build. Switching
+  // voices now releases the previous engine first -- costs a reload if the
+  // user bounces between languages, but that's a real cost, not a crash.
+  private var currentVoiceId: String? = null
+  private var currentEngine: OfflineTts? = null
   private val loadLock = Any()
 
   /**
@@ -108,9 +117,9 @@ object SherpaTts {
   }
 
   private fun engine(context: Context, voiceId: String): OfflineTts {
-    engines[voiceId]?.let { return it }
+    currentEngine?.let { if (currentVoiceId == voiceId) return it }
     synchronized(loadLock) {
-      engines[voiceId]?.let { return it }
+      currentEngine?.let { if (currentVoiceId == voiceId) return it }
       val spec = VOICES[voiceId] ?: error("unknown voice id: $voiceId")
       val d = dir(context).absolutePath
       val config = OfflineTtsConfig(
@@ -128,11 +137,21 @@ object SherpaTts {
         // once at the end of the whole phrase.
         maxNumSentences = 1,
       )
+      // Free the previous voice's native engine BEFORE constructing the new
+      // one -- two OfflineTts instances alive at once crashes the native
+      // process (see class doc). try/catch: release() on an engine with any
+      // in-flight generate() call is unverified territory; a failure here
+      // must not block loading the voice the caller actually asked for.
+      currentEngine?.let {
+        try { it.release() } catch (e: Throwable) { Log.w(TAG, "release() of previous voice failed", e) }
+      }
+      currentEngine = null
       // No AssetManager passed: the model was already copied to a real path
       // above, so this takes sherpa's file-path constructor rather than its
       // (slower, one-shot) load-from-APK-assets one.
       val instance = OfflineTts(config = config)
-      engines[voiceId] = instance
+      currentEngine = instance
+      currentVoiceId = voiceId
       return instance
     }
   }

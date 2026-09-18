@@ -600,7 +600,7 @@ export default function CommandCenterPage() {
             <div className="min-h-0 flex-1">
               <Chat onRefresh={handleAgentRefresh} onSurface={setSurface} />
             </div>
-            <AgentRunStatus unavailable />
+            <AgentRunStatus />
           </div>
 
           <div className={"min-h-0 overflow-hidden " + (chatOpen ? "hidden" : "block")}>
@@ -659,14 +659,24 @@ export default function CommandCenterPage() {
         onClose={() => setVoiceOpen(false)}
         onRefresh={(domains) => handleAgentRefresh(domains as RefreshDomain[])}
         onSurface={setSurface}
-        panelOpen={surface !== null}
+        // Was `surface !== null` -- the panel itself is disabled above
+        // (`false && voiceOpen && <SurfaceLayer .../>`) for latency testing,
+        // but `surface` state was still being set on every tool_result, so
+        // the globe kept shrinking/dimming as if a panel were opening with
+        // nothing there to show for it. Hard-false here so the core has zero
+        // reaction while the panel stays off. Revert both together.
+        panelOpen={false}
       />
 
       {/* Rendered after the HUD rather than inside it, for two reasons: it
           stacks above a z-50 overlay without fighting it, and VoiceMode stays
           ignorant of records, mutations and dashboard state — it asks for a
           surface and does not care who draws it. */}
-      {voiceOpen && (
+      {/* Temporarily disabled (2026-09-16) for raw voice-latency testing --
+          the user wants no tool-result panel popping up over the HUD while
+          timing the cloud voice stack. Re-enable by restoring the `voiceOpen &&`
+          block below; nothing else changed, `surfaceProps` still exists. */}
+      {false && voiceOpen && (
         <SurfaceLayer
           {...surfaceProps}
           placement="voice"

@@ -270,7 +270,7 @@ async def _v4_reminders(conn: aiosqlite.Connection) -> None:
     sharing an outbox would both fire the same reminder, and the person would
     be told twice.
     """
-    await conn.executescript(
+    await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS reminders (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,11 +278,17 @@ async def _v4_reminders(conn: aiosqlite.Connection) -> None:
             due_at      DATETIME NOT NULL,
             created_at  DATETIME NOT NULL,
             fired_at    DATETIME
-        );
-
+        )
+        """
+    )
+    await conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_reminders_pending
-            ON reminders (due_at) WHERE fired_at IS NULL;
-
+            ON reminders (due_at) WHERE fired_at IS NULL
+        """
+    )
+    await conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS announcements (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             kind          TEXT NOT NULL CHECK (kind IN ('reminder', 'schedule', 'task')),
@@ -293,10 +299,13 @@ async def _v4_reminders(conn: aiosqlite.Connection) -> None:
             created_at    DATETIME NOT NULL,
             delivered_at  DATETIME,
             UNIQUE (kind, ref_id, occurrence_at)
-        );
-
+        )
+        """
+    )
+    await conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_announcements_undelivered
-            ON announcements (created_at) WHERE delivered_at IS NULL;
+            ON announcements (created_at) WHERE delivered_at IS NULL
         """
     )
 
@@ -316,14 +325,17 @@ async def _v6_systematic_memory(conn: aiosqlite.Connection) -> None:
     ``memories.content``.  The existing Supabase table can therefore transport
     v2 memories immediately, while old clients still see ordinary text.
     """
-    await conn.executescript(
+    await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS memory_access (
             memory_uid       TEXT PRIMARY KEY,
             access_count     INTEGER NOT NULL DEFAULT 0,
             last_accessed_at TEXT NOT NULL
-        );
-
+        )
+        """
+    )
+    await conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS action_events (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             uid              TEXT UNIQUE NOT NULL,
@@ -336,11 +348,19 @@ async def _v6_systematic_memory(conn: aiosqlite.Connection) -> None:
             started_at       TEXT NOT NULL,
             completed_at     TEXT NOT NULL,
             created_at       TEXT NOT NULL
-        );
+        )
+        """
+    )
+    await conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_action_events_created
-            ON action_events (created_at DESC);
+            ON action_events (created_at DESC)
+        """
+    )
+    await conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_action_events_type
-            ON action_events (action_type, created_at DESC);
+            ON action_events (action_type, created_at DESC)
         """
     )
 
@@ -423,8 +443,13 @@ async def apply(conn: aiosqlite.Connection) -> None:
         migrate = MIGRATIONS.get(version)
         if migrate is None:
             continue
-        await migrate(conn)
-        # PRAGMA does not accept bound parameters.
-        await conn.execute(f"PRAGMA user_version = {version}")
-        await conn.commit()
-        logger.info("Applied schema migration v%d", version)
+        await conn.execute("BEGIN IMMEDIATE")
+        try:
+            await migrate(conn)
+            # PRAGMA does not accept bound parameters.
+            await conn.execute(f"PRAGMA user_version = {version}")
+            await conn.commit()
+            logger.info("Applied schema migration v%d", version)
+        except Exception:
+            await conn.rollback()
+            raise

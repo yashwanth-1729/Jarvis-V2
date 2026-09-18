@@ -583,8 +583,17 @@ export class VoiceSession {
     // Telugu is additionally gated server-side on the user's opt-in
     // (`telugu_tts_engine` == "piper") -- advertising readiness here only
     // means "ask me", not "always use me", for Telugu.
-    const nativeEnglish = isNativeTtsAvailable("en-IN") ? "&english_tts=client" : "";
-    const nativeTelugu = isNativeTtsAvailable("te-IN") ? "&telugu_tts=client" : "";
+    // On-device native TTS (sherpa-onnx, both English and Telugu voices)
+    // disabled outright, 2026-09-16: loading a second native voice engine
+    // while one was already resident crashed the whole app process (no Java
+    // exception, just "Process ... has died" -- confirmed live via logcat
+    // right after a second OfflineTts() construction). Every reply now goes
+    // through the normal backend TTS path (Sarvam) regardless of language or
+    // device capability. See JarvisTts.kt's SherpaTts object for the
+    // (now-unused) native engine code, left in place but never invoked.
+    const nativeEnglish = "";
+    const nativeTelugu = "";
+    void isNativeTtsAvailable; // kept imported; intentionally unused while native TTS is disabled
     const url = `${API_BASE.replace(/^http/, "ws")}/api/voice/session?audio=pcm16${nativeEnglish}${nativeTelugu}`;
     const socket = new WebSocket(url);
     this.socket = socket;

@@ -46,3 +46,13 @@ backend/.piptmp/
 # Android Piper assets fetched by backend/tools/android/setup_piper.ps1 (large, not committed)
 frontend/src-tauri/gen/android/app/libs/*.aar
 frontend/src-tauri/gen/android/app/src/main/assets/piper/
+# Machine-local pointer copied beside a personal Windows installation.
+frontend/src-tauri/backend-path.local.txt
+install-backups/
+# Local scratch that can hold personal data: artifact staging (contained a copy
+# of the real memory store) and raw device log captures (spoken transcripts).
+.artifact_staging/
+crash_capture*.log
+verify_capture*.log
+android_tts_capture*.log
+backend/backend_live.log

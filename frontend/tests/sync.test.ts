@@ -24,6 +24,7 @@ import {
   mergeAgentRows,
   projectTombstone,
   putRows,
+  setMeta,
 } from "@/lib/localdb";
 import {
   type Remote,
@@ -316,6 +317,19 @@ async function main(): Promise<number> {
   check(
     "the local deletion reached the remote despite the mix",
     `tasks:${deletedHere.uid}` in remote.tombstones,
+  );
+
+  console.log("\n== future tombstone watermark does not block current deletions ==");
+  const futureTombKey = `push:${remote.id}:tombstones`;
+  await setMeta(futureTombKey, "2099-01-01T00:00:00.000Z");
+  const skewedDelete = makeRow({ title: "Delete during skew" });
+  await putRows("tasks", [skewedDelete]);
+  await syncOnce(remote);
+  await deleteRow("tasks", skewedDelete.uid, nowIso());
+  await syncOnce(remote);
+  check(
+    "current deletion reaches remote despite future watermark",
+    `tasks:${skewedDelete.uid}` in remote.tombstones,
   );
 
   console.log("\n== a row edited after its delete is kept ==");

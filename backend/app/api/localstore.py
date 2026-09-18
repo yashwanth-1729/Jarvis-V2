@@ -104,34 +104,36 @@ async def seed(payload: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     _require_client_owned()
 
     loaded: dict[str, int] = {}
-    for table in SYNCED_TABLES:
-        rows = payload.get(table) or []
-        # `id` is written explicitly rather than left to AUTOINCREMENT. See
-        # `numeric_id` -- letting SQLite renumber on every seed is what made
-        # deleting a visible task report that it did not exist.
-        columns = ("id", *SYNC_COLUMNS[table])
-        placeholders = ", ".join("?" for _ in columns)
+    async with db.write() as conn:
+        for table in SYNCED_TABLES:
+            rows = payload.get(table) or []
+            # `id` is written explicitly rather than left to AUTOINCREMENT. See
+            # `numeric_id` -- letting SQLite renumber on every seed is what made
+            # deleting a visible task report that it did not exist.
+            columns = ("id", *SYNC_COLUMNS[table])
+            placeholders = ", ".join("?" for _ in columns)
 
-        await db.execute(f"DELETE FROM {table}")
-        if rows:
-            await db.execute_many(
-                f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
-                [
-                    (
-                        numeric_id(str(row.get("uid") or "")),
-                        *(row.get(column) for column in SYNC_COLUMNS[table]),
-                    )
-                    for row in rows
-                    if row.get("uid")
-                ],
-            )
-        loaded[table] = len(rows)
+            await conn.execute(f"DELETE FROM {table}")
+            if rows:
+                await conn.executemany(
+                    f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+                    [
+                        (
+                            numeric_id(str(row.get("uid") or "")),
+                            *(row.get(column) for column in SYNC_COLUMNS[table]),
+                        )
+                        for row in rows
+                        if row.get("uid")
+                    ],
+                )
+            loaded[table] = len(rows)
 
-    # Seeding is not a change. The inserts above tripped the pending triggers,
-    # so clearing the queue here is what stops the very next drain handing the
-    # client its own data back as if the agent had produced it.
-    await db.execute("DELETE FROM sync_pending")
-    await db.execute("DELETE FROM sync_tombstones")
+        # Seeding is not a change. The inserts above tripped the pending triggers,
+        # so clearing the queue here within the same transaction stops the very
+        # next drain handing the client its own data back.
+        await conn.execute("DELETE FROM sync_pending")
+        await conn.execute("DELETE FROM sync_tombstones")
+        await conn.commit()
 
     logger.info("Seeded working copy: %s", loaded)
     return {"seeded": loaded, "at": now_iso()}
@@ -164,8 +166,22 @@ async def drain() -> dict[str, Any]:
     )
 
     if upserts or deletes:
-        await db.execute("DELETE FROM sync_pending")
-        await db.execute("DELETE FROM sync_tombstones")
+        async with db.write() as conn:
+            for table, rows in upserts.items():
+                uids = [r["uid"] for r in rows if r.get("uid")]
+                if uids:
+                    placeholders = ", ".join("?" for _ in uids)
+                    await conn.execute(
+                        f"DELETE FROM sync_pending WHERE table_name = ? AND uid IN ({placeholders})",
+                        (table, *uids),
+                    )
+            for tomb in deletes:
+                await conn.execute(
+                    "DELETE FROM sync_tombstones WHERE table_name = ? AND uid = ?",
+                    (tomb["table_name"], tomb["uid"]),
+                )
+            await conn.commit()
+
         logger.info(
             "Drained %d upserts, %d deletes to the client",
             sum(len(rows) for rows in upserts.values()),
@@ -222,6 +238,11 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
     for payload_key, attr, has_key_attr in (
         ("sarvam_api_key", "sarvam_api_key", "has_api_key"),
         ("gemini_api_key", "gemini_api_key", "has_gemini_key"),
+        # No .env ships on Android, so OPENROUTER_API_KEY (desktop's .env)
+        # never reaches the Android build any other way -- this is the only
+        # path an Android client has to hand the runtime its OpenRouter key,
+        # same BYOK pattern as Sarvam/Gemini above.
+        ("openrouter_api_key", "openrouter_api_key", "has_openrouter_key"),
     ):
         if payload_key not in payload:
             continue
@@ -246,6 +267,7 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
     return {
         "configured": configured.get("sarvam_api_key", settings.has_api_key),
         "gemini_configured": configured.get("gemini_api_key", settings.has_gemini_key),
+        "openrouter_configured": configured.get("openrouter_api_key", settings.has_openrouter_key),
     }
 
 

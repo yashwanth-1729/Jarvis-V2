@@ -38,7 +38,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -64,13 +65,17 @@ const WATCHDOG_HEALTHY_AFTER: Duration = Duration::from_secs(10);
 pub struct Backend {
     child: Mutex<Option<Child>>,
     shutting_down: AtomicBool,
+    pairing_secret: String,
 }
 
 impl Backend {
     pub fn new() -> Self {
+        let mut secret = [0_u8; 32];
+        getrandom::fill(&mut secret).expect("Windows secure random source is unavailable");
         Self {
             child: Mutex::new(None),
             shutting_down: AtomicBool::new(false),
+            pairing_secret: hex::encode(secret),
         }
     }
 
@@ -87,6 +92,59 @@ impl Backend {
             }
         }
     }
+}
+
+#[derive(Serialize)]
+pub struct AgentPairing {
+    token: String,
+    principal_id: String,
+}
+
+/// Exchange the launcher's private bootstrap secret for a short-lived bearer.
+/// The webview never receives the bootstrap secret.
+#[tauri::command]
+pub fn pair_agent_runtime(state: State<'_, Backend>) -> Result<AgentPairing, String> {
+    const PRINCIPAL: &str = "desktop-owner";
+    let body = serde_json::json!({
+        "secret": state.pairing_secret,
+        "principal_id": PRINCIPAL,
+    })
+    .to_string();
+    let mut stream =
+        TcpStream::connect_timeout(&([127, 0, 0, 1], PORT).into(), Duration::from_millis(800))
+            .map_err(|_| "The local agent runtime is not ready yet".to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .map_err(|_| "Could not configure the local pairing connection".to_string())?;
+    let request = format!(
+        "POST /api/agent/pair HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(), body
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|_| "Could not contact the local agent runtime".to_string())?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|_| "The local agent runtime did not finish pairing".to_string())?;
+    let response = String::from_utf8(response)
+        .map_err(|_| "The local agent runtime returned an invalid response".to_string())?;
+    let (headers, response_body) = response
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "The local agent runtime returned an incomplete response".to_string())?;
+    if !headers.starts_with("HTTP/1.1 200") {
+        return Err("The running backend was not started by this JARVIS window".to_string());
+    }
+    let value: serde_json::Value = serde_json::from_str(response_body)
+        .map_err(|_| "The local agent runtime returned invalid pairing data".to_string())?;
+    let token = value
+        .get("token")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "The local agent runtime returned no pairing token".to_string())?;
+    Ok(AgentPairing {
+        token: token.to_owned(),
+        principal_id: PRINCIPAL.to_owned(),
+    })
 }
 
 impl Default for Backend {
@@ -121,11 +179,11 @@ pub fn already_running() -> bool {
         return false;
     }
 
-    let mut response = [0_u8; 4096];
-    let Ok(size) = stream.read(&mut response) else {
+    let mut response = Vec::with_capacity(4096);
+    if stream.read_to_end(&mut response).is_err() {
         return false;
-    };
-    let response = String::from_utf8_lossy(&response[..size]);
+    }
+    let response = String::from_utf8_lossy(&response);
     response.starts_with("HTTP/1.1 200") && response.contains("\"status\":\"ok\"")
 }
 
@@ -143,6 +201,19 @@ fn find_backend_dir() -> Option<PathBuf> {
             return Some(path);
         }
         log::warn!("JARVIS_BACKEND_DIR is set but has no main.py: {:?}", path);
+    }
+
+    // A personal installed build can keep an explicit checkout pointer beside
+    // the executable instead of relying on Explorer's inherited directory.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if let Ok(configured) = std::fs::read_to_string(parent.join("backend-path.txt")) {
+                let path = PathBuf::from(configured.trim());
+                if path.join("main.py").is_file() {
+                    return Some(path);
+                }
+            }
+        }
     }
 
     let mut roots: Vec<PathBuf> = Vec::new();
@@ -218,6 +289,7 @@ fn try_start(state: &Backend) -> bool {
             &PORT.to_string(),
         ])
         .current_dir(&backend_dir)
+        .env("JARVIS_AGENT_PAIRING_SECRET", &state.pairing_secret)
         // Inherited pipes would fill and block the child once nothing drains
         // them; the backend writes its own log and does not need a console.
         .stdout(Stdio::null())
@@ -301,6 +373,13 @@ fn watch(app: AppHandle, initial_start_pending: bool) {
                 // A process that bound no healthy API endpoint is not ready.
                 // Give imports/migrations a bounded window, then restart the
                 // owned child instead of calling its PID a success forever.
+                // This timer must also start after a previously healthy
+                // Windows venv wrapper loses its serving child: the wrapper
+                // can remain alive even though nothing owns the port.
+                if !restart_pending_health {
+                    restart_pending_health = true;
+                    restart_started_at = Some(std::time::Instant::now());
+                }
                 if restart_pending_health
                     && restart_started_at
                         .is_some_and(|started| started.elapsed() >= WATCHDOG_HEALTHY_AFTER)

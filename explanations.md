@@ -128,6 +128,46 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-18 · Claude Code · OpenRouter reliability + the "fake actions" finding
+
+For Codex: the whole cloud voice stack (OpenRouter chat/STT/TTS,
+`app/providers/openrouter.py`, `app/llm/tool_routing.py`) is still
+**uncommitted, several files untracked**, sitting next to your own
+uncommitted agent-runtime work. Nothing has been committed from either side
+since f6a5ae6. Please don't `git clean`/`checkout .` — coordinate with the
+user on committing. I saw and kept your `route(user_text, recent_text)`
+change; my edits don't touch it.
+
+- **"OpenRouter stream failed ()" root cause:** every live failure stopped at
+  exactly ~10.0s = our hardcoded 10s *connect* timeout on a stalled mobile
+  TCP/TLS handshake. Handshakes happened on nearly every request because chat,
+  STT and each TTS language owned separate `AsyncClient`s and httpx's default
+  `keepalive_expiry` is 5s. Phone network measured clean (25ms RTT, 1500-byte
+  packets pass v4/v6), so no provider change was needed.
+- Fix (`providers/openrouter.py`): one shared client (60s keep-alive,
+  `OPENROUTER_KEEPALIVE_SECONDS`), 4s connect timeout
+  (`OPENROUTER_CONNECT_TIMEOUT`), retry once on transport errors / 429 / 5xx,
+  and the **chat stream now retries too — but only if nothing was yielded yet**
+  (never repeats speech). Errors log their exception type (no more "failed ()").
+  Auth header per request so BYOK key changes need no client rebuild.
+  `realtime.py` warms the connection when voice mode opens and every 25s.
+- `session_id` (documented OpenRouter body field, 10-min provider pin) on every
+  chat request: live, turn 2 cache went 0.2% -> 85.8%.
+- `realtime.py` voice gate checked the *Sarvam* key even on the cloud stack;
+  now checks OpenRouter's. Startup banner reports resolved providers.
+- `agent.py`: "UNBACKED ACTION CLAIM" warning when the model claims an action
+  with no tool call.
+- **Biggest finding, not yet acted on (user's call):** measured through the
+  real agent + DB, `qwen/qwen-2.5-7b-instruct` performed 1 of 12 requested
+  actions and claimed success on 11 ("Got it, added…", nothing saved). Prompt
+  ablations (5 variants x 5 trials) could not fix it; a one-line persona gets
+  8/8, so the 7B cannot handle our full voice prompt + tools. gpt-4.1-nano:
+  11/12 real, 0 false claims, same input price, ~0.7s slower first output.
+- Verified: new `tests/openrouter_transport_test.py` (16 checks, fake network),
+  full offline suite 48/50 (the 2 were my harness: scheduler_test 37/37 with
+  default env; latency_test is live). Built + installed on device afterwards —
+  see README entry for what was checked live.
+
 ### 2026-09-15 · Codex · P33 closed-by-default release policy
 
 - Added explicit runtime release flags. Every unfinished capability defaults off;

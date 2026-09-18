@@ -52,8 +52,14 @@ async def main():
     # This file tests Sarvam specifically (see its own docstring), including
     # its reasoning_content streaming -- pin English routing here regardless
     # of get_english_chat_provider's own default (Gemini, since 2026-09-12),
-    # which has no visible reasoning text to stream at all.
+    # which has no visible reasoning text to stream at all. Also pin the
+    # voice stack to "legacy": jarvis_voice_stack="cloud" (the default since
+    # 2026-09-16) short-circuits get_english_chat_provider/get_english_tts_provider
+    # straight to OpenRouter/Kokoro before jarvis_english_llm is even
+    # checked, and OpenRouter's Qwen model has no reasoning_content to
+    # stream either -- same problem, one level up.
     settings.jarvis_english_llm = "sarvam"
+    settings.jarvis_voice_stack = "legacy"
 
     print(f"\nchat model : {settings.sarvam_chat_model}")
     print(f"max_tokens : {settings.jarvis_max_tokens}")

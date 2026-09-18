@@ -23,6 +23,12 @@ DEFAULT_LANGUAGE = "en-IN"
 #: `app.services.speech`.
 TELUGU_LANGUAGE = "te-IN"
 
+#: Under the cloud voice stack (`JARVIS_VOICE_STACK=cloud`), Hindi is routed
+#: to Kokoro (`get_hindi_tts_provider`) same as English, rather than Sarvam.
+#: Under the legacy stack this constant is unused -- Hindi stays plain Sarvam
+#: like every other non-English, non-Telugu-opt-in language.
+HINDI_LANGUAGE = "hi-IN"
+
 
 #: Indic speech renders markedly longer than the equivalent English sentence —
 #: measured on bulbul:v3, the same reply took 3.67s in `en-IN` and 5.55s in

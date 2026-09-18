@@ -16,6 +16,11 @@ python-multipart>=0.0.12
 # Local English TTS (desktop only; no arm64/Chaquopy wheel)
 piper-tts>=1.8.0
 
+# Soniox TTS (cloud voice stack, Telugu only) -- real-time full-duplex
+# WebSocket client. Already present transitively via uvicorn/fastapi, listed
+# explicitly now that app/providers/soniox_tts.py imports it directly.
+websockets>=17.0
+
 # Computer-control tools (desktop only; gated by settings.system_tools_enabled,
 # which jarvis_android forces off -- these are never imported, let alone
 # installed, on a Chaquopy/Android build). All three are imported lazily

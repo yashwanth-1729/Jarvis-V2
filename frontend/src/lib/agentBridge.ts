@@ -38,6 +38,7 @@ import { nowIso } from "@/lib/syncClient";
 /** Where the provider keys are remembered on this device (BYOK). */
 export const PROVIDER_KEY_STORAGE = "jarvis.providerKey";
 export const GEMINI_KEY_STORAGE = "jarvis.geminiKey";
+export const OPENROUTER_KEY_STORAGE = "jarvis.openrouterKey";
 
 interface DrainResponse {
   upserts: Partial<Record<SyncedTable, SyncRow[]>>;
@@ -149,6 +150,33 @@ export function getGeminiKey(): string {
 }
 
 /**
+ * BYOK: the OpenRouter key that powers the cloud voice stack
+ * (`JARVIS_VOICE_STACK=cloud`, the default since 2026-09-16) -- chat, STT,
+ * and English/Hindi/Telugu TTS all go through OpenRouter now, so unlike
+ * Gemini's key this one is required for voice to work at all under that
+ * stack. Desktop gets it from `backend/.env`; Android has no `.env`, so
+ * this BYOK path is Android's ONLY way to hand the runtime this key.
+ */
+export function getOpenRouterKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(OPENROUTER_KEY_STORAGE)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setOpenRouterKey(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (key.trim()) window.localStorage.setItem(OPENROUTER_KEY_STORAGE, key.trim());
+    else window.localStorage.removeItem(OPENROUTER_KEY_STORAGE);
+  } catch {
+    // Storage unavailable (private mode, quota) -- the key just won't persist.
+  }
+}
+
+/**
  * Hand the local runtime its provider keys (BYOK).
  *
  * A packaged app ships no `.env`, so the backend starts with no credentials and
@@ -162,11 +190,16 @@ export function getGeminiKey(): string {
  * the other.
  */
 export async function sendProviderKey(): Promise<boolean> {
-  const result = await post<{ configured: boolean; gemini_configured: boolean }>(
+  const result = await post<{
+    configured: boolean;
+    gemini_configured: boolean;
+    openrouter_configured: boolean;
+  }>(
     "/api/local/credentials",
     {
       sarvam_api_key: getProviderKey(),
       gemini_api_key: getGeminiKey(),
+      openrouter_api_key: getOpenRouterKey(),
     },
   );
   // This boolean means the runtime acknowledged the handshake, not that a

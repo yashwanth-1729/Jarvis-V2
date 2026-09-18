@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-ant-piper-test")
 os.environ.setdefault("SARVAM_API_KEY", "piper-test")
+os.environ["JARVIS_VOICE_STACK"] = "legacy"
 
 import app.services.speech as speech  # noqa: E402
 from app.providers import get_english_tts_provider, get_tts_provider  # noqa: E402
@@ -56,15 +57,15 @@ def _voice_available() -> bool:
     return path.exists()
 
 
-def main() -> int:
+async def _check_routing() -> None:
     print("== routing ==")
     # English → the local engine (Piper here); every Indic language → Sarvam.
-    check("English routes to Piper", isinstance(speech._provider_for("en-IN"), PiperTTS))
-    check("Telugu routes to Sarvam", isinstance(speech._provider_for("te-IN"), SarvamTTS))
-    check("Hindi routes to Sarvam", isinstance(speech._provider_for("hi-IN"), SarvamTTS))
+    check("English routes to Piper", isinstance(await speech._provider_for("en-IN"), PiperTTS))
+    check("Telugu routes to Sarvam", isinstance(await speech._provider_for("te-IN"), SarvamTTS))
+    check("Hindi routes to Sarvam", isinstance(await speech._provider_for("hi-IN"), SarvamTTS))
     check(
         "unknown language falls back to English routing",
-        isinstance(speech._provider_for("zz-XX"), PiperTTS),
+        isinstance(await speech._provider_for("zz-XX"), PiperTTS),
     )
     check(
         "get_english_tts_provider is the Piper engine",
@@ -74,6 +75,10 @@ def main() -> int:
         "the other-language engine is still Sarvam",
         isinstance(get_tts_provider(), SarvamTTS),
     )
+
+
+def main() -> int:
+    asyncio.run(_check_routing())
 
     print("\n== length_scale mapping ==")
     p = PiperTTS()

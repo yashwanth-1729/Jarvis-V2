@@ -15,7 +15,7 @@ from typing import AsyncIterator
 
 from app.core.config import settings
 
-from app.core.languages import DEFAULT_LANGUAGE, TELUGU_LANGUAGE, is_supported
+from app.core.languages import DEFAULT_LANGUAGE, HINDI_LANGUAGE, TELUGU_LANGUAGE, is_supported
 from app.core.languages import resolve as resolve_language
 from app.core.speechtext import spell_numbers_in_english
 from app.core.voices import Voice
@@ -23,6 +23,7 @@ from app.core.voices import resolve as resolve_voice
 from app.db import crud
 from app.providers import (
     get_english_tts_provider,
+    get_hindi_tts_provider,
     get_telugu_tts_provider,
     get_tts_provider,
 )
@@ -139,20 +140,29 @@ async def current_telugu_engine() -> str:
 async def _provider_for(language_code: str | None) -> TTSProvider:
     """Which engine speaks this language.
 
-    English is spoken by the local engine (Piper) when one is configured;
-    Telugu is spoken by the local Piper voice only when the user has opted in
-    via the language picker (`PREF_TELUGU_TTS_ENGINE`) — Sarvam is the default
+    English is spoken by the local engine (Piper) when one is configured, or
+    by Kokoro under the cloud stack. Telugu is spoken by the local Piper
+    voice only when the user has opted in via the language picker
+    (`PREF_TELUGU_TTS_ENGINE`) under the legacy stack — Sarvam is the default
     for Telugu, unlike English, since Sarvam's Telugu already worked before
-    this existed. Every other language always goes to Sarvam, which covers the
-    rest of the Indic set no local voice does. `get_english_tts_provider`
-    returns the Sarvam TTS itself when English is set to stay on the cloud, so
-    this stays simple either way.
+    this existed; under the cloud stack Telugu ALWAYS goes through
+    `get_telugu_tts_provider()` regardless of that preference, since Kokoro
+    (this stack's English/Hindi engine) does not cover Telugu at all — see
+    that getter's own docstring for the full "what was tried and rejected"
+    history. Hindi gets its own cloud-stack override (also Kokoro); every
+    other language this app supports (Tamil, Kannada, Malayalam, Marathi,
+    Bengali, Gujarati, Punjabi, Odia) always goes to Sarvam via
+    `get_tts_provider()`, which covers the rest of the Indic set no local or
+    cloud alternative here does, in either stack.
     """
+    cloud = settings.jarvis_voice_stack == "cloud"
     code = resolve_language(language_code).code
     if code == DEFAULT_LANGUAGE:
         return get_english_tts_provider()
-    if code == TELUGU_LANGUAGE and await current_telugu_engine() == "piper":
+    if code == TELUGU_LANGUAGE and (cloud or await current_telugu_engine() == "piper"):
         return get_telugu_tts_provider()
+    if code == HINDI_LANGUAGE and cloud:
+        return get_hindi_tts_provider()
     return get_tts_provider()
 
 

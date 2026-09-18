@@ -25,6 +25,7 @@ pub fn run() {
 
     builder
         .manage(Backend::new())
+        .invoke_handler(tauri::generate_handler![backend::pair_agent_runtime])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

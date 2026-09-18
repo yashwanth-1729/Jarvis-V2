@@ -85,7 +85,14 @@ with TestClient(main.app) as client:
         json={"sarvam_api_key": "sarvam-key-2", "gemini_api_key": "gemini-key-2"},
     )
     check("both POST -> 200", resp.status_code == 200, resp.text)
-    check("both reported configured", resp.json() == {"configured": True, "gemini_configured": True})
+    check(
+        "both reported configured",
+        resp.json() == {
+            "configured": True, "gemini_configured": True,
+            "openrouter_configured": settings.has_openrouter_key,
+        },
+        resp.json(),
+    )
     check(
         "both settings updated",
         settings.sarvam_api_key == "sarvam-key-2" and settings.gemini_api_key == "gemini-key-2",
@@ -106,7 +113,14 @@ with TestClient(main.app) as client:
         "desktop: blank gemini key does not clear the working one either",
         settings.gemini_api_key == "already-working-gemini",
     )
-    check("both still reported as configured, not cleared", resp.json() == {"configured": True, "gemini_configured": True})
+    check(
+        "both still reported as configured, not cleared",
+        resp.json() == {
+            "configured": True, "gemini_configured": True,
+            "openrouter_configured": settings.has_openrouter_key,
+        },
+        resp.json(),
+    )
 
     print("\n== android: a blank key still means \"clear it\", both providers ==")
     settings.jarvis_android = True
@@ -117,7 +131,14 @@ with TestClient(main.app) as client:
     check("android blank-both POST -> 200", resp.status_code == 200, resp.text)
     check("android: blank sarvam key clears it", settings.sarvam_api_key == "")
     check("android: blank gemini key clears it too", settings.gemini_api_key == "")
-    check("both reported as cleared", resp.json() == {"configured": False, "gemini_configured": False})
+    check(
+        "both reported as cleared",
+        resp.json() == {
+            "configured": False, "gemini_configured": False,
+            "openrouter_configured": settings.has_openrouter_key,
+        },
+        resp.json(),
+    )
     settings.jarvis_android = False
 
     print("\n== omitting a key entirely leaves it alone and reports its current state ==")

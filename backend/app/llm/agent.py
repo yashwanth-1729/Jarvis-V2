@@ -23,12 +23,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any, AsyncIterator
 
 from app.core.config import settings
 from app.core.languages import reply_directive, reply_reminder
 from app.core.timeutil import now
 from app.db import crud
+from app.llm import tool_routing
 from app.llm.prompts import (
     CONTEXT_PREAMBLE,
     SYSTEM_PROMPT,
@@ -315,9 +317,12 @@ async def _load_history() -> list[dict[str, Any]]:
             if row["role"] == "assistant":
                 text = strip_time_opener(text)
             messages.append({"role": row["role"], "content": text})
-    return _trim_to_safe_boundary(
-        _close_interrupted_tool_cycles(_defuse_clock_only_replies(messages))
-    )
+    cleaned = _close_interrupted_tool_cycles(_defuse_clock_only_replies(messages))
+    # Only the last N reach the model -- see `jarvis_llm_history_messages`.
+    # Trimmed to a safe boundary a second time: cutting to the last N can
+    # itself land mid tool-cycle even though `cleaned` already started clean.
+    windowed = cleaned[-settings.jarvis_llm_history_messages :]
+    return _trim_to_safe_boundary(windowed)
 
 
 #: Stands in for a reply that was nothing but the clock, when nobody asked.
@@ -501,6 +506,16 @@ async def _build_state_message(user_text: str = "") -> dict[str, Any]:
     return {"role": "system", "content": f"{CONTEXT_PREAMBLE}\n\n{snapshot}"}
 
 
+#: Phrases that assert a write happened. Only consulted when no tool ran and
+#: the router saw an actionable request, so small talk never trips it.
+_CLAIMS_DONE = re.compile(
+    r"(i'?ll remind|reminder (is )?set|set (a|the|your) reminder|i'?ve set|"
+    r"added|i'?ve added|on (the|your) board|scheduled|i'?ve scheduled|saved|"
+    r"noted|deleted|removed|cleared|done, boss|all set)",
+    re.IGNORECASE,
+)
+
+
 def _parse_arguments(
     raw: str, tool_name: str | None = None
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -632,8 +647,27 @@ async def run_turn(
         yield {"type": "error", "data": {"message": str(exc)}}
         return
 
-    model = settings.sarvam_voice_model if voice else None
+    # sarvam_voice_model ("...-conversations", a faster dialogue-tuned
+    # variant) is a Sarvam-specific override -- only meaningful, and only
+    # safe to send, when Sarvam is actually the active provider. Blindly
+    # applying it whenever voice=True sent the literal string
+    # "sarvam-105b-conversations" to OpenRouter as a `model=` override once
+    # the cloud stack made OpenRouter the active provider, which OpenRouter
+    # correctly rejected as an unknown model -- confirmed live, 2026-09-16.
+    model = settings.sarvam_voice_model if (voice and provider.name == "sarvam") else None
     max_tokens = settings.jarvis_voice_max_tokens if voice else None
+
+    # OpenRouter-only: its built-in web-search plugin is a request-level
+    # flag (see openrouter.py's WebSearchRouter), not a tool the model calls
+    # itself, so it has to be decided here, before the call, from the raw
+    # user text. Sarvam/Gemini's stream() signatures don't accept this kwarg
+    # at all -- passed unconditionally it would raise TypeError -- so it's
+    # only ever added to the call when OpenRouter is actually the provider.
+    extra_stream_kwargs: dict[str, Any] = {}
+    if provider.name == "openrouter":
+        from app.providers.openrouter import WebSearchRouter
+
+        extra_stream_kwargs["enable_web_search"] = WebSearchRouter.needs_live_information(user_text)
     stream_typed = not voice and len(user_text) >= settings.jarvis_typed_stream_chars
     if stream_typed:
         logger.info("Large typed prompt (%d chars): using progressive output", len(user_text))
@@ -701,7 +735,42 @@ async def run_turn(
     # Resolved once per turn, not per iteration: the tool block is part of the
     # cached request prefix, so it must be byte-identical across the iterations
     # of a single turn.
-    offered_tools = openai_tools()
+    #
+    # Routed to the tools this turn plausibly needs (see tool_routing.py)
+    # instead of always sending the full set -- that set, unconditionally,
+    # was the single largest recurring cost in a live "why so many tokens"
+    # investigation (2026-09-16). `route()` returns None on low confidence,
+    # which is deliberately treated as "send everything" rather than
+    # "send nothing": a missed narrow route costs tokens, a missed empty
+    # route would silently break a tool call.
+    # The immediately preceding user turn, when there is one -- a
+    # confirm-then-act reply ("yes, delete them all") routinely shares none
+    # of the original request's domain keywords, only a generic "delete",
+    # so routing the reply in isolation offered delete_record but never
+    # bulk_delete_tasks: the model could not call the very tool it had just
+    # proposed. See tool_routing.route's own docstring for the reproduction.
+    previous_user_text = next(
+        (
+            message.get("content")
+            for message in reversed(settled)
+            if message.get("role") == "user" and isinstance(message.get("content"), str)
+        ),
+        "",
+    )
+    router_started = time.perf_counter()
+    routed_names = tool_routing.route(user_text, previous_user_text)
+    offered_tools = openai_tools(routed_names)
+    router_ms = (time.perf_counter() - router_started) * 1000
+    if routed_names is None:
+        router_label = "fallback(all)"
+    elif not routed_names:
+        router_label = "no-match(zero)"
+    else:
+        router_label = f"{len(routed_names)} routed: {sorted(routed_names)}"
+    logger.info(
+        "tool router: %s -> %d tool(s) offered in %.2fms",
+        router_label, len(offered_tools), router_ms,
+    )
 
     # Same reasoning_effort for every iteration of this turn too -- a
     # multi-step tool cycle is answering the same question throughout.
@@ -712,6 +781,7 @@ async def run_turn(
 
     refreshed: set[str] = {"memories"} if inferred_candidate else set()
     assistant_text_parts: list[str] = []
+    tools_run = 0
     usage_total: dict[str, int] = {}
     finish_reason: str | None = None
 
@@ -758,6 +828,7 @@ async def run_turn(
                 max_tokens=max_tokens,
                 incremental=voice or stream_typed,
                 reasoning_effort=reasoning_effort,
+                **extra_stream_kwargs,
             ):
                 if chunk.kind == "text":
                     yield {"type": "text", "data": {"text": chunk.text}}
@@ -842,6 +913,7 @@ async def run_turn(
                 }
                 await crud.append_chat_message("user", "", tool_message)
                 messages.append(tool_message)
+                tools_run += 1
 
                 yield {
                     "type": "tool_result",
@@ -880,6 +952,7 @@ async def run_turn(
                 [],
                 model=model,
                 max_tokens=max_tokens,
+                **extra_stream_kwargs,
                 incremental=voice or stream_typed,
                 reasoning_effort=reasoning_effort,
             ):
@@ -927,6 +1000,37 @@ async def run_turn(
         logger.exception("Agent turn failed")
         yield {"type": "error", "data": {"message": f"Agent failure: {exc}"}}
         return
+
+    # Tripwire for the worst failure this app has had: the model saying an
+    # action is done ("Got it, reminder set", "Added it to your board") with no
+    # tool call behind it, so nothing was saved. Measured 2026-09-18 on
+    # qwen-2.5-7b: 6 of 6 real voice actions faked this way. Cannot un-speak it
+    # after the fact, but it must never again be invisible in the log.
+    if tools_run == 0 and routed_names and _CLAIMS_DONE.search("".join(assistant_text_parts)):
+        logger.warning(
+            "UNBACKED ACTION CLAIM: model reported an action with no tool call "
+            "(model=%s, offered=%d tools)", model or provider.model, len(offered_tools),
+        )
+
+    # This was the only place per-turn token usage existed at all, and it was
+    # never logged -- realtime.py has no branch for `kind == "done"` (voice
+    # turns dropped it silently), and chat.py only forwards it to the client.
+    # Investigating a real "why is it burning so many credits" report found
+    # no server-side record of any turn's cost, ever. Logged here, once, so
+    # both paths get it instead of duplicating the call in each caller.
+    if usage_total:
+        prompt_tokens = usage_total.get("prompt_tokens")
+        cached = usage_total.get("cached_tokens")
+        # Only claim a hit rate when the provider actually returned the
+        # field -- see `_extract_usage`'s docstring for why this is never
+        # assumed. No field present logs plainly, not a fabricated "0%".
+        if prompt_tokens and cached is not None:
+            logger.info(
+                "agent turn usage: %s (cache hit %.1f%%, %d/%d cached)",
+                usage_total, 100 * cached / prompt_tokens, cached, prompt_tokens,
+            )
+        else:
+            logger.info("agent turn usage: %s (CACHE METRIC UNAVAILABLE)", usage_total)
 
     yield {
         "type": "done",

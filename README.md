@@ -458,6 +458,274 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-18 — Root-caused and fixed "OpenRouter stream failed ()"; found
+  that qwen-2.5-7b fakes most actions.** Every live failure stopped at exactly
+  ~10.0s: our own hardcoded 10s connect timeout on a stalled mobile TLS
+  handshake, happening because chat/STT/each TTS language had separate HTTP
+  clients and httpx drops idle connections after 5s — so nearly every request
+  re-handshook. `app/providers/openrouter.py` now uses one shared client
+  (`OPENROUTER_KEEPALIVE_SECONDS=60`, `OPENROUTER_CONNECT_TIMEOUT=4`), retries
+  once on transport errors/429/5xx, retries the chat stream only if no output
+  was produced yet, logs exception types, and sends a stable `session_id`
+  (live: follow-up turn cache 0.2% -> 85.8%). Voice mode keeps the connection
+  warm while open (`app/api/realtime.py`). The voice websocket no longer
+  requires a Sarvam key under the cloud stack; the startup banner reports the
+  resolved providers (`main.py`). `agent.py` logs "UNBACKED ACTION CLAIM"
+  when a reply claims an action without a tool call. Measured through the real
+  agent with database checks: qwen-2.5-7b performed 1 of 12 requested actions
+  and claimed success on 11; prompt changes could not fix it; gpt-4.1-nano did
+  11/12 with no false claims. Model not changed yet (user's decision).
+  Verified: `tests/openrouter_transport_test.py` (16 checks), full offline
+  suite green. Installed on device; see chat for live checks.
+
+- **2026-09-18 — Fixed the actually-serious version of the reminder bug: JARVIS
+  verbally claimed a reminder was set when it never called the tool.** Live
+  repro: user said "remember me to sleep at 11pm tonight"; JARVIS replied
+  "got it boss reminder is set to 11pm to sleep"; the reminders API showed
+  no new row was ever created. Two stacked causes. (1) The "remember to"
+  bigram fix from earlier today required the words adjacent -- "remember
+  **me** to sleep" doesn't match it, so `set_reminder` wasn't offered at
+  all; widened to `remember(?:\s+\w+){0,2}\s+to` in
+  `app/llm/tool_routing.py`, which now catches "remember to", "remember me
+  to", "remember you to" while still leaving genuine memory saves
+  ("remember that I like tea", "remember my address") alone. (2) The more
+  important one: even with the tool missing, Qwen still told the user it
+  had completed the action -- nothing in the prompt forbade claiming success
+  without a backing tool call. `VOICE_SYSTEM_PROMPT`
+  (`app/llm/prompts.py`) now explicitly says: never say something is set,
+  added, saved or done unless the corresponding tool was actually called
+  this turn and returned success; if the tool isn't available, say so and
+  ask the user to repeat the request rather than confirming an action that
+  didn't happen. This is the more load-bearing fix of the two -- routing
+  keywords can never be proven exhaustive, so the model claiming false
+  success on a routing miss is worse than the miss itself. Source changes
+  only; rebuild/reinstall before live.
+
+- **2026-09-18 — Fixed a second, different tool-routing miss for reminders:
+  "remember to X" only matched the `memory` keyword group, not `reminder`.**
+  The 2026-09-16 fallback-to-all revert only protects a turn with *zero*
+  keyword matches; "remember to call mom tomorrow" is not zero matches, it's
+  a *wrong* one -- `memory`'s "remember" fired, `set_reminder` was never
+  offered, and Qwen replied in text with no tool call (confirmed live from
+  the log: `tool router: 2 routed: ['generate_proactive_brief',
+  'search_memory']`, 22 completion tokens, no tool_calls). Added `remember
+  to` (the bigram, not bare "remember") to the `reminder` group in
+  `app/llm/tool_routing.py` -- narrow enough that "remember that I like my
+  coffee black" (a genuine memory save) still routes to `memory` only, not
+  both. Source change only; rebuild/reinstall before live.
+
+- **2026-09-16 — Reverted the tool router's no-match default from "zero
+  tools" to "every core tool" after it broke a real request live.** The
+  router shipped earlier today defaulting to zero tools on no keyword match,
+  explicitly chosen to hit the user's "0 tools for ordinary conversation"
+  target. Confirmed from the log the same day: "remind me..." didn't match
+  any keyword pattern, `tool router: no-match(zero) -> 0 tool(s) offered`
+  fired, and Qwen replied in plain text instead of calling `set_reminder` --
+  a real, silent feature failure, not a hypothetical one. `jarvis_tool_routing_fallback_all`
+  now defaults to `true` (`core/config.py`); a missed keyword now costs the
+  full core-tool-set tokens on that turn instead of silently dropping the
+  feature. Also broadened the `reminder` keyword group (added "notify me",
+  "don't let me forget", "nudge me") so more common phrasings hit the cheap
+  path directly rather than relying on the fallback. `tests/agent_context_budget_test.py`
+  updated to assert the new default. Source change only; rebuild/reinstall
+  before live.
+
+- **2026-09-16 — Switched STT to Whisper v3 Turbo; fixed the globe still
+  reacting to a tool panel that was supposed to be fully off.** Verified
+  live before switching (per this project's standing rule, never guess a
+  model id): `openai/whisper-large-v3-turbo` transcribed a real test clip
+  successfully on OpenRouter's `/audio/transcriptions` and came back at
+  ~44% of plain `whisper-large-v3`'s cost for the same clip. Now the default
+  via new `OPENROUTER_STT_MODEL` setting (`core/config.py`,
+  `providers/openrouter.py`). Separately: disabling the voice-mode tool
+  panel earlier this session only hid `SurfaceLayer`'s render
+  (`{false && voiceOpen && ...}` in `frontend/src/app/page.tsx`) but left
+  `panelOpen={surface !== null}` wired to `VoiceMode`, so the globe kept
+  shrinking/dimming on every tool result as if a panel were opening, with
+  nothing visible to show for it -- exactly what the user reported ("tool
+  driven ui is gone, it still pulling jarvis globe up"). `panelOpen` is now
+  hard-`false` alongside the panel disable, with both changes cross-referenced
+  in comments so they get reverted together. Source changes only; rebuild
+  both platforms before either fix is live.
+
+- **2026-09-16 — Voice-pipeline token/latency optimization pass: history
+  window, dynamic tool routing, verified prompt caching.** Full report kept
+  in the session; summary here. Real measurements first: the true Android
+  baseline is 21 "core" tools / ~6,092 tokens (not 56/~10,700 -- that number
+  was measured against the desktop venv's default settings, where
+  `system_tools_enabled` is true; Android forces it off via
+  `jarvis_android`, so all 35 desktop-only "system" tools were never part of
+  the real mobile problem). Changes:
+  (1) `JARVIS_LLM_HISTORY_MESSAGES` (default 6, new setting in
+  `core/config.py`) caps what `_load_history` (`llm/agent.py`) sends to the
+  model, decoupled from `JARVIS_HISTORY_LIMIT` (still 40) which only bounds
+  the DB fetch and the UI transcript scrollback -- changing the shared
+  constant would have shrunk the visible chat history too.
+  (2) New `app/llm/tool_routing.py`: deterministic keyword router over the
+  21 core tools, grouped into tasks/schedule/notes/memory/web/settings/
+  reminder/record. No match -> zero core tools by default
+  (`jarvis_tool_routing_fallback_all=false`, flip to restore the safer
+  "send everything" fallback without a code change). A match returns the
+  union of every matched group's tools, so compound requests naturally get
+  more than one group. Asserts at import time that every core tool belongs
+  to a group, so a future new tool can't silently become unroutable.
+  `openai_tools()` (`llm/tools.py`) gained an optional `names` filter that
+  narrows only "core" tools -- "system" tools always pass through
+  unfiltered, so this doesn't touch desktop's separate tool set.
+  (3) Verified prompt caching LIVE against the real endpoint (not assumed):
+  two identical-prefix chat completions measured `cached_tokens` 5/1428 then
+  1427/1428 -- 99.9% -- and confirmed this holds under `stream:true` with
+  `stream_options.include_usage:true` too, contradicting an old in-code
+  comment claiming the provider never caches streaming requests (that
+  measurement predates OpenRouter and this flag). `_extract_usage`
+  (`providers/openrouter.py`) now pulls `prompt_tokens_details.cached_tokens`
+  out of the usage payload -- a flat `int`-only filter was silently dropping
+  it, since it's one level nested. `agent.py`'s per-turn usage log now
+  reports a real cache-hit percentage when the field is present, and says
+  `CACHE METRIC UNAVAILABLE` rather than fabricating one when it isn't.
+  (4) Router timing (`tool_router_ms`) and selection logged per turn.
+  Added `tests/agent_context_budget_test.py`: asserts `_load_history` never
+  exceeds the 6-message cap and returns the *most recent* messages, asserts
+  full router coverage of core tools, and asserts a no-match route offers
+  zero core tools. Deliberately NOT done this pass, with reasons: shrinking
+  `VOICE_SYSTEM_PROMPT`/`VOICE_TURN_REMINDER` text (real, measured ~2,050
+  tokens, but that prompt's comments document multiple past live
+  regressions from careless edits -- needs its own careful pass, not a
+  blind trim bundled into this one); provider/session affinity investigation
+  (OpenRouter's docs for this weren't checked this session); routing over
+  the 35 desktop-only "system" tools (separate, unmeasured surface). Source
+  changes only; rebuild/reinstall Android before any of this is live there.
+
+- **2026-09-16 — Found and fixed why token usage was invisible, while
+  investigating a real "why 500k credits" report.** No code path anywhere
+  ever logged per-turn token usage -- `agent.py`'s `run_turn` computed
+  `usage_total` but only handed it to callers inside the final "done" event;
+  `realtime.py` (voice) has no branch for `kind == "done"` at all and
+  silently dropped it, `chat.py` (typed) only forwarded it to the client.
+  Worse, voice turns always stream, and OpenAI-compatible streaming omits
+  `usage` from every chunk unless `stream_options: {include_usage: true}` is
+  set -- which `OpenRouterChat.stream` never did, so voice usage would have
+  logged empty even after adding a log line. Fixed both: added that flag to
+  `app/providers/openrouter.py`'s streaming payload, and one
+  `logger.info("agent turn usage: %s", ...)` in `agent.py` right before the
+  "done" event, so it fires for both text and voice turns going forward.
+  Measured the real static cost per turn while at it: `openai_tools()`
+  (`app/llm/tools.py`) serializes to ~10,700 tokens across 56 tool
+  definitions, sent in full on *every* turn regardless of whether a tool is
+  used -- more than 4x the size of `VOICE_SYSTEM_PROMPT` + `VOICE_TURN_REMINDER`
+  (~2,050 tokens) combined, and neither is sent with any `cache_control`
+  hint to OpenRouter, so nothing about that ~12,750-token static floor is
+  discounted on repeat requests the way Sarvam's prompt caching was designed
+  to be (see `SYSTEM_PROMPT`'s own docstring). At `JARVIS_HISTORY_LIMIT=40`
+  messages, this recurring floor easily accounts for the reported volume
+  over many turns; verified live against OpenRouter's own `/api/v1/credits`
+  endpoint that real spend to date is $0.137 on a $5 balance, not something
+  urgent, but the fixed logging now gives an actual per-turn number instead
+  of an estimate for whatever comes next. No prompt-caching fix implemented
+  yet -- that would need testing whether OpenRouter/Qwen honors any cache
+  hint at all, not assumed. Source changes only; rebuild/reinstall before
+  live.
+
+- **2026-09-16 — Logged the one voice-turn error path that was completely
+  silent.** Investigating a live "sometimes it just fails" report:
+  `/api/voice/metrics` (already-existing instrumentation) showed real p50/p90
+  numbers across 14 real turns (STT 2.4s/7.0s, LLM reply 2.8s/7.3s, TTS first
+  packet a comparatively steady 1.3s/1.7s) — the tail spikes on STT and the
+  LLM call are the actual source of "sometimes so much latency", not TTS.
+  One of those 14 turns also went completely silent in the log: STT
+  succeeded, then nothing for 10s, then the turn just ended -- traced to
+  `app/api/realtime.py`'s `elif kind == "error":` branch, which forwards a
+  provider failure (chat timeout, rate limit, etc.) straight to the client
+  with no `logger` call at all, so a real on-screen error left zero trace to
+  diagnose after the fact. Added a `logger.warning` there; the *next*
+  real error will actually be visible in logcat instead of guessed at.
+  Source change only; rebuild/reinstall before live.
+
+- **2026-09-16 — Kokoro/Grok voice now paces up, and the voice-mode tool-result
+  panel is temporarily disabled for latency testing.** `OpenRouterTTS` never
+  sent a speed parameter at all (silently accepted but unused `pace` arg);
+  live-tested against the real endpoint before adding anything (identical
+  text at `speed=1.3` measured 3.85s -> 3.15s via ffprobe, so the field is
+  real, not guessed) and wired a new `OPENROUTER_TTS_SPEED` setting (default
+  1.15) into the `/audio/speech` payload. Separately, `frontend/src/app/page.tsx`
+  now force-disables the `SurfaceLayer` (the HUD panel that pops up for
+  weather/tasks/etc. results) while `voiceOpen` — `{false && voiceOpen && (...)}`
+  — at the user's request, so nothing else competes with timing the raw voice
+  round trip. This is scaffolding for the user's own testing, not a
+  permanent UX change: re-enable by removing the `false &&` once testing is
+  done. Source changes only; rebuild/reinstall Android, restart the desktop
+  dev server, before either is live.
+
+- **2026-09-16 — OpenRouter audio retry now also covers transient HTTP status
+  (429/5xx), not just dropped connections.** Follow-up to the same-day
+  timeout/retry work below, after the user kept seeing intermittent
+  "openrouter stt request failed" even with that fix in place. The original
+  retry only covered transport failures (timeout/connect/read/protocol
+  errors); a real error *response* from OpenRouter (rate limited, momentary
+  5xx on a shared gateway) fell straight through to the user with no retry.
+  `_post_with_retry` (`app/providers/openrouter.py`) now retries once more,
+  after a 400ms backoff, on 429 or any 5xx status; any other 4xx (bad
+  payload, bad model, bad key) is still never retried since a retry cannot
+  fix those. Also corrected a wrong claim made earlier in this same
+  investigation: end-of-speech detection in this app is NOT manual/stop-word
+  only -- `frontend/src/lib/realtime.ts` already implements real two-tier
+  energy-based VAD (700ms to close a transcription segment while still
+  listening, 1.2s/4s adaptive turn-end depending on whether the sentence
+  sounds finished), and per-stage latency (STT/TTFT-ish/TTS-first-packet/
+  end-to-playback, p50/p90/p99) is already tracked at `/api/voice/metrics`
+  (`app/services/voice_metrics.py`). Neither needed building; a proposed
+  large self-hosted-inference pipeline rewrite (assuming local GPU control
+  over Whisper/Qwen/Kokoro) was declined in favor of these two targeted
+  fixes, since the app is intentionally cloud-API-only with no self-hosted
+  models to tune. Source change only; rebuild and reinstall before live.
+
+- **2026-09-16 — Fixed the real cause of "speech was interrupted by a synthesis
+  error": OpenRouterTTS was passing the app's own Sarvam-style voice id
+  (e.g. `"priya"`) straight through as Kokoro/Grok's `voice` parameter.**
+  Live logcat during a reproduction showed STT and chat both returning 200,
+  and only `/audio/speech` returning 400 ("Provider returned 400") — the
+  timeout/retry fix below was a real but secondary improvement; this was the
+  actual, 100%-reproducing bug. `speaker` in this codebase only ever holds a
+  Sarvam voice id, a different namespace from Kokoro's (`af_sky`, ...) or
+  Grok's (`eve`) own voice names, and there is no UI path to choose a real
+  voice for these languages under the cloud stack anyway (VoiceMode already
+  hides "Speaking voice" for English/Hindi/Telugu). Fixed in
+  `OpenRouterTTS.synthesize` (`app/providers/openrouter.py`) by always using
+  the model's own default voice instead of the passed-through `speaker`.
+  Also added a small guard to `VOICE_SYSTEM_PROMPT`
+  (`app/llm/prompts.py`) after a live report of the model answering "you're
+  talking to Anthropic's Claude Sonnet 4-6" when asked what LLM it is —
+  confirmed via `.env`/Android default (`OPENROUTER_MODEL=qwen/qwen-2.5-7b-instruct`)
+  that Qwen is genuinely what's configured and answering; the prompt had no
+  guidance for this specific question and the small model fabricated a
+  plausible-sounding wrong vendor name instead of deflecting. The prompt now
+  explicitly forbids naming any specific vendor/model it wasn't actually told
+  it's running on. Source changes only in this entry; rebuild and reinstall
+  before either fix is live on device.
+
+- **2026-09-16 — OpenRouter audio calls get their own timeout and a transient-failure retry.**
+  Live use surfaced two real symptoms on mobile: STT calls failing with
+  "OpenRouter STT request failed" and voice replies dropping a phrase with
+  "Speech was interrupted by a synthesis error" — both traced to
+  `OpenRouterSTT.transcribe`/`OpenRouterTTS.synthesize` sharing the 30s chat
+  timeout for base64-audio payloads over a phone's slower, less stable
+  uplink, with no retry on a dropped connection. Added `OPENROUTER_AUDIO_TIMEOUT`
+  (default 45s, separate from `OPENROUTER_CHAT_TIMEOUT`) and one automatic
+  retry on `httpx` timeout/connect/read/protocol errors in
+  `app/providers/openrouter.py` (`_post_with_retry`) — a genuine transport
+  blip now recovers instead of failing the phrase or transcription outright.
+  Separately confirmed (not changed): OpenRouter's `/audio/speech` and
+  `/audio/transcriptions` are request/response only, no streaming — so
+  "very slow, no streaming" for Kokoro/Grok-via-OpenRouter voices is an
+  accurate report of a real limitation, not a bug. The existing per-sentence
+  chunking (`MAX_CHUNK_CHARS`, first-chunk-fast-path) plus the 2-slot speech
+  pipeline already overlap a phrase's playback with the next phrase's
+  synthesis, which is the available mitigation short of a provider with real
+  audio streaming (Soniox, already scaffolded in `soniox_tts.py` for a later
+  Telugu switch, is the only provider in this codebase that does).
+  Source change only in this entry; rebuild and reinstall on device before
+  the fix is live there.
+
 - **2026-09-15 — Runtime release controls added (P33).** A closed-by-default
   feature-flag policy now distinguishes new-run admission from existing-run
   inspection/cancellation. Domain writes, sensitive effects, background jobs,

@@ -129,9 +129,14 @@ async def main() -> int:
     from app.providers import get_chat_provider, get_stt_provider, get_tts_provider
 
     chat_p, stt_p, tts_p = get_chat_provider(), get_stt_provider(), get_tts_provider()
-    check("chat provider resolves", chat_p.name == "sarvam", chat_p.name)
+    # jarvis_voice_stack defaults to "cloud" as of 2026-09-16: chat and STT
+    # resolve to OpenRouter now, not Sarvam. TTS's catch-all getter is
+    # deliberately unchanged under either stack -- see get_tts_provider's own
+    # docstring -- Kokoro/Grok don't cover the 8 Indic languages besides
+    # Telugu/Hindi that only Sarvam speaks, so it stays Sarvam regardless.
+    check("chat provider resolves", chat_p.name == "openrouter", chat_p.name)
     check("chat model configured", bool(chat_p.model), chat_p.model)
-    check("stt provider resolves", stt_p.name == "sarvam", stt_p.model)
+    check("stt provider resolves", stt_p.name == "openrouter", stt_p.model)
     check("tts provider resolves", tts_p.name == "sarvam", tts_p.model)
     check("providers are cached singletons", get_chat_provider() is chat_p)
 
@@ -827,14 +832,20 @@ async def main() -> int:
     with TestClient(main.app) as client:
         health = client.get("/api/health")
         check("GET /api/health -> 200", health.status_code == 200, str(health.status_code))
+        # health.model / details.chat_provider report the ACTUAL resolved
+        # provider now (main.py's _resolved helper), not the raw legacy
+        # setting string -- under jarvis_voice_stack="cloud" (default since
+        # 2026-09-16) that's OpenRouter/Qwen, not settings.sarvam_chat_model
+        # or settings.jarvis_chat_provider ("sarvam" either way).
         check(
             "health reports the chat model",
-            health.json()["model"] == settings.sarvam_chat_model,
+            health.json()["model"] == settings.openrouter_model,
             health.json().get("model", ""),
         )
         check(
             "health reports the provider wiring",
-            health.json()["details"]["chat_provider"] == settings.jarvis_chat_provider,
+            health.json()["details"]["chat_provider"] == "openrouter",
+            health.json()["details"].get("chat_provider", ""),
         )
 
         voice_cfg = client.get("/api/voice/config")

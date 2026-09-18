@@ -421,10 +421,17 @@ async function push(remote: Remote, result: SyncResult): Promise<void> {
   if (firstContact) await setMeta(bootKey, nowIso());
 
   const tombKey = stateKey(remote, "push", "tombstones");
-  const tombstones = await listTombstones(await getMeta(tombKey));
+  const storedTomb = await getMeta(tombKey);
+  const now = nowIso();
+  // A cursor that drifted into the future (e.g. clock skew) must not swallow
+  // current deletions. Reset to null if it exceeds the current local time.
+  const effectiveTombCursor = storedTomb && storedTomb > now ? null : storedTomb;
+  const tombstones = await listTombstones(effectiveTombCursor);
   if (tombstones.length) {
     await remote.pushTombstones(tombstones);
-    await setMeta(tombKey, tombstones[tombstones.length - 1].deleted_at);
+    const lastDeleted = tombstones[tombstones.length - 1].deleted_at;
+    const nextCursor = lastDeleted > now ? now : lastDeleted;
+    await setMeta(tombKey, nextCursor);
   }
 }
 

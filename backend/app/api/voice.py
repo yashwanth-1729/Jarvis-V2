@@ -32,7 +32,7 @@ from app.core.voices import VOICES
 from app.core.voices import is_supported as voice_supported
 from app.core.voices import resolve as resolve_voice
 from app.db import crud
-from app.providers import get_stt_provider
+from app.providers import get_english_tts_provider, get_stt_provider
 from app.services import speech
 from app.providers.base import (
     ProviderAuthError,
@@ -77,10 +77,29 @@ async def voice_config() -> VoiceConfigOut:
     current = await crud.get_preference(crud.PREF_VOICE_LANGUAGE, DEFAULT_LANGUAGE)
     chosen_voice = await speech.current_voice()
     telugu_engine = await speech.current_telugu_engine()
+    # Under JARVIS_VOICE_STACK=cloud, voice runs on OPENROUTER_API_KEY, not
+    # Sarvam's -- checking has_api_key here would report voice as disabled
+    # on a device that has only ever set up OpenRouter (Android's normal
+    # case now, since it has no .env to source SARVAM_API_KEY from).
+    has_required_key = (
+        settings.has_openrouter_key if settings.jarvis_voice_stack == "cloud" else settings.has_api_key
+    )
+    # Report what's actually resolved, not the raw legacy setting string
+    # (stayed "sarvam" even once cloud-stack routing moved STT/English TTS
+    # elsewhere -- confusing to see reported as-is, see main.py's health
+    # endpoint for the same fix).
+    try:
+        stt_name = get_stt_provider().name
+    except ProviderNotConfigured:
+        stt_name = "unconfigured"
+    try:
+        tts_name = get_english_tts_provider().name
+    except ProviderNotConfigured:
+        tts_name = "unconfigured"
     return VoiceConfigOut(
-        enabled=settings.jarvis_voice_enabled and settings.has_api_key,
-        stt_provider=settings.jarvis_stt_provider,
-        tts_provider=settings.jarvis_tts_provider,
+        enabled=settings.jarvis_voice_enabled and has_required_key,
+        stt_provider=stt_name,
+        tts_provider=tts_name,
         language=current if is_supported(current) else DEFAULT_LANGUAGE,
         max_audio_mb=settings.jarvis_max_audio_mb,
         languages=[

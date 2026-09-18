@@ -1252,8 +1252,13 @@ PREF_TELUGU_TTS_ENGINE = "telugu_tts_engine"
 
 
 async def get_preference(key: str, default: str = "") -> str:
-    row = await db.fetch_one("SELECT value FROM preferences WHERE key = ?", (key,))
-    return row["value"] if row else default
+    if not db._started:
+        return default
+    try:
+        row = await db.fetch_one("SELECT value FROM preferences WHERE key = ?", (key,))
+        return row["value"] if row else default
+    except Exception:
+        return default
 
 
 async def set_preference(key: str, value: str) -> str:

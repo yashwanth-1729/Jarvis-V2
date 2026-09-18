@@ -9,7 +9,6 @@ import { VoiceSession } from "@/lib/realtime";
 import { intentSurface, readSurface, type SurfaceDescriptor } from "@/lib/surfaces";
 import {
   fetchVoiceConfig,
-  setTeluguTtsEngine,
   setVoiceLanguage,
   setVoiceSpeaker,
 } from "@/lib/voice";
@@ -32,24 +31,29 @@ const JarvisCore = dynamic(
 );
 
 /**
- * The reply language whose speech comes from a local Piper voice, not Sarvam.
+ * Which engine actually speaks each reply language, shown as shadow text
+ * under the language picker's options (see the "Reply language" HudSelect
+ * below) -- the picker used to also carry separate engine-choice buttons
+ * ("Sarvam" / "Local voice" for Telugu, a disabled "On-device voice" chip
+ * for English); those are gone, replaced by this hint, since the engine is
+ * no longer a user choice at all under the cloud voice stack.
  *
- * Must match `DEFAULT_LANGUAGE` in `backend/app/core/languages.py`. Piper
- * always speaks with the one voice it was built with (`en_US-ryan-high`) --
- * on desktop via the Python provider, and on Android via the on-device
- * sherpa-onnx bridge once it's provisioned -- so the "Speaking voice" picker
- * (Sarvam's Priya/Ritu/Kavya/…) has nothing to change while English is
- * selected, and showing it as if it did was actively misleading.
+ * Must match `backend/app/providers/__init__.py`'s actual routing:
+ * English and Hindi -> Kokoro (via OpenRouter's /audio/speech), Telugu ->
+ * Grok TTS (also via OpenRouter). Every other language keeps speaking
+ * through Sarvam (`get_tts_provider`'s catch-all), which is the default
+ * this map falls back to for any code not listed here.
  */
-const ENGLISH_LANGUAGE = "en-IN";
+const ENGINE_BY_LANGUAGE: Record<string, string> = {
+  "en-IN": "Kokoro",
+  "hi-IN": "Kokoro",
+  "te-IN": "Grok",
+};
 
-/**
- * The one non-English reply language with an optional local (Piper) voice.
- * Must match `TELUGU_LANGUAGE` in `backend/app/core/languages.py`. Unlike
- * English, Sarvam is the default here -- it already spoke Telugu before this
- * existed -- so this is an opt-in switch, not a fixed indicator.
- */
-const TELUGU_LANGUAGE = "te-IN";
+/** Languages whose "Speaking voice" (Sarvam's Priya/Ritu/Kavya/…) picker
+ * would be misleading to show -- each already has its own fixed voice
+ * baked into its own engine (see ENGINE_BY_LANGUAGE), not a Sarvam voice id. */
+const CLOUD_ENGINE_LANGUAGES = new Set(Object.keys(ENGINE_BY_LANGUAGE));
 
 const STATUS_COPY: Record<VoiceSessionState, string> = {
   idle: "Offline",
@@ -120,7 +124,6 @@ export function VoiceMode({
   const [language, setLanguage] = React.useState("en-IN");
   const [voices, setVoices] = React.useState<VoiceOption[]>([]);
   const [voice, setVoice] = React.useState("priya");
-  const [teluguEngine, setTeluguEngine] = React.useState<"sarvam" | "piper">("sarvam");
 
   const sessionRef = React.useRef<VoiceSession | null>(null);
 
@@ -297,7 +300,6 @@ export function VoiceMode({
         if (config.language) setLanguage(config.language);
         setVoices(config.voices ?? []);
         if (config.voice) setVoice(config.voice);
-        if (config.telugu_tts_engine) setTeluguEngine(config.telugu_tts_engine);
       })
       .catch(() => undefined);
     return () => {
@@ -317,17 +319,6 @@ export function VoiceMode({
     setVoice(id);
     sessionRef.current?.setVoice(id);
     void setVoiceSpeaker(id).catch(() => undefined);
-  }, []);
-
-  const toggleTeluguEngine = React.useCallback(() => {
-    // No socket push needed: the backend re-reads this preference on every
-    // synthesis call (`speech.current_telugu_engine`), so persisting it here
-    // is enough for the next Telugu reply to pick it up mid-session.
-    setTeluguEngine((current) => {
-      const next = current === "piper" ? "sarvam" : "piper";
-      void setTeluguTtsEngine(next).catch(() => undefined);
-      return next;
-    });
   }, []);
 
   React.useEffect(() => {
@@ -463,72 +454,40 @@ export function VoiceMode({
                   options: languages.map((option) => ({
                     value: option.code,
                     label: option.native,
-                    hint: option.native === option.label ? undefined : option.label,
+                    // Shadow text under each language names the engine that
+                    // actually speaks it, so there's nothing left to pick —
+                    // just to know. See ENGINE_BY_LANGUAGE above.
+                    hint: ENGINE_BY_LANGUAGE[option.code] ?? "Sarvam",
                   })),
                 },
               ]}
             />
           )}
 
-          {language === ENGLISH_LANGUAGE ? (
-            // Piper ignores the speaker choice entirely, so a picker here
-            // would offer voices that do nothing -- exactly what was
-            // confusing before this. A plain indicator instead.
-            <HudChip
+          {/* Sarvam's Priya/Ritu/Kavya voice picker only means anything for
+              languages Sarvam actually speaks. English/Hindi (Kokoro) and
+              Telugu (Grok) each carry their own fixed voice already. */}
+          {!CLOUD_ENGINE_LANGUAGES.has(language) && voices.length > 0 && (
+            <HudSelect
+              icon={<AudioLines className="h-3 w-3" />}
+              label="Speaking voice"
+              value={voice}
+              onChange={changeVoice}
               accent={accent}
-              disabled
-              title="English is spoken by a fixed local voice (Piper), not Sarvam — the speaking-voice picker does not apply here."
-              className="cursor-default hover:text-white/55"
-            >
-              <AudioLines className="h-3 w-3" />
-              On-device voice
-            </HudChip>
-          ) : (
-            voices.length > 0 && (
-              <HudSelect
-                icon={<AudioLines className="h-3 w-3" />}
-                label="Speaking voice"
-                value={voice}
-                onChange={changeVoice}
-                accent={accent}
-                groups={(["female", "male"] as const)
-                  .map((gender) => ({
-                    label: gender === "female" ? "Female" : "Male",
-                    options: voices
-                      .filter((option) => option.gender === gender)
-                      .map((option) => ({
-                        value: option.id,
-                        label: option.label,
-                        hint: option.note,
-                      })),
-                  }))
-                  // A group with no voices would render a heading over nothing.
-                  .filter((group) => group.options.length > 0)}
-              />
-            )
-          )}
-
-          {language === TELUGU_LANGUAGE && (
-            <HudChip
-              active={teluguEngine === "piper"}
-              accent={accent}
-              onClick={toggleTeluguEngine}
-              role="switch"
-              aria-checked={teluguEngine === "piper"}
-              aria-label={
-                teluguEngine === "piper"
-                  ? "Switch Telugu speech to Sarvam"
-                  : "Switch Telugu speech to the on-device voice"
-              }
-              title={
-                teluguEngine === "piper"
-                  ? "Telugu is spoken by the local Piper voice. Click to switch back to Sarvam."
-                  : "Telugu is spoken by Sarvam (cloud). Click to switch to the on-device voice."
-              }
-            >
-              <AudioLines className="h-3 w-3" />
-              {teluguEngine === "piper" ? "Local voice" : "Sarvam"}
-            </HudChip>
+              groups={(["female", "male"] as const)
+                .map((gender) => ({
+                  label: gender === "female" ? "Female" : "Male",
+                  options: voices
+                    .filter((option) => option.gender === gender)
+                    .map((option) => ({
+                      value: option.id,
+                      label: option.label,
+                      hint: option.note,
+                    })),
+                }))
+                // A group with no voices would render a heading over nothing.
+                .filter((group) => group.options.length > 0)}
+            />
           )}
 
           <HudChip

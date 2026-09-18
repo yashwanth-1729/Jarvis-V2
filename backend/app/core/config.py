@@ -95,6 +95,30 @@ class Settings(BaseSettings):
     jarvis_max_tokens: int = Field(default=4000, alias="JARVIS_MAX_TOKENS")
     jarvis_max_tool_iterations: int = Field(default=8, alias="JARVIS_MAX_TOOL_ITERATIONS")
     jarvis_history_limit: int = Field(default=40, alias="JARVIS_HISTORY_LIMIT")
+    #: How many of the *loaded* history messages actually reach the model.
+    #:
+    #: Separate from ``jarvis_history_limit`` on purpose: that one bounds the
+    #: DB fetch (and, via `chat.py`'s `* 10`, how far back the UI transcript
+    #: can scroll) -- changing it would also shrink the visible chat history.
+    #: This one only trims what gets sent to Qwen on every single request,
+    #: which is where the real, recurring token cost is. 2026-09-16, in
+    #: response to a live "why so many tokens" investigation: the full
+    #: 40-message window was being resent, unconditionally, on every turn.
+    jarvis_llm_history_messages: int = Field(default=6, alias="JARVIS_LLM_HISTORY_MESSAGES")
+    #: When the keyword tool router finds no matching group, offer every core
+    #: tool rather than none. Was defaulted to "zero" for a token-savings
+    #: target (ordinary conversation costs no tool tokens) -- reverted to
+    #: "all" the same day after it broke a real request live: "remind me..."
+    #: didn't hit any keyword pattern, the router sent zero tools, and Qwen
+    #: just replied in words instead of calling `set_reminder` (confirmed
+    #: from the log: "tool router: no-match(zero) -> 0 tool(s) offered",
+    #: followed by a 15-token text reply, no tool call). A missed keyword
+    #: silently disabling a feature is worse than the tokens saved on
+    #: "Hey Jarvis" -- keyword coverage can never be proven exhaustive, so
+    #: this default now fails toward correctness, not toward savings.
+    jarvis_tool_routing_fallback_all: bool = Field(
+        default=True, alias="JARVIS_TOOL_ROUTING_FALLBACK_ALL"
+    )
     #: Absolute ceiling for a typed agent turn, including all tool rounds. A
     #: local UI must always receive a terminal event even if the vendor stalls.
     jarvis_chat_turn_timeout: float = Field(default=240.0, alias="JARVIS_CHAT_TURN_TIMEOUT")
@@ -152,6 +176,88 @@ class Settings(BaseSettings):
     #: Global speaking-rate nudge for Piper, multiplied onto the per-language
     #: pace (English 1.04). 1.0 leaves the voice at its natural speed.
     jarvis_piper_pace: float = Field(default=1.0, alias="JARVIS_PIPER_PACE")
+
+    # --- Cloud voice stack (OpenRouter + Sarvam for the one unresolved
+    # language) ---------------------------------------------------------
+    # Default flipped to "cloud" 2026-09-16 at the user's explicit request
+    # (real OPENROUTER_API_KEY provided, chat/STT/English+Hindi-TTS all
+    # live-verified against the real API before this switch flipped -- see
+    # app/providers/openrouter.py's module docstring). "legacy" is still
+    # available (Sarvam chat/STT/TTS, Gemini for English chat, Piper for
+    # English/Telugu TTS) by setting JARVIS_VOICE_STACK=legacy, kept working
+    # and untouched as a rollback path. Telugu stays on Sarvam under BOTH
+    # stacks -- see get_telugu_tts_provider's docstring for what was tried
+    # and rejected (Grok TTS, OpenAI TTS via OpenRouter) before settling on
+    # that. No .env ships on Android, so this Python-level default is what
+    # actually controls the Android build; desktop's backend/.env sets the
+    # same value explicitly so both platforms agree.
+    jarvis_voice_stack: Literal["legacy", "cloud"] = Field(
+        default="cloud", alias="JARVIS_VOICE_STACK"
+    )
+
+    #: OpenRouter is an OpenAI-shaped gateway (same wire format Sarvam already
+    #: speaks), used as the chat provider when jarvis_voice_stack="cloud".
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    #: gpt-4.1-nano since 2026-09-18. Measured through the real agent with
+    #: database checks: qwen-2.5-7b performed 1 of 12 requested voice actions
+    #: and claimed success on the other 11 ("Got it, added" -- nothing saved);
+    #: no prompt change fixed it. gpt-4.1-nano did 11/12 with no false claims,
+    #: same input price, ~0.7s slower first output. Android has no .env, so
+    #: this default is what the phone runs.
+    openrouter_model: str = Field(
+        default="openai/gpt-4.1-nano", alias="OPENROUTER_MODEL"
+    )
+    openrouter_chat_timeout: float = Field(default=30.0, alias="OPENROUTER_CHAT_TIMEOUT")
+    #: STT/TTS calls carry a full audio payload (base64 JSON, ~33% bigger than
+    #: the raw bytes) and a phone's uplink is slower and less stable than the
+    #: chat path's short JSON round trip, so audio gets its own, longer budget
+    #: instead of inheriting the chat timeout and failing early on flaky wifi
+    #: or a mobile hotspot.
+    openrouter_audio_timeout: float = Field(default=45.0, alias="OPENROUTER_AUDIO_TIMEOUT")
+    #: TCP+TLS setup budget. Was a hardcoded 10s, and every live "stream
+    #: failed ()"/"STT failed ()" landed at exactly ~10.0s: a stalled mobile
+    #: handshake. A healthy one takes ~100ms from the phone (25ms RTT), so 4s
+    #: is generous -- and failing at 4s leaves time to retry on a fresh
+    #: connection inside the 22s STT budget instead of dying at 10s.
+    openrouter_connect_timeout: float = Field(default=4.0, alias="OPENROUTER_CONNECT_TIMEOUT")
+    #: How long an idle pooled connection is kept. httpx's default is 5s,
+    #: which is shorter than the gap between any two voice turns -- so almost
+    #: every request paid a fresh handshake.
+    openrouter_keepalive_seconds: float = Field(default=60.0, alias="OPENROUTER_KEEPALIVE_SECONDS")
+    #: Live-confirmed (2026-09-16) real model id on OpenRouter's
+    #: /audio/transcriptions -- transcribed successfully and came back at
+    #: ~44% of plain whisper-large-v3's cost for the same clip.
+    openrouter_stt_model: str = Field(
+        default="openai/whisper-large-v3-turbo", alias="OPENROUTER_STT_MODEL"
+    )
+    #: Playback-rate multiplier sent to Kokoro/Grok's own `speed` parameter on
+    #: every /audio/speech call. Confirmed live (2026-09-16): 1.3 measurably
+    #: shortened identical text from 3.85s to 3.15s, so the vendor genuinely
+    #: honors this rather than us guessing at an undocumented field. 1.15 is a
+    #: modest default bump over the vendor's natural 1.0 pace, in response to
+    #: a direct request to speed voice mode up a bit -- raise or lower per
+    #: taste; there is no per-language value yet the way Sarvam has one.
+    openrouter_tts_speed: float = Field(default=1.15, alias="OPENROUTER_TTS_SPEED")
+    #: Max results the `web` plugin fetches per search-enabled turn (OpenRouter
+    #: default is 5; kept explicit so it is a knob, not a hidden default).
+    openrouter_web_max_results: int = Field(default=5, alias="OPENROUTER_WEB_MAX_RESULTS")
+
+    #: DeepInfra hosts both the cloud STT (Whisper) and English/Hindi TTS
+    #: (Kokoro) used when jarvis_voice_stack="cloud". One key, two models.
+    deepinfra_api_key: str = Field(default="", alias="DEEPINFRA_API_KEY")
+    deepinfra_stt_model: str = Field(
+        default="openai/whisper-large-v3", alias="DEEPINFRA_STT_MODEL"
+    )
+    deepinfra_tts_model: str = Field(
+        default="hexgrad/Kokoro-82M", alias="DEEPINFRA_TTS_MODEL"
+    )
+    deepinfra_timeout: float = Field(default=30.0, alias="DEEPINFRA_TIMEOUT")
+
+    #: Soniox speaks Telugu TTS over a real-time full-duplex WebSocket when
+    #: jarvis_voice_stack="cloud" -- English/Hindi stay on Kokoro above.
+    soniox_api_key: str = Field(default="", alias="SONIOX_API_KEY")
+    soniox_tts_model: str = Field(default="tts-rt-v2", alias="SONIOX_TTS_MODEL")
+    soniox_tts_voice: str = Field(default="Adrian", alias="SONIOX_TTS_VOICE")
 
     # --- Telugu TTS (Piper, local, opt-in) ----------------------------------
     #: Telugu stays on Sarvam by default — unlike English, this is a per-user
@@ -325,6 +431,10 @@ class Settings(BaseSettings):
     @property
     def has_gemini_key(self) -> bool:
         return bool(self.gemini_api_key.strip())
+
+    @property
+    def has_openrouter_key(self) -> bool:
+        return bool(self.openrouter_api_key.strip())
 
     @property
     def sync_configured(self) -> bool:

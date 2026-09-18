@@ -95,7 +95,7 @@ async def main() -> int:
     agent.get_chat_provider = lambda: provider  # type: ignore[assignment]
     agent.get_english_chat_provider = lambda: provider  # type: ignore[assignment]
     agent.execute_tool = fake_execute  # type: ignore[assignment]
-    agent.openai_tools = lambda: [{"type": "function", "function": {"name": "fixture_tool"}}]  # type: ignore[assignment]
+    agent.openai_tools = lambda *a, **k: [{"type": "function", "function": {"name": "fixture_tool"}}]  # type: ignore[assignment]
     agent.memory_service.capture_inferred_candidate = no_candidate  # type: ignore[assignment]
 
     try:

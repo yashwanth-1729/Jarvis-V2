@@ -35,7 +35,14 @@ from app.db.database import db
 from app.agent_runtime.approvals import LocalAuthenticator
 from app.agent_runtime.database import runtime_db
 from app.agent_runtime.repository import RuntimeRepository
-from app.providers import close_providers
+from app.agent_runtime.worker import ReadOnlyFixtureAdapter, ReadOnlyWorker
+from app.providers import (
+    ProviderNotConfigured,
+    close_providers,
+    get_chat_provider,
+    get_english_tts_provider,
+    get_stt_provider,
+)
 from app.services import scheduler
 
 logging.basicConfig(
@@ -53,6 +60,18 @@ async def lifespan(_: FastAPI):
     app.state.agent_pairing_enabled = bool(settings.jarvis_agent_pairing_secret)
     app.state.agent_auth = LocalAuthenticator(settings.jarvis_agent_pairing_secret or 'runtime-api-disabled')
     app.state.agent_repository = RuntimeRepository(runtime_db)
+    app.state.agent_worker = ReadOnlyWorker(
+        app.state.agent_repository,
+        ReadOnlyFixtureAdapter(
+            {
+                "desktop-installed-path": (
+                    "The installed desktop window reached its owned local backend "
+                    "and completed a read-only verified fixture."
+                )
+            }
+        ),
+        worker_id="desktop-fixture-worker",
+    )
 
     # The board holds outstanding work only. Completing a task normally clears
     # it on the spot; this catches anything left behind by an older build or a
@@ -96,20 +115,31 @@ async def lifespan(_: FastAPI):
         if warm is not None:
             asyncio.create_task(warm())
 
-    if not settings.has_api_key:
+    # Warn about the key the active stack actually needs. On Android the
+    # OpenRouter key arrives moments later via the BYOK credentials endpoint,
+    # so this is informational there, not an error.
+    if settings.jarvis_voice_stack == "cloud":
+        if not settings.has_openrouter_key:
+            logger.warning(
+                "OPENROUTER_API_KEY is not set yet. Chat, transcription and speech "
+                "will fail until it is (Android supplies it from the client on connect)."
+            )
+    elif not settings.has_api_key:
         logger.warning(
             "SARVAM_API_KEY is not set in backend/.env. The dashboard will work, "
             "but chat, transcription and speech will fail."
         )
+    # Report what the getters actually resolve to, not the raw legacy
+    # setting strings -- those still say "sarvam" under the cloud stack and
+    # made the startup log look like Sarvam was being called.
+    from app.providers import get_chat_provider, get_english_tts_provider, get_stt_provider
+
+    chat_p, stt_p, tts_p = (
+        _resolved(g) for g in (get_chat_provider, get_stt_provider, get_english_tts_provider)
+    )
     logger.info(
-        "JARVIS v%s ready — chat=%s/%s stt=%s/%s tts=%s/%s",
-        __version__,
-        settings.jarvis_chat_provider,
-        settings.sarvam_chat_model,
-        settings.jarvis_stt_provider,
-        settings.sarvam_stt_model,
-        settings.jarvis_tts_provider,
-        settings.sarvam_tts_model,
+        "JARVIS v%s ready — stack=%s chat=%s/%s stt=%s/%s english-tts=%s/%s",
+        __version__, settings.jarvis_voice_stack, *chat_p, *stt_p, *tts_p,
     )
     try:
         yield
@@ -164,22 +194,44 @@ app.include_router(records.router)
 app.include_router(location.router)
 
 
+def _resolved(getter: object) -> tuple[str, str]:
+    """(name, model) of whatever a provider getter actually resolves to right
+    now -- not the raw legacy setting string, which stayed "sarvam" even
+    after `JARVIS_VOICE_STACK=cloud` started routing chat/STT/English TTS
+    elsewhere, and was confusing to see reported as-is (it looked like
+    Sarvam was still being called when it wasn't)."""
+    try:
+        provider = getter()  # type: ignore[operator]
+        return provider.name, getattr(provider, "model", "")
+    except ProviderNotConfigured as exc:
+        return "unconfigured", str(exc)
+
+
 @app.get("/api/health", response_model=HealthOut, tags=["meta"])
 async def health() -> HealthOut:
     task_count = await db.fetch_value("SELECT COUNT(*) FROM tasks", default=0)
+    chat_name, chat_model = _resolved(get_chat_provider)
+    stt_name, stt_model = _resolved(get_stt_provider)
+    tts_name, tts_model = _resolved(get_english_tts_provider)
     return HealthOut(
         status="ok",
         version=__version__,
-        model=settings.sarvam_chat_model,
+        model=chat_model or settings.sarvam_chat_model,
         database=str(settings.db_file),
         api_key_configured=settings.has_api_key,
         gemini_key_configured=settings.has_gemini_key,
+        openrouter_key_configured=settings.has_openrouter_key,
         details={
-            "chat_provider": settings.jarvis_chat_provider,
-            "stt_provider": settings.jarvis_stt_provider,
-            "stt_model": settings.sarvam_stt_model,
-            "tts_provider": settings.jarvis_tts_provider,
-            "tts_model": settings.sarvam_tts_model,
+            "voice_stack": settings.jarvis_voice_stack,
+            "chat_provider": chat_name,
+            "stt_provider": stt_name,
+            "stt_model": stt_model,
+            # English TTS specifically, since that's the language people
+            # actually mean when they ask "why is this calling Sarvam" --
+            # the catch-all get_tts_provider() for the 8 other Indic
+            # languages Kokoro/Grok don't cover is deliberately still Sarvam.
+            "tts_provider": tts_name,
+            "tts_model": tts_model,
             "voice_enabled": settings.jarvis_voice_enabled,
             "reasoning_effort": settings.sarvam_reasoning_effort or "default",
             "max_tokens": settings.jarvis_max_tokens,

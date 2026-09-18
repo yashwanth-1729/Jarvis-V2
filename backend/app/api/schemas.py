@@ -197,6 +197,10 @@ class HealthOut(BaseModel):
     #: show "the runtime has a key" the moment one is set, before the user
     #: has to also flip that separate toggle to see it take effect.
     gemini_key_configured: bool
+    #: BYOK's OpenRouter key -- required for the cloud voice stack
+    #: (JARVIS_VOICE_STACK=cloud, the default since 2026-09-16) to work at
+    #: all, since Android has no .env to source it from otherwise.
+    openrouter_key_configured: bool
     details: dict[str, Any] = Field(default_factory=dict)
 
 

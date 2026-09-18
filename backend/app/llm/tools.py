@@ -4044,9 +4044,25 @@ def enabled_specs() -> tuple[ToolSpec, ...]:
     return tuple(spec for spec in TOOL_REGISTRY if spec.capability == "core")
 
 
-def openai_tools() -> list[dict[str, Any]]:
-    """The wire format, for the tools available right now."""
-    return [_envelope(spec) for spec in enabled_specs()]
+def openai_tools(names: frozenset[str] | None = None) -> list[dict[str, Any]]:
+    """The wire format, for the tools available right now.
+
+    ``names`` narrows the *"core"* tools to a specific subset (see
+    ``tool_routing.py``, which only routes over core tools) without
+    disturbing registry order -- same cache-stability reasoning as
+    ``enabled_specs``: a set that reorders between two requests for the same
+    routed group would cost a cache miss even though the content is
+    identical. "system" tools (desktop-only) are never affected by routing
+    and always pass through unfiltered when the platform gate has them on --
+    narrowing them is untested, separate scope. ``None`` (the default) keeps
+    the old behaviour: every enabled tool, unfiltered.
+    """
+    specs = enabled_specs()
+    if names is not None:
+        specs = tuple(
+            spec for spec in specs if spec.capability != "core" or spec.name in names
+        )
+    return [_envelope(spec) for spec in specs]
 
 
 #: Every tool, regardless of gating. Kept for tests and introspection; the agent

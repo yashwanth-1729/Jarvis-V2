@@ -89,7 +89,7 @@ async def main() -> int:
     agent.get_chat_provider = lambda: _ToolProvider()  # type: ignore[assignment]
     agent.get_english_chat_provider = lambda: _ToolProvider()  # type: ignore[assignment]
     agent.execute_tool = fake_execute_tool  # type: ignore[assignment]
-    agent.openai_tools = lambda: []  # type: ignore[assignment]
+    agent.openai_tools = lambda *a, **k: []  # type: ignore[assignment]
     agent.memory_service.capture_inferred_candidate = no_candidate  # type: ignore[assignment]
 
     stream = agent.run_turn("Run the receipt-order fixture.")

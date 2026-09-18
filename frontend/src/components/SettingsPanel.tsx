@@ -3,7 +3,14 @@
 import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
 import * as React from "react";
 
-import { GEMINI_KEY_STORAGE, PROVIDER_KEY_STORAGE, getGeminiKey, getProviderKey } from "@/lib/agentBridge";
+import {
+  GEMINI_KEY_STORAGE,
+  OPENROUTER_KEY_STORAGE,
+  PROVIDER_KEY_STORAGE,
+  getGeminiKey,
+  getOpenRouterKey,
+  getProviderKey,
+} from "@/lib/agentBridge";
 import { API_BASE, API_BASE_STORAGE_KEY, isNativeShell } from "@/lib/api";
 import { clearAll } from "@/lib/localdb";
 import {
@@ -132,13 +139,16 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   }, [sldtRecoveryInput]);
   const [providerKey, setProviderKey] = React.useState(() => getProviderKey());
   const [geminiKey, setGeminiKey] = React.useState(() => getGeminiKey());
+  const [openrouterKey, setOpenrouterKey] = React.useState(() => getOpenRouterKey());
   const [showKey, setShowKey] = React.useState(false);
   const [showProviderKey, setShowProviderKey] = React.useState(false);
   const [showGeminiKey, setShowGeminiKey] = React.useState(false);
+  const [showOpenRouterKey, setShowOpenRouterKey] = React.useState(false);
   const [backendProbe, setBackendProbe] = React.useState<ProbeState>("idle");
   /** Whether the runtime currently holds a provider key, per its health. */
   const [runtimeHasKey, setRuntimeHasKey] = React.useState<boolean | null>(null);
   const [runtimeHasGeminiKey, setRuntimeHasGeminiKey] = React.useState<boolean | null>(null);
+  const [runtimeHasOpenRouterKey, setRuntimeHasOpenRouterKey] = React.useState<boolean | null>(null);
   const [confirmReset, setConfirmReset] = React.useState(false);
 
   const dialogRef = React.useRef<HTMLDivElement>(null);
@@ -165,12 +175,14 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         if (!cancelled) {
           setRuntimeHasKey(health?.api_key_configured ?? null);
           setRuntimeHasGeminiKey(health?.gemini_key_configured ?? null);
+          setRuntimeHasOpenRouterKey(health?.openrouter_key_configured ?? null);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setRuntimeHasKey(null);
           setRuntimeHasGeminiKey(null);
+          setRuntimeHasOpenRouterKey(null);
         }
       });
     return () => {
@@ -203,6 +215,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     store("jarvis.supabaseKey", supabaseKey);
     store(PROVIDER_KEY_STORAGE, providerKey);
     store(GEMINI_KEY_STORAGE, geminiKey);
+    store(OPENROUTER_KEY_STORAGE, openrouterKey);
 
     setSyncBackend(syncBackend);
     // Only saved once a dataset actually exists (generated or paired this
@@ -234,6 +247,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     supabaseKey,
     providerKey,
     geminiKey,
+    openrouterKey,
     syncBackend,
     sldtDatasetId,
     sldtRepo,
@@ -467,6 +481,50 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 {runtimeHasGeminiKey
                   ? "The runtime has a Gemini key."
                   : "The runtime has no Gemini key yet — save to send it."}
+              </p>
+            )}
+
+            <label htmlFor="openrouter-key" className="block pt-3 text-sm font-medium text-ink">
+              OpenRouter key
+            </label>
+            <p className="text-xs leading-relaxed text-ink-dim">
+              Powers the cloud voice stack — chat, speech recognition, and
+              English/Hindi/Telugu speech all go through OpenRouter now.
+              Required for voice to work at all on this device (no `.env`
+              ships here, so this is the only way to hand it over).
+            </p>
+            <div className="relative">
+              <input
+                id="openrouter-key"
+                type={showOpenRouterKey ? "text" : "password"}
+                autoComplete="off"
+                spellCheck={false}
+                value={openrouterKey}
+                onChange={(event) => setOpenrouterKey(event.target.value)}
+                placeholder="sk-or-v1-..."
+                className="h-11 w-full rounded border border-line bg-surface-2 px-3 pr-12 font-mono text-lg text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none sm:text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOpenRouterKey((current) => !current)}
+                aria-label={showOpenRouterKey ? "Hide OpenRouter key" : "Show OpenRouter key"}
+                className="absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              >
+                {showOpenRouterKey ? (
+                  <EyeOff aria-hidden className="h-4 w-4" />
+                ) : (
+                  <Eye aria-hidden className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {runtimeHasOpenRouterKey !== null && (
+              <p
+                aria-live="polite"
+                className={cn("text-xs", runtimeHasOpenRouterKey ? "text-accent" : "text-ink-dim")}
+              >
+                {runtimeHasOpenRouterKey
+                  ? "The runtime has an OpenRouter key."
+                  : "The runtime has no OpenRouter key yet — save to send it."}
               </p>
             )}
           </section>
