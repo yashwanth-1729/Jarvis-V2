@@ -219,6 +219,75 @@ async def main() -> int:
           out.is_error and "Reconnect Google" in out.content, out.content)
     await registry.configure({})
 
+    # 5b. One-click MCP sign-in against a fake protected server + auth server.
+    from app.connectors import mcp_oauth
+
+    oauth_log: list[httpx.Request] = []
+    issued = {"access": "at-1", "refresh": "rt-1"}
+
+    def oauth_server(request: httpx.Request) -> httpx.Response:
+        oauth_log.append(request)
+        url = str(request.url)
+        if url == "https://mcp.notes.test/mcp":
+            if request.headers.get("authorization") != f"Bearer {issued['access']}":
+                return httpx.Response(401, headers={"www-authenticate":
+                    'Bearer resource_metadata="https://mcp.notes.test/.well-known/oauth-protected-resource/mcp", scope="notes.read"'})
+            message = json.loads(request.content)
+            if "id" not in message:
+                return httpx.Response(202)
+            result = ({"protocolVersion": "2025-06-18"} if message["method"] == "initialize"
+                      else {"tools": [{"name": "list_notes", "annotations": {"readOnlyHint": True},
+                                       "inputSchema": {"type": "object"}}]})
+            return httpx.Response(200, json={"jsonrpc": "2.0", "id": message["id"], "result": result})
+        if url.endswith("/.well-known/oauth-protected-resource/mcp"):
+            return httpx.Response(200, json={"resource": "https://mcp.notes.test/mcp",
+                                             "authorization_servers": ["https://auth.notes.test"]})
+        if url == "https://auth.notes.test/.well-known/oauth-authorization-server":
+            return httpx.Response(200, json={
+                "issuer": "https://auth.notes.test",
+                "authorization_endpoint": "https://auth.notes.test/authorize",
+                "token_endpoint": "https://auth.notes.test/token",
+                "registration_endpoint": "https://auth.notes.test/register",
+                "code_challenge_methods_supported": ["S256"]})
+        if url == "https://auth.notes.test/register":
+            return httpx.Response(201, json={"client_id": "jarvis-dyn-1"})
+        if url == "https://auth.notes.test/token":
+            form = parse_qs(request.content.decode())
+            if form["grant_type"] == ["refresh_token"]:
+                issued.update(access="at-2", refresh="rt-2")  # rotation
+            return httpx.Response(200, json={"access_token": issued["access"],
+                                             "refresh_token": issued["refresh"], "expires_in": 3600})
+        return httpx.Response(404)
+
+    oauth_transport = httpx.MockTransport(oauth_server)
+    state, auth_url = await mcp_oauth.start("https://mcp.notes.test/mcp",
+                                            "http://127.0.0.1:8000/api/connectors/mcp/oauth/callback",
+                                            transport=oauth_transport)
+    q = parse_qs(urlparse(auth_url).query)
+    registration = json.loads(next(r for r in oauth_log if str(r.url).endswith("/register")).content)
+    check("MCP sign-in: discovered via 401 + resource metadata, registered JARVIS automatically",
+          auth_url.startswith("https://auth.notes.test/authorize") and q["client_id"] == ["jarvis-dyn-1"]
+          and registration["redirect_uris"] == ["http://127.0.0.1:8000/api/connectors/mcp/oauth/callback"])
+    check("MCP sign-in: PKCE S256, resource parameter and scope from the challenge",
+          q["code_challenge_method"] == ["S256"] and q["resource"] == ["https://mcp.notes.test/mcp"]
+          and q["scope"] == ["notes.read"])
+    await mcp_oauth.finish(state, "code-1", None, transport=oauth_transport)
+    bundle = mcp_oauth.collect(state)
+    token_form = parse_qs(oauth_log[-1].content.decode())
+    check("MCP sign-in: code exchange sends verifier + resource and yields a token bundle",
+          isinstance(bundle, dict) and bundle["access_token"] == "at-1" and bundle["refresh_token"] == "rt-1"
+          and token_form.get("code_verifier") and token_form["resource"] == ["https://mcp.notes.test/mcp"])
+    config = ServerConfig.from_payload({"id": "n1", "name": "Notes", "url": "https://mcp.notes.test/mcp",
+                                        "oauth": bundle})
+    rotated: list[dict] = []
+    session = await open_session(config, allow_stdio=False, transport=oauth_transport, on_rotate=rotated.append)
+    check("MCP sign-in: the token opens the server", [t.name for t in await session.list_tools()] == ["list_notes"])
+    issued["access"] = "revoked-early"  # server stops accepting at-1 -> 401 -> refresh -> retry
+    names = [t.name for t in await session.list_tools()]
+    check("MCP sign-in: a 401 triggers one refresh + retry, and the rotated tokens are reported",
+          names == ["list_notes"] and rotated and rotated[-1]["refresh_token"] == "rt-2", str(rotated[-1:] ))
+    await session.close()
+
     # 6. The endpoints refuse anyone who is not on this device.
     from main import app
     for host, expect in (("127.0.0.1", 200), ("192.168.1.50", 403)):

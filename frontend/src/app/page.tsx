@@ -23,7 +23,7 @@ import {
   toggleTask,
 } from "@/lib/api";
 import { drainAgentStore, seedAgentStore, sendProviderKey } from "@/lib/agentBridge";
-import { refreshConnectors } from "@/lib/connectors";
+import { refreshConnectors, saveRotatedTokens } from "@/lib/connectors";
 import { localDashboard } from "@/lib/localDashboard";
 import { syncNativeNotifications } from "@/lib/nativeNotifications";
 import { reportLocation } from "@/lib/geo";
@@ -275,6 +275,13 @@ export default function CommandCenterPage() {
       cancelled = true;
     };
   }, [loadLocal]);
+
+  // MCP servers rotate refresh tokens on every renewal; save each new one
+  // (sealed + synced) so the stored sign-in never goes stale. A local call.
+  React.useEffect(() => {
+    const timer = window.setInterval(() => void saveRotatedTokens(), 5 * 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Self-scheduling rather than a fixed interval, so the delay can shorten
   // while the backend is still starting and relax once it answers.

@@ -19,12 +19,16 @@ import {
   type GoogleService,
   type McpConfig,
   type McpSecret,
+  connectMcpServer,
+  googleBuiltin,
   listConnectors,
   newUid,
   openSecret,
   parseConfig,
   refreshConnectors,
   removeConnector,
+  saveRotatedTokens,
+  setAuthUrlListener,
   seal,
   startGoogleSignIn,
   testMcpServer,
@@ -59,6 +63,7 @@ export function ConnectorsSection() {
 
   const refresh = React.useCallback(async (note?: string) => {
     setBusy(true);
+    await saveRotatedTokens();
     const result = await refreshConnectors();
     setRows(listConnectors());
     setStatus(result.status);
@@ -158,7 +163,16 @@ function GoogleCard({
   );
   const [pending, setPending] = React.useState<{ url: string; controller: AbortController } | null>(null);
   const [error, setError] = React.useState("");
+  const [builtin, setBuiltin] = React.useState<{ available: boolean; client_id: string }>({ available: false, client_id: "" });
+  const [advanced, setAdvanced] = React.useState(false);
   const connected = status?.google.connected;
+  // With a client built into this app, users never see OAuth details: one
+  // button, Google's own consent screen, done. Own-client stays as "advanced".
+  const useOwn = !builtin.available || advanced;
+
+  React.useEffect(() => {
+    void googleBuiltin().then(setBuiltin);
+  }, []);
 
   React.useEffect(() => {
     if (!row) return;
@@ -170,7 +184,9 @@ function GoogleCard({
   const connect = async () => {
     setError("");
     try {
-      const { state, auth_url } = await startGoogleSignIn(clientId.trim(), clientSecret.trim(), services);
+      const id = useOwn ? clientId.trim() : builtin.client_id;
+      const secretValue = useOwn ? clientSecret.trim() : "";
+      const { state, auth_url } = await startGoogleSignIn(id, secretValue, services);
       const controller = new AbortController();
       setPending({ url: auth_url, controller });
       const timer = setTimeout(() => controller.abort(), 5 * 60_000);
@@ -179,8 +195,8 @@ function GoogleCard({
         uid: row?.uid ?? newUid(),
         kind: "google",
         name: "Google",
-        config: JSON.stringify({ client_id: clientId.trim(), services: outcome.services, email: outcome.email }),
-        secret: await seal({ client_secret: clientSecret.trim(), refresh_token: outcome.refresh_token }),
+        config: JSON.stringify({ client_id: id, services: outcome.services, email: outcome.email }),
+        secret: await seal({ client_secret: secretValue, refresh_token: outcome.refresh_token }),
       });
       setPending(null);
       await onChanged(`Google connected as ${outcome.email || "your account"}.`);
@@ -207,10 +223,18 @@ function GoogleCard({
       {!connected && (
         <>
           <p className="text-xs leading-relaxed text-ink-dim">
-            Needs your own free Google Cloud OAuth client (type &ldquo;Desktop app&rdquo;) with the
-            Gmail, Calendar and Drive APIs enabled. Sign in once on the laptop; the phone gets it
-            through sync.
+            {useOwn
+              ? "Uses your own Google Cloud OAuth client (type \u201cDesktop app\u201d) with the Gmail, Calendar and Drive APIs enabled."
+              : "Sign in with Google in your browser and allow JARVIS. Your mail and files go straight from Google to this device."}{" "}
+            Sign in once on the laptop; the phone gets it through sync.
           </p>
+          {builtin.available && (
+            <button type="button" onClick={() => setAdvanced((v) => !v)}
+              className="min-h-11 text-xs text-ink-dim underline hover:text-ink">
+              {advanced ? "Use JARVIS's Google sign-in" : "Advanced: use my own OAuth client"}
+            </button>
+          )}
+          {useOwn && (<>
           <input
             aria-label="Google OAuth client ID"
             value={clientId}
@@ -226,6 +250,7 @@ function GoogleCard({
             placeholder="Client secret"
             className={INPUT}
           />
+          </>)}
           <div className="flex flex-wrap gap-3" role="group" aria-label="Google services">
             {SERVICES.map((service) => (
               <label key={service.id} className="inline-flex min-h-11 items-center gap-2 text-sm text-ink">
@@ -264,7 +289,7 @@ function GoogleCard({
             <button
               type="button"
               className={PRIMARY}
-              disabled={disabled || !clientId.trim() || !clientSecret.trim() || !services.length}
+              disabled={disabled || !services.length || (useOwn && (!clientId.trim() || !clientSecret.trim()))}
               onClick={() => void connect()}
             >
               {row ? "Reconnect Google" : "Connect Google"}
@@ -383,6 +408,7 @@ function McpForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: (name: 
   const [headerValue, setHeaderValue] = React.useState("");
   const [result, setResult] = React.useState<string>("");
   const [testing, setTesting] = React.useState(false);
+  const [signing, setSigning] = React.useState<{ controller: AbortController; url: string } | null>(null);
 
   const definition = () => {
     const [cmd, ...args] = command.trim().split(/\s+/).filter(Boolean);
@@ -405,14 +431,33 @@ function McpForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: (name: 
     setTesting(false);
   };
 
-  const save = async () => {
+  const save = async (oauth?: Record<string, unknown>) => {
     const { config, secret } = definition();
+    const full: McpSecret = oauth ? { ...secret, oauth } : secret;
     upsertConnector({
       uid: newUid(), kind: "mcp", name: name.trim(),
       config: JSON.stringify(config as McpConfig),
-      secret: Object.keys(secret.headers ?? {}).length ? await seal(secret) : null,
+      secret: Object.keys(full.headers ?? {}).length || full.oauth ? await seal(full) : null,
     });
     await onSaved(name.trim());
+  };
+
+  /** One-click: the server's own sign-in page opens in the browser. */
+  const signIn = async () => {
+    const controller = new AbortController();
+    setSigning({ controller, url: "" });
+    setAuthUrlListener((authUrl) => setSigning((s) => (s ? { ...s, url: authUrl } : s)));
+    const timer = setTimeout(() => controller.abort(), 5 * 60_000);
+    try {
+      const { oauth } = await connectMcpServer(url.trim(), controller.signal);
+      await save(oauth);
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      clearTimeout(timer);
+      setAuthUrlListener(null);
+      setSigning(null);
+    }
   };
 
   const ready = name.trim() && (transport === "http" ? /^https?:\/\//.test(url.trim()) : command.trim());
@@ -437,22 +482,40 @@ function McpForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: (name: 
             <input aria-label="Auth header name" value={header} onChange={(e) => setHeader(e.target.value)}
               placeholder="Header" className={cn(INPUT, "w-2/5")} />
             <input aria-label="Auth header value" type="password" value={headerValue}
-              onChange={(e) => setHeaderValue(e.target.value)} placeholder="Bearer … (optional)" className={INPUT} />
+              onChange={(e) => setHeaderValue(e.target.value)} placeholder="API key (only if no sign-in)" className={INPUT} />
           </div>
+          <p className="text-xs text-ink-dim">
+            Most servers support &ldquo;Sign in &amp; save&rdquo;: you approve JARVIS on the server&rsquo;s own page, no keys needed.
+          </p>
         </>
       ) : (
         <input aria-label="Command" value={command} onChange={(e) => setCommand(e.target.value)}
           placeholder="npx -y @modelcontextprotocol/server-filesystem D:\Notes" className={INPUT} />
       )}
       {result && <p className="text-xs text-ink-dim">{result}</p>}
+      {signing && (
+        <p className="text-xs text-ink">
+          Approve JARVIS in your browser.{" "}
+          {signing.url && (
+            <a href={signing.url} target="_blank" rel="noreferrer" className="text-accent underline">
+              Open the sign-in page
+            </a>
+          )}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
+        {transport === "http" && (
+          <button type="button" className={PRIMARY} disabled={!ready || Boolean(signing)} onClick={() => void signIn()}>
+            {signing ? "Waiting for sign-in…" : "Sign in & save"}
+          </button>
+        )}
         <button type="button" className={BUTTON} disabled={!ready || testing} onClick={() => void test()}>
           {testing ? "Testing…" : "Test"}
         </button>
-        <button type="button" className={PRIMARY} disabled={!ready} onClick={() => void save()}>
-          Save
+        <button type="button" className={transport === "http" ? BUTTON : PRIMARY} disabled={!ready} onClick={() => void save()}>
+          {transport === "http" ? "Save without sign-in" : "Save"}
         </button>
-        <button type="button" className={BUTTON} onClick={onCancel}>
+        <button type="button" className={BUTTON} onClick={() => { signing?.controller.abort(); onCancel(); }}>
           Cancel
         </button>
       </div>

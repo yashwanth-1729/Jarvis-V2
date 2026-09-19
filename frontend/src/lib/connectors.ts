@@ -45,6 +45,8 @@ export interface McpConfig {
 export interface McpSecret {
   headers?: Record<string, string>;
   env?: Record<string, string>;
+  /** One-click sign-in bundle (tokens, token endpoint) from the MCP OAuth flow. */
+  oauth?: Record<string, unknown>;
 }
 
 export interface ConnectorRow {
@@ -227,6 +229,7 @@ export async function configureRuntime(): Promise<HandOffResult> {
         id: row.uid, name: row.name, transport: cfg.transport, url: cfg.url ?? "",
         command: cfg.command ?? "", args: cfg.args ?? [], enabled: cfg.enabled,
         disabled_tools: cfg.disabled_tools ?? [], headers: s.headers ?? {}, env: s.env ?? {},
+        oauth: s.oauth ?? {},
       });
     }
   }
@@ -248,6 +251,77 @@ export async function refreshConnectors(): Promise<HandOffResult & { sync: Conne
   const sync = await syncConnectors();
   const handOff = await configureRuntime();
   return { ...handOff, sync };
+}
+
+/**
+ * Re-seal MCP sign-ins the runtime renewed. Servers must rotate refresh
+ * tokens for apps like this one, so an unsaved renewal would leave the
+ * stored token dead on the next launch -- and on the other device.
+ */
+export async function saveRotatedTokens(): Promise<number> {
+  let rotated: Record<string, Record<string, unknown>> = {};
+  try {
+    const response = await fetch(`${API_BASE}/api/connectors/mcp/rotated`, { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return 0;
+    rotated = ((await response.json()) as { rotated: typeof rotated }).rotated ?? {};
+  } catch {
+    return 0;
+  }
+  let saved = 0;
+  for (const [uid, oauth] of Object.entries(rotated)) {
+    const row = listConnectors().find((r) => r.uid === uid);
+    if (!row) continue;
+    try {
+      const secret = (await openSecret<McpSecret>(row)) ?? {};
+      upsertConnector({ ...row, secret: await seal({ ...secret, oauth }) });
+      saved += 1;
+    } catch {
+      // A device that cannot open the secret cannot re-seal it either.
+    }
+  }
+  if (saved) await syncConnectors();
+  return saved;
+}
+
+export async function googleBuiltin(): Promise<{ available: boolean; client_id: string }> {
+  try {
+    const response = await fetch(`${API_BASE}/api/connectors/google/builtin`, { signal: AbortSignal.timeout(10_000) });
+    if (response.ok) return response.json();
+  } catch {
+    // fall through
+  }
+  return { available: false, client_id: "" };
+}
+
+/** One-click sign-in for a remote MCP server; resolves with the token bundle. */
+export async function connectMcpServer(url: string, signal: AbortSignal): Promise<{
+  oauth: Record<string, unknown>; authUrl: string;
+}> {
+  const response = await fetch(`${API_BASE}/api/connectors/mcp/oauth/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+    signal,
+  });
+  const started = (await response.json()) as { state?: string; auth_url?: string; detail?: string };
+  if (!response.ok || !started.state) throw new Error(started.detail ?? `Sign-in could not start (${response.status}).`);
+  onAuthUrl?.(started.auth_url ?? "");
+  while (!signal.aborted) {
+    const poll = await fetch(
+      `${API_BASE}/api/connectors/mcp/oauth/result?state=${encodeURIComponent(started.state)}`, { signal },
+    );
+    const body = (await poll.json()) as { status: string; error?: string; oauth?: Record<string, unknown> };
+    if (body.status === "done" && body.oauth) return { oauth: body.oauth, authUrl: started.auth_url ?? "" };
+    if (body.status === "error") throw new Error(body.error ?? "Sign-in failed.");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error("Sign-in cancelled.");
+}
+
+/** Set by the UI so it can show a fallback link while the browser round-trip runs. */
+let onAuthUrl: ((url: string) => void) | null = null;
+export function setAuthUrlListener(listener: ((url: string) => void) | null): void {
+  onAuthUrl = listener;
 }
 
 // --------------------------------------------------------------- google sign-in

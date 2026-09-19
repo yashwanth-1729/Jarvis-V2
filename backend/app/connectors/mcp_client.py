@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -66,6 +67,8 @@ class ServerConfig:
     env: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     disabled_tools: list[str] = field(default_factory=list)
+    #: OAuth bundle from mcp_oauth (access/refresh token, token endpoint...).
+    oauth: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_payload(cls, raw: dict[str, Any]) -> "ServerConfig":
@@ -83,6 +86,7 @@ class ServerConfig:
             env={str(k): str(v) for k, v in (raw.get("env") or {}).items()},
             enabled=bool(raw.get("enabled", True)),
             disabled_tools=[str(t) for t in (raw.get("disabled_tools") or [])],
+            oauth=dict(raw.get("oauth") or {}),
         )
 
 
@@ -185,6 +189,28 @@ class HttpSession(_Session):
         )
         self._session_id: str | None = None
         self._protocol: str | None = None
+        self._refresh_lock = asyncio.Lock()
+        #: Called with the new bundle whenever a refresh rotates the tokens,
+        #: so the client can re-seal and sync them (see registry).
+        self.on_rotate = None
+
+    async def _ensure_token(self, force: bool = False) -> None:
+        bundle = self.config.oauth
+        if not bundle:
+            return
+        if not force and bundle.get("access_token") and time.time() < float(bundle.get("expires_at", 0)) - 60:
+            return
+        from app.connectors.mcp_oauth import OAuthError, refresh
+
+        async with self._refresh_lock:
+            if not force and time.time() < float(self.config.oauth.get("expires_at", 0)) - 60:
+                return
+            try:
+                self.config.oauth = await refresh(self.config.oauth, self._client)
+            except OAuthError as exc:
+                raise McpError(f"{self.config.name}: {exc}") from exc
+            if self.on_rotate:
+                self.on_rotate(self.config.oauth)
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -192,6 +218,8 @@ class HttpSession(_Session):
             "Content-Type": "application/json",
             **self.config.headers,
         }
+        if self.config.oauth.get("access_token"):
+            headers["Authorization"] = f"Bearer {self.config.oauth['access_token']}"
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
         if self._protocol:
@@ -199,14 +227,24 @@ class HttpSession(_Session):
         return headers
 
     async def _post(self, message: dict[str, Any], timeout: float) -> httpx.Response:
-        try:
-            response = await self._client.post(
-                self.config.url, json=message, headers=self._headers(), timeout=timeout,
-            )
-        except httpx.HTTPError as exc:
-            raise McpError(f"could not reach {self.config.name}: {type(exc).__name__}") from exc
+        await self._ensure_token()
+        for attempt in range(2):
+            try:
+                response = await self._client.post(
+                    self.config.url, json=message, headers=self._headers(), timeout=timeout,
+                )
+            except httpx.HTTPError as exc:
+                raise McpError(f"could not reach {self.config.name}: {type(exc).__name__}") from exc
+            # An access token can die early (revoked, server restart); renew
+            # once and retry before calling the sign-in broken.
+            if response.status_code == 401 and self.config.oauth and attempt == 0:
+                await self._ensure_token(force=True)
+                continue
+            break
         if response.headers.get("mcp-session-id"):
             self._session_id = response.headers["mcp-session-id"]
+        if response.status_code == 401 and not self.config.oauth:
+            raise McpError(f"{self.config.name} needs sign-in: use Connect in Settings")
         if response.status_code in (401, 403):
             raise McpError(f"{self.config.name} refused the credentials (HTTP {response.status_code})")
         if response.status_code >= 400:
@@ -343,7 +381,8 @@ class StdioSession(_Session):
 
 
 async def open_session(config: ServerConfig, *, allow_stdio: bool,
-                       transport: httpx.AsyncBaseTransport | None = None) -> _Session:
+                       transport: httpx.AsyncBaseTransport | None = None,
+                       on_rotate=None) -> _Session:
     """Connect and initialize. Raises McpError with a readable reason."""
     if config.transport == "stdio":
         if not allow_stdio:
@@ -354,6 +393,7 @@ async def open_session(config: ServerConfig, *, allow_stdio: bool,
         if not config.url.startswith(("https://", "http://")):
             raise McpError(f"{config.name} has no valid URL")
         session = HttpSession(config, transport=transport)
+        session.on_rotate = on_rotate
     try:
         await asyncio.wait_for(session.initialize(), 30.0)
     except asyncio.TimeoutError as exc:

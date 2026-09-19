@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · MCP OAuth + built-in Google client slot
+
+- `connectors/mcp_oauth.py` (discover/register/start/finish/refresh);
+  HttpSession attaches bearer tokens, refreshes, reports rotation via
+  `on_rotate` -> registry `_rotated` -> `/api/connectors/mcp/rotated`.
+- `connectors/builtin_google.json` is git-ignored on purpose (bundled into
+  Android builds from disk). Don't commit it.
+- Answered for the user: an app-owned OAuth client is the production
+  pattern (Thunderbird, rclone...); each user authorizes their own account;
+  public launch needs Google verification + CASA for Gmail/Drive scopes.
+
 ### 2026-09-19 · Claude Code · Laptop model = DeepSeek v4-pro (typed), element-id fix
 
 - `OPENROUTER_DESKTOP_MODEL` in config.py; agent.run_turn applies it when

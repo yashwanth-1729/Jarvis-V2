@@ -56,3 +56,6 @@ crash_capture*.log
 verify_capture*.log
 android_tts_capture*.log
 backend/backend_live.log
+
+# Built-in Google OAuth client for the app (kept out of the public repo; bundled into builds)
+backend/app/connectors/builtin_google.json

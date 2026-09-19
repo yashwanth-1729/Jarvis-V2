@@ -458,6 +458,22 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — One-click connectors: MCP sign-in and a built-in Google
+  client slot.** New `backend/app/connectors/mcp_oauth.py` implements the MCP
+  authorization spec: discovery from the server's 401 / RFC 9728 metadata,
+  RFC 8414 server metadata, automatic registration (RFC 7591), browser
+  sign-in with PKCE S256 + `resource` (RFC 8707) via
+  `/api/connectors/mcp/oauth/start|callback|result`, token refresh on expiry
+  or 401, and rotated tokens surfaced at `/api/connectors/mcp/rotated` for the
+  client to re-seal and sync (Settings and a 5-minute page timer collect
+  them). Settings' MCP form now leads with "Sign in & save"; API keys are the
+  fallback. Google: `google.builtin_client()` reads a git-ignored
+  `backend/app/connectors/builtin_google.json` (or env), so a build that ships
+  one shows only "Connect Google"; own-client stays under Advanced. Offline
+  connectors_test now 35 checks (5 new for MCP sign-in against fake servers);
+  `tsc` clean. Not yet tried against a real OAuth MCP server or with a real
+  built-in Google client.
+
 - **2026-09-19 — Typed laptop turns use DeepSeek v4-pro; bracketed element ids
   accepted; Supabase `connectors` table created.** New
   `OPENROUTER_DESKTOP_MODEL` (default `deepseek/deepseek-v4-pro`) applies to

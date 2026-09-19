@@ -40,6 +40,8 @@ _servers: dict[str, McpServerState] = {}
 _specs: tuple = ()
 _by_name: dict[str, Any] = {}
 _routes: list[tuple[re.Pattern[str], frozenset[str]]] = []
+#: server id -> OAuth bundle refreshed since the client last collected it.
+_rotated: dict[str, dict[str, Any]] = {}
 _lock = asyncio.Lock()
 
 
@@ -329,7 +331,10 @@ async def configure(payload: dict[str, Any]) -> dict[str, Any]:
         async def connect(config: ServerConfig) -> McpServerState:
             state = McpServerState(config)
             try:
-                state.session = await open_session(config, allow_stdio=not settings.jarvis_android)
+                state.session = await open_session(
+                    config, allow_stdio=not settings.jarvis_android,
+                    on_rotate=lambda bundle, sid=config.id: _rotated.__setitem__(sid, bundle),
+                )
                 state.tools = await state.session.list_tools()
             except (McpError, OSError) as exc:
                 state.error = str(exc)
@@ -364,6 +369,13 @@ def status() -> dict[str, Any]:
         ],
         "tool_count": len(_specs),
     }
+
+
+def collect_rotated() -> dict[str, dict[str, Any]]:
+    """OAuth bundles renewed since the last call, keyed by server id (handed out once)."""
+    out = dict(_rotated)
+    _rotated.clear()
+    return out
 
 
 async def close() -> None:

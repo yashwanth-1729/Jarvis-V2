@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 
 from app.connectors import google as g
+from app.connectors import mcp_oauth
 from app.connectors import registry
 from app.core.config import settings
 
@@ -89,6 +90,13 @@ async def google_callback(request: Request, state: str = "", code: str | None = 
     ))
 
 
+@router.get("/google/builtin", summary="Whether this build ships its own Google sign-in")
+async def google_builtin(request: Request) -> dict[str, Any]:
+    _local_only(request)
+    client_id, _ = g.builtin_client()
+    return {"available": bool(client_id), "client_id": client_id}
+
+
 @router.get("/google/result", summary="Collect the outcome of a sign-in (once)")
 async def google_result(state: str, request: Request) -> dict[str, Any]:
     _local_only(request)
@@ -105,3 +113,53 @@ async def google_result(state: str, request: Request) -> dict[str, Any]:
 async def mcp_test(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     _local_only(request)
     return await registry.probe_server(payload)
+
+
+@router.post("/mcp/oauth/start", summary="Begin one-click sign-in for a remote MCP server")
+async def mcp_oauth_start(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Discovers the server's sign-in, registers JARVIS with it, and returns
+    the browser URL (also opened directly on the laptop)."""
+    _local_only(request)
+    url = str(payload.get("url") or "").strip()
+    if not url.startswith(("https://", "http://")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Enter the server's https:// URL.")
+    redirect_uri = f"http://127.0.0.1:{request.url.port or 8000}/api/connectors/mcp/oauth/callback"
+    try:
+        state, auth_url = await mcp_oauth.start(url, redirect_uri)
+    except mcp_oauth.OAuthError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    opened = False
+    if not settings.jarvis_android:
+        import webbrowser
+
+        opened = webbrowser.open(auth_url)
+    return {"state": state, "auth_url": auth_url, "opened": opened}
+
+
+@router.get("/mcp/oauth/callback", response_class=HTMLResponse, include_in_schema=False)
+async def mcp_oauth_callback(request: Request, state: str = "", code: str | None = None,
+                             error: str | None = None) -> HTMLResponse:
+    _local_only(request)
+    try:
+        await mcp_oauth.finish(state, code, error)
+    except mcp_oauth.OAuthError as exc:
+        return HTMLResponse(_PAGE.format(title="Sign-in expired", body=html.escape(str(exc))), status_code=400)
+    return HTMLResponse(_PAGE.format(title="Server connected",
+                                     body="You can close this tab and go back to JARVIS."))
+
+
+@router.get("/mcp/oauth/result", summary="Collect an MCP sign-in outcome (once)")
+async def mcp_oauth_result(state: str, request: Request) -> dict[str, Any]:
+    _local_only(request)
+    outcome = mcp_oauth.collect(state)
+    if outcome is None:
+        return {"status": "pending"}
+    if isinstance(outcome, str):
+        return {"status": "error", "error": outcome}
+    return {"status": "done", "oauth": outcome}
+
+
+@router.get("/mcp/rotated", summary="Renewed MCP sign-ins the client should re-save")
+async def mcp_rotated(request: Request) -> dict[str, Any]:
+    _local_only(request)
+    return {"rotated": registry.collect_rotated()}

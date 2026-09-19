@@ -16,6 +16,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import json
+import os
 import logging
 import re
 import secrets
@@ -23,6 +25,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -47,6 +50,41 @@ BASE_SCOPES = ["openid", "email"]
 
 #: Longest text handed to the model from one email or file.
 MAX_TEXT = 6000
+
+
+_BUILTIN_FILE = Path(__file__).with_name("builtin_google.json")
+
+
+def builtin_client() -> tuple[str, str]:
+    """(client_id, client_secret) of the OAuth client JARVIS ships with, or ("", "").
+
+    The developer creates ONE Google OAuth client ("Desktop app") for JARVIS;
+    users then only click Connect. It lives in ``builtin_google.json`` next to
+    this file -- git-ignored so it stays out of the public repo, but present
+    on disk so the Android build bundles it. Google treats an installed app's
+    client secret as non-confidential; PKCE is what protects the sign-in.
+    Env vars override it for development.
+    """
+    client_id = os.environ.get("JARVIS_GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("JARVIS_GOOGLE_CLIENT_SECRET", "")
+    if not client_id and _BUILTIN_FILE.exists():
+        try:
+            data = json.loads(_BUILTIN_FILE.read_text(encoding="utf-8"))
+            client_id = str(data.get("client_id") or "")
+            client_secret = str(data.get("client_secret") or "")
+        except (OSError, ValueError):
+            logger.warning("builtin_google.json is unreadable; built-in Google sign-in is off")
+    return client_id, client_secret
+
+
+def resolve_client(client_id: str, client_secret: str) -> tuple[str, str]:
+    """The user's own client if given, else the built-in one."""
+    if client_id.strip():
+        builtin_id, builtin_secret = builtin_client()
+        if client_id.strip() == builtin_id and not client_secret.strip():
+            return builtin_id, builtin_secret
+        return client_id.strip(), client_secret.strip()
+    return builtin_client()
 
 
 class GoogleError(RuntimeError):
@@ -77,8 +115,9 @@ _results: dict[str, SignInResult | str] = {}
 def start_sign_in(client_id: str, client_secret: str, redirect_uri: str,
                   services: list[str]) -> tuple[str, str]:
     """(state, consent URL). The state is how the client later collects the result."""
-    if not client_id.strip():
-        raise GoogleError("Enter the Google OAuth client ID first.")
+    client_id, client_secret = resolve_client(client_id, client_secret)
+    if not client_id:
+        raise GoogleError("This build has no built-in Google sign-in; enter an OAuth client ID.")
     services = [s for s in services if s in SCOPES] or list(SCOPES)
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
@@ -199,8 +238,7 @@ class GoogleConnector:
     def __init__(self, client_id: str, client_secret: str, refresh_token: str,
                  services: list[str], email: str = "",
                  transport: httpx.AsyncBaseTransport | None = None) -> None:
-        self.client_id = client_id
-        self.client_secret = client_secret
+        self.client_id, self.client_secret = resolve_client(client_id, client_secret)
         self.refresh_token = refresh_token
         self.services = [s for s in services if s in SCOPES]
         self.email = email
