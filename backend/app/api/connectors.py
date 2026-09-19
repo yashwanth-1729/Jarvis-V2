@@ -45,7 +45,7 @@ async def connector_status(request: Request) -> dict[str, Any]:
 
 
 @router.post("/google/start", summary="Begin Google sign-in (returns the consent URL)")
-async def google_start(payload: dict[str, Any], request: Request) -> dict[str, str]:
+async def google_start(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     _local_only(request)
     port = request.url.port or 8000
     # Google's "Desktop app" clients accept any loopback port; 127.0.0.1 (not

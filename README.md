@@ -458,6 +458,20 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Google connector verified live with the built-in client.**
+  The user created a "Desktop app" OAuth client (project voice-agent-new) and
+  it was installed as the git-ignored `builtin_google.json`. A real sign-in
+  through `/api/connectors/google/start` (isolated backend) returned a refresh
+  token with gmail+calendar+drive granted; read-only calls then worked:
+  Gmail search listed 10 recent emails, Calendar list returned (0 events in
+  the next week), Drive search succeeded after the Drive API was enabled in
+  the project. Findings fixed: `/google/start` 500'd (response annotated as
+  str-only while returning a bool); a disabled API now reports "the Google
+  Drive API is not enabled in the project..." instead of a generic 403. The
+  test token was deleted afterwards. Android rebuilt/installed with the
+  built-in client bundled. Not yet done: sign-in from inside the installed
+  apps, and publishing the OAuth app (Testing mode expires tokens after 7 days).
+
 - **2026-09-19 — Fixed: clicking anything found by `browser_inspect` failed.**
   Inspect registered the parsed accessibility-snapshot dict instead of a
   Playwright locator, so every inspect -> click failed with "'dict' object

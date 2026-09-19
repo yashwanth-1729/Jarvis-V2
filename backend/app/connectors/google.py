@@ -278,9 +278,26 @@ class GoogleConnector:
                 self._access = None  # expired early; refresh once and retry
                 continue
             if response.status_code == 403:
+                try:
+                    error = response.json().get("error", {})
+                except ValueError:
+                    error = {}
+                reasons = {d.get("reason") for d in error.get("errors") or []}
+                if "accessNotConfigured" in reasons or "SERVICE_DISABLED" in str(error):
+                    # Seen live: the Drive API was off in the OAuth client's
+                    # project. Say exactly that -- it is the one fix that works.
+                    named = re.match(r"(.+? API) has not been used", str(error.get("message", "")))
+                    api = named.group(1) if named else "needed Google"
+                    if not named:
+                        api += " API"
+                    raise GoogleError(
+                        f"Google refused this because the {api} is not enabled in the "
+                        "Google Cloud project that owns JARVIS's sign-in. Enable it there, "
+                        "wait a minute, and try again."
+                    )
                 raise GoogleError(
-                    "Google refused this request (403). The API may not be enabled in your "
-                    "Google Cloud project, or JARVIS was not granted that permission."
+                    "Google refused this request (403): JARVIS was not granted that "
+                    "permission. Reconnect Google in Settings and allow every box."
                 )
             if response.status_code >= 400:
                 try:
