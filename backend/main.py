@@ -19,6 +19,7 @@ from app.api import (
     agent_runs,
     announcements,
     chat,
+    connectors,
     dashboard,
     localstore,
     location,
@@ -150,6 +151,9 @@ async def lifespan(_: FastAPI):
             with suppress(asyncio.CancelledError):
                 await scheduler_task
         await close_providers()
+        from app.connectors import registry as connector_registry
+
+        await connector_registry.close()
         await runtime_db.disconnect()
         await db.disconnect()
 
@@ -192,6 +196,8 @@ app.include_router(announcements.router)
 app.include_router(records.router)
 
 app.include_router(location.router)
+# Google + MCP connectors (definitions and secrets come from the client).
+app.include_router(connectors.router)
 
 
 def _resolved(getter: object) -> tuple[str, str]:

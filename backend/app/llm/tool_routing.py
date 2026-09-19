@@ -134,11 +134,17 @@ def route(user_text: str, recent_text: str = "") -> frozenset[str] | None:
     "genuinely no tool needed" from "the keyword net missed it" from text
     alone, so this is a deliberate, documented tradeoff, not an oversight.
     """
+    from app.connectors import registry as connectors
+
     matched: set[str] = set()
     for text in (user_text or "", recent_text or ""):
         for group, pattern in _KEYWORDS.items():
             if pattern.search(text):
                 matched.update(TOOL_GROUPS[group])
+    # Connected Google/MCP tools route on their own keywords ("email",
+    # "calendar", an MCP server's name). On a full fallback (None) every
+    # connector tool is offered along with every core tool.
+    matched |= connectors.route_names(user_text, recent_text)
     if matched:
         return frozenset(matched)
     return None if settings.jarvis_tool_routing_fallback_all else frozenset()

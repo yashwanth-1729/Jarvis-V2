@@ -2403,7 +2403,9 @@ async def _handle_disk_usage(payload: DiskUsageInput) -> ToolOutcome:
 #: ``system`` — anything reaching outside the process: shell, files, network.
 #:              Gated on ``settings.system_tools_enabled``, which is false on
 #:              mobile whatever the operator sets.
-Capability = Literal["core", "system"]
+#:   connector -- a live Google/MCP tool from app.connectors.registry; offered on
+#:              both platforms, only while that connector is configured.
+Capability = Literal["core", "system", "connector"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -4039,9 +4041,15 @@ def enabled_specs() -> tuple[ToolSpec, ...]:
     shuffles between turns would quietly cost a cache miss on every request.
     Registry order is the stable order; filtering preserves it.
     """
+    from app.connectors import registry as connectors
+
     if settings.system_tools_enabled:
-        return TOOL_REGISTRY
-    return tuple(spec for spec in TOOL_REGISTRY if spec.capability == "core")
+        base = TOOL_REGISTRY
+    else:
+        base = tuple(spec for spec in TOOL_REGISTRY if spec.capability == "core")
+    # Connector tools go last so the built-in prefix of the tool block is the
+    # same with or without them.
+    return base + connectors.specs()
 
 
 def openai_tools(names: frozenset[str] | None = None) -> list[dict[str, Any]]:
@@ -4060,7 +4068,8 @@ def openai_tools(names: frozenset[str] | None = None) -> list[dict[str, Any]]:
     specs = enabled_specs()
     if names is not None:
         specs = tuple(
-            spec for spec in specs if spec.capability != "core" or spec.name in names
+            spec for spec in specs
+            if spec.capability == "system" or spec.name in names
         )
     return [_envelope(spec) for spec in specs]
 
@@ -4086,10 +4095,16 @@ def tool_requires_arguments(name: str) -> bool:
     tools. For those, an unparseable blob can safely be treated as ``{}`` —
     failing the call would discard an invocation whose intent is unambiguous.
     """
-    spec = _BY_NAME.get(name)
+    spec = _spec_named(name)
     if spec is None:
         return True
     return bool(spec.input_schema.get("required"))
+
+
+def _spec_named(name: str) -> ToolSpec | None:
+    from app.connectors import registry as connectors
+
+    return _BY_NAME.get(name) or connectors.lookup(name)
 
 
 async def execute_tool(
@@ -4100,7 +4115,7 @@ async def execute_tool(
 ) -> ToolOutcome:
     """Validate and run one tool call. Never raises — failures come back as
     ``is_error`` outcomes so the model can recover inside the same turn."""
-    spec = _BY_NAME.get(name)
+    spec = _spec_named(name)
     if spec is None:
         available = ", ".join(s.name for s in enabled_specs())
         return ToolOutcome(
@@ -4112,7 +4127,7 @@ async def execute_tool(
     # still arrive from replayed history recorded on a machine where it was
     # enabled -- and a gated capability must not execute just because it was
     # once offered.
-    if spec.capability != "core" and not settings.system_tools_enabled:
+    if spec.capability == "system" and not settings.system_tools_enabled:
         return ToolOutcome(
             content=(
                 f"'{name}' is not available in this environment. "

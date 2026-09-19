@@ -128,6 +128,22 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Connectors phase 1 (backend) + laptop model benchmark
+
+- New `backend/app/connectors/` (google.py, mcp_client.py, registry.py) and
+  `app/api/connectors.py`; tools.py gains capability "connector"
+  (`enabled_specs` appends `registry.specs()`, `_spec_named` falls back to
+  `registry.lookup`); tool_routing adds `registry.route_names`. Design and
+  user decisions: docs/connectors.md (built-in Google instead of Google's MCP
+  preview; custom MCP; definitions AND secrets sync, encrypted client-side).
+- Codex: this touches tools.py's `enabled_specs`/`openai_tools`/`execute_tool`
+  gating (system vs connector). Please keep connector specs appended last.
+- Laptop benchmark (6 read-only tasks): nano 5/6 4.3s; gemini-3.1-flash-lite
+  6/6 5.2s; gpt-4.1-mini 6/6 6.4s; qwen3.8-flash 6/6 9.9s; deepseek-v4-flash
+  6/6 11s; gpt-5.4-nano 5/6. No model switched yet; user to choose.
+- Next: phase 2 frontend (Settings UI, `connectors` synced table, passphrase
+  encryption, hand-off), phase 3 live Google sign-in + builds.
+
 ### 2026-09-19 · Claude Code · Cost cuts (web plugin, hedging, reply length) + laptop agent check
 
 - `OPENROUTER_WEB_PLUGIN` (default off) gates OpenRouter's paid web plugin in

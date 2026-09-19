@@ -458,6 +458,24 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Connectors, phase 1 (backend): built-in Google connector and
+  MCP client.** New `backend/app/connectors/` (design: `docs/connectors.md`).
+  Google: OAuth installed-app sign-in with PKCE via the local backend
+  (`/api/connectors/google/start|callback|result`), refresh tokens handed
+  back to the client, access tokens refreshed in memory; tools
+  `gmail_search/read/draft/send`, `calendar_list_events/create_event/
+  delete_event`, `drive_search/read`. MCP: a dependency-free client for
+  Streamable HTTP (both devices) and stdio (laptop only); tools appear as
+  `mcp__<server>__<tool>`. Sending mail, deleting events, inviting guests and
+  any MCP tool not marked read-only need the user's yes (`confirmed=true`);
+  external content is wrapped as untrusted. Connector tools route on their
+  own keywords. `/api/connectors/configure` takes definitions + secrets from
+  the client, memory only; every connector endpoint refuses non-loopback
+  callers. Offline `tests/connectors_test.py` (30 checks: fake MCP over
+  HTTP/SSE, a real stdio MCP process, fake Google APIs, confirmation gates,
+  loopback guard) plus existing suites pass. **Not usable yet:** the Settings
+  UI, synced/encrypted storage and a live Google sign-in are phase 2-3.
+
 - **2026-09-19 — Cost cuts: paid web plugin off, voice backups only on real
   stalls, one-sentence spoken replies.** Key usage was $1.17 of $5 ($0.50 in
   one day, much of it test runs). Three leaks fixed: (1) OpenRouter's paid
