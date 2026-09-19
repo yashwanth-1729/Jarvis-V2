@@ -655,6 +655,10 @@ async def run_turn(
     # the cloud stack made OpenRouter the active provider, which OpenRouter
     # correctly rejected as an unknown model -- confirmed live, 2026-09-16.
     model = settings.sarvam_voice_model if (voice and provider.name == "sarvam") else None
+    # Non-English replies get their own OpenRouter model: the default English
+    # model writes stilted, sometimes wrong Telugu/Hindi (see config.py).
+    if provider.name == "openrouter" and not is_english and settings.openrouter_indic_model:
+        model = settings.openrouter_indic_model
     max_tokens = settings.jarvis_voice_max_tokens if voice else None
 
     # OpenRouter-only: its built-in web-search plugin is a request-level

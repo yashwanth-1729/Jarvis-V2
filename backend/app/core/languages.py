@@ -76,6 +76,41 @@ def is_supported(code: str | None) -> bool:
     return (code or "").strip() in _BY_CODE
 
 
+#: What the natural code-mixed register is called, for the prompt.
+_MIX_NAME = {
+    "te-IN": "Tenglish -- Telugu mixed with English",
+    "hi-IN": "Hinglish -- Hindi mixed with English",
+}
+
+#: Worked examples of the register plus formal words to avoid. Written after a
+#: native speaker said Telugu replies felt "over Telugu", bookish, and used
+#: complicated Telugu words where people just say the English word.
+_REGISTER_EXAMPLES = {
+    "te-IN": (
+        "\n## Sounds like this\n"
+        "  Okay boss, tomorrow morning nine కి అమ్మకి call చేయమని reminder set చేశా.\n"
+        "  ఈ రోజు మీకు three tasks ఉన్నాయి boss, అందులో physics assignment important.\n"
+        "  Evening seven thirty కి C class ఉంది. Free గా లేకపోతే skip చేయొచ్చు.\n"
+        "  Done boss, ఆ task delete చేశా.\n"
+        "## Not like this (formal / bookish) -> say this instead\n"
+        "  గుర్తు చేస్తాను -> reminder set చేశా · సమావేశం -> meeting · సమయం -> time · "
+        "ఉదయం / సాయంత్రం -> morning / evening · ఖాళీగా -> free గా · "
+        "కార్యక్రమం -> program · చేయబడింది -> చేశా · ఉన్నది -> ఉంది · సర్ -> boss\n"
+    ),
+    "hi-IN": (
+        "\n## Sounds like this\n"
+        "  Okay boss, कल morning nine बजे mom को call करने का reminder set कर दिया.\n"
+        "  आज आपके three tasks हैं boss, सबसे important physics assignment है.\n"
+        "  Evening seven thirty को C class है. Free नहीं हो तो skip कर सकते हो.\n"
+        "  Done boss, वो task delete कर दिया.\n"
+        "## Not like this (formal / bookish) -> say this instead\n"
+        "  स्मरण कराऊँगा -> reminder set कर दिया · बैठक -> meeting · कार्य -> task · "
+        "समय सारणी -> schedule · दूरभाष -> phone · कृपया -> (drop it) · "
+        "किया गया है -> कर दिया · श्रीमान -> boss\n"
+    ),
+}
+
+
 def reply_reminder(code: str | None) -> str | None:
     """A terse restatement injected immediately before generation.
 
@@ -98,11 +133,16 @@ def reply_reminder(code: str | None) -> str | None:
             "Hindi or anything else. Do not mirror the user's language."
         )
     return (
-        f"Reminder: reply in {language.directive}, even though the user may have "
-        "just spoken English. Keep names, class titles, times and numbers in "
-        "English — write times and counts as English words ('seven thirty PM', "
-        "'three tasks'), never in "
-        f"{language.label} words or {language.label} digits. "
+        f"Reminder: reply in casual spoken {language.label} ({language.directive}) "
+        f"-- the code-mixed way people actually talk "
+        f"({_MIX_NAME.get(language.code, 'mixed with English')}), even though the "
+        "user may have just spoken English. Everyday words people normally say in "
+        "English stay English, in Latin script (reminder, task, meeting, call, "
+        f"time, morning, free, done, check). Only the grammar glue is {language.label}. "
+        f"{language.label} parts in {language.label} script only -- not romanized, and "
+        "never letters from any other script. "
+        "Short, simple spoken sentences; no formal or bookish words. Times and "
+        "counts as English words ('seven thirty PM', 'three tasks'), never digits. "
         "Do not mirror the user's language."
     )
 
@@ -127,27 +167,39 @@ def reply_directive(code: str | None) -> str:
             "which point call `set_language`. Do not mirror the user's language."
         )
 
+    mix = _MIX_NAME.get(language.code, f"{language.label} mixed with English")
     return (
         "# Language\n"
-        f"Reply in {language.directive}. This is spoken aloud, so write it the "
-        "way a bilingual speaker actually talks, not the way a textbook would.\n\n"
+        f"Reply in {language.directive}, in the **casual, code-mixed way people "
+        f"actually talk** ({mix}) -- like a friend from the city speaking "
+        "out loud, never a news reader, a textbook, or a translation.\n\n"
         f"**This holds no matter which language the user speaks.** They will "
-        f"often talk to you in English — that is normal and expected, and it is "
-        f"NOT a request to switch. Keep replying in {language.label} until they "
-        "explicitly ask you to change, at which point call `set_language`. Do "
-        "not mirror the user's language.\n\n"
-        "Keep the following in English and Latin script, inline, never "
-        "translated or transliterated:\n"
-        "- names of classes, subjects, people, places and apps\n"
-        "- clock times, dates, and all numbers\n"
-        "- technical terms that are normally said in English\n\n"
-        "Everything else — the connecting words, verbs, and your own phrasing — "
-        f"goes in {language.label}.\n\n"
+        f"often talk to you in English -- that is normal and NOT a request to "
+        f"switch. Keep replying in {language.label} until they explicitly ask to "
+        "change, then call `set_language`. Do not mirror the user's language.\n\n"
+        "## Which words stay English (Latin script, inline)\n"
+        "- Any everyday word people normally say in English: reminder, task, "
+        "schedule, meeting, class, call, phone, message, time, morning, evening, "
+        "weekend, free, busy, done, okay, sure, check, update, add, delete, set, "
+        "plan, important, boss.\n"
+        "- Names of classes, subjects, people, places and apps.\n"
+        "- Clock times, dates and all numbers.\n\n"
+        f"Only the grammar glue is {language.label}: verb endings, case endings, "
+        "connectors, pronouns. If a young person would say the English word, use "
+        f"the English word -- never swap it for a pure or literary {language.label} "
+        "word.\n\n"
+        "## Grammar\n"
+        "Short, simple, spoken sentences. Everyday verb forms, not formal or "
+        "written ones. If a sentence sounds like it came out of a translator, "
+        "rewrite it the way you would say it.\n\n"
+        "## Script (read aloud by a voice, so this matters)\n"
+        f"- The {language.label} parts are always in {language.label} script -- never "
+        f"romanized {language.label} in English letters (a voice mispronounces it).\n"
+        "- The English words are in English letters.\n"
+        "- Never any third script: no Hindi, Bengali, Tamil or other letters "
+        f"inside a {language.label} reply.\n\n"
         "**Numbers are spoken aloud, so write them as English words, not "
-        "digits**: 'seven thirty PM' not '7:30 PM', 'three tasks' not '3 tasks', "
-        f"'Monday' not 'సోమవారం'. A digit gets read out in {language.label}, "
-        "which is exactly what the user does not want.\n\n"
-        "Example of the register (Telugu):\n"
-        "  అవును సర్, ఈ రోజు సాయంత్రం C Learning Session ఉంది, seven thirty PM కి. "
-        "అది skill class కాబట్టి, work ఉంటే skip చేయొచ్చు."
+        "digits**: 'seven thirty PM' not '7:30 PM', 'three tasks' not '3 tasks'. "
+        f"A digit gets read out in {language.label}.\n"
+        + _REGISTER_EXAMPLES.get(language.code, "")
     )

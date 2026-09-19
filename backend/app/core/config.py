@@ -208,6 +208,16 @@ class Settings(BaseSettings):
         default="openai/gpt-4.1-nano", alias="OPENROUTER_MODEL"
     )
     openrouter_chat_timeout: float = Field(default=30.0, alias="OPENROUTER_CHAT_TIMEOUT")
+    #: Chat model for non-English replies (Telugu, Hindi, ...). Added 2026-09-19
+    #: after a native speaker called gpt-4.1-nano's Telugu "over Telugu" and
+    #: ungrammatical. Measured through the real agent: nano wrote wrong words
+    #: (uncle for mom), leaked Hindi letters into Telugu and romanized 2 of 5
+    #: Hindi replies; gemini-2.5-flash wrote natural Tenglish/Hinglish with
+    #: 2/2 actions saved and the same ~1.7s first output. English stays on
+    #: `openrouter_model`. Empty string = use `openrouter_model` for everything.
+    openrouter_indic_model: str = Field(
+        default="google/gemini-2.5-flash", alias="OPENROUTER_INDIC_MODEL"
+    )
     #: STT/TTS calls carry a full audio payload (base64 JSON, ~33% bigger than
     #: the raw bytes) and a phone's uplink is slower and less stable than the
     #: chat path's short JSON round trip, so audio gets its own, longer budget

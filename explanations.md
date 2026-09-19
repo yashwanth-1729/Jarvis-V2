@@ -128,6 +128,24 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Telugu/Hindi reply quality: Tenglish register + Gemini for non-English
+
+- `app/core/languages.py`: `reply_directive` / `reply_reminder` rewritten for
+  casual code-mixed Tenglish/Hinglish (English everyday words in Latin script,
+  native grammar in native script, no romanized Telugu, no third script), with
+  `_MIX_NAME` and `_REGISTER_EXAMPLES` (examples + formal-word blacklist).
+- New `OPENROUTER_INDIC_MODEL` (default `google/gemini-2.5-flash`) in
+  `config.py`; `agent.run_turn` passes it as `model=` when the provider is
+  OpenRouter and the reply language is not English. English stays on nano.
+- Why: through the real agent, nano wrote wrong Telugu words, leaked Hindi
+  letters into Telugu and romanized Hindi; Gemini was clean in both, 2/2
+  actions saved, same latency. Costs ~3x nano on input for Indic turns only.
+- Verified: live routing check (te/hi -> Gemini, en -> nano, reminder saved,
+  isolated DB); offline agent_context_budget, openrouter_transport,
+  identity_turn, smoke all pass. Android rebuilt/installed (see README).
+- Left: user's on-phone listening check; other Indic languages have no
+  `_REGISTER_EXAMPLES` yet (they get the generic register text).
+
 ### 2026-09-19 · Claude Code · Autonomy Blueprint v2 (docs only) — please read, Codex
 
 - `docs/desktop-autonomy.md` rewritten as a full blueprint at the user's request

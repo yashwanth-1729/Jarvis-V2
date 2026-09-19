@@ -458,6 +458,23 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Telugu/Hindi replies: casual Tenglish/Hinglish, answered by
+  Gemini 2.5 Flash.** A native speaker said Telugu replies felt "over Telugu",
+  ungrammatical, and full of bookish words. The reply-language instructions
+  (`app/core/languages.py`) now ask for the code-mixed way people talk:
+  everyday words (reminder, meeting, time, free, done, boss) stay English in
+  Latin script, only the grammar is Telugu/Hindi, native parts in native script
+  only, with worked examples and a formal-word blacklist. gpt-4.1-nano still
+  wrote wrong words (uncle for mom), leaked Hindi letters into Telugu and
+  romanized 2 of 5 Hindi replies, so non-English replies now use
+  `OPENROUTER_INDIC_MODEL` (default `google/gemini-2.5-flash`, $0.30/$2.50 per
+  M tokens vs nano's $0.10/$0.40); English stays on nano. Measured through the
+  real agent on an isolated database: Gemini 2/2 actions saved, 0 script leaks,
+  0 romanized, ~1.7s median first output in both languages; a routing check
+  confirmed te-IN and hi-IN go to Gemini and en-IN to nano. Offline tests
+  passed (agent_context_budget, openrouter_transport, identity_turn, smoke).
+  Android APK rebuilt and installed; not yet heard on the phone by the user.
+
 - **2026-09-19 — Speech recognition now listens in the selected language; Telugu
   recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed
   the selected language to the recognizer, so Whisper guessed per segment
