@@ -458,6 +458,22 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Typed laptop turns use DeepSeek v4-pro; bracketed element ids
+  accepted; Supabase `connectors` table created.** New
+  `OPENROUTER_DESKTOP_MODEL` (default `deepseek/deepseek-v4-pro`) applies to
+  typed turns when the computer-control tools are on; voice keeps nano
+  (English) / Gemini 2.5 Flash (Telugu/Hindi). Chosen on a 5-task multi-step
+  laptop benchmark (isolated DB, read-only tasks): v4-pro 5/5 (19s median),
+  gpt-4.1-mini 4/5, deepseek-v4-flash 3/5 (invented a line count); an
+  earlier 6-task easy set had nano 5/6 and most others 6/6. Live routing
+  check: typed -> v4-pro, English voice -> nano, Telugu voice -> Gemini, all
+  answers correct. The benchmark exposed `browser_click` failing on ids
+  written as `[e3.2]` (as inspection prints them); ElementRegistry now
+  strips brackets. The `connectors` table from `docs/supabase/connectors.sql`
+  was applied to the jarvis-sync project. Tests: agent_context_budget,
+  identity_turn, smoke, system_tools (109), connectors (30) pass. Android
+  rebuilt/installed with the connectors UI; desktop runs from source.
+
 - **2026-09-19 — Connectors, phase 2 (frontend): Settings > Connectors.**
   Sync passphrase, Google card (client id/secret, service toggles,
   Connect/Disconnect: the laptop backend opens Google's consent page in the

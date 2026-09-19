@@ -66,7 +66,15 @@ class ElementRegistry(Generic[T]):
         self._ever_issued.update(self._table)
         return list(self._table.keys())
 
+    @staticmethod
+    def _normalize(ref_id: str) -> str:
+        """Accept the id as printed: inspection output shows `[e3.2]`, and models
+        copy the brackets (a live `browser_click` on "[e3.2]" failed with
+        "does not exist" on 2026-09-19 while "e3.2" was valid)."""
+        return ref_id.strip().strip("[]").strip()
+
     def get(self, ref_id: str) -> T:
+        ref_id = self._normalize(ref_id)
         entry = self._table.get(ref_id)
         if entry is None:
             if ref_id in self._ever_issued:
@@ -81,7 +89,7 @@ class ElementRegistry(Generic[T]):
         return entry.value
 
     def describe(self, ref_id: str) -> str:
-        entry = self._table.get(ref_id)
+        entry = self._table.get(self._normalize(ref_id))
         return entry.summary if entry else ref_id
 
     def clear(self) -> None:

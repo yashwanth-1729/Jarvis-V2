@@ -215,6 +215,14 @@ class Settings(BaseSettings):
     #: Hindi replies; gemini-2.5-flash wrote natural Tenglish/Hinglish with
     #: 2/2 actions saved and the same ~1.7s first output. English stays on
     #: `openrouter_model`. Empty string = use `openrouter_model` for everything.
+    #: Model for typed turns on the laptop, where the 35 computer-control tools
+    #: are on and a turn is often a multi-step job. Chosen 2026-09-19 on a
+    #: 5-task multi-step laptop benchmark: deepseek-v4-pro 5/5 (19s median),
+    #: gpt-4.1-mini 4/5, deepseek-v4-flash 3/5 (invented a line count). Voice
+    #: turns keep the fast models. Empty = use `openrouter_model`.
+    openrouter_desktop_model: str = Field(
+        default="deepseek/deepseek-v4-pro", alias="OPENROUTER_DESKTOP_MODEL"
+    )
     openrouter_indic_model: str = Field(
         default="google/gemini-2.5-flash", alias="OPENROUTER_INDIC_MODEL"
     )

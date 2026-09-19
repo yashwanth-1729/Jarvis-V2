@@ -659,6 +659,11 @@ async def run_turn(
     # model writes stilted, sometimes wrong Telugu/Hindi (see config.py).
     if provider.name == "openrouter" and not is_english and settings.openrouter_indic_model:
         model = settings.openrouter_indic_model
+    # Typed laptop turns are where multi-step computer jobs happen; latency
+    # matters less there than finishing correctly (see config.py).
+    if (provider.name == "openrouter" and not voice and settings.system_tools_enabled
+            and settings.openrouter_desktop_model):
+        model = settings.openrouter_desktop_model
     max_tokens = settings.jarvis_voice_max_tokens if voice else None
 
     # OpenRouter-only: its built-in web-search plugin is a request-level

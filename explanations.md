@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Laptop model = DeepSeek v4-pro (typed), element-id fix
+
+- `OPENROUTER_DESKTOP_MODEL` in config.py; agent.run_turn applies it when
+  `not voice and system_tools_enabled`. Voice routing unchanged.
+- tools_automation_common.ElementRegistry._normalize strips `[ ]` around ids.
+- Supabase jarvis-sync: `public.connectors` created (RLS on, no policies).
+- Left for connectors: user creates the Google Cloud OAuth client and signs
+  in; test sync laptop <-> phone; desktop release build if wanted.
+
 ### 2026-09-19 · Claude Code · Connectors phase 2 (frontend)
 
 - New `frontend/src/lib/connectorCrypto.ts`, `lib/connectors.ts`,
