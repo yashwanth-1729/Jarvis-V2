@@ -135,7 +135,8 @@ Medium, worth doing:
   system instruction: ~87% cached, no writes, ~1-1.6s. cache_control is sent
   only for anthropic/ now; system->user-note conversion for google/+anthropic/.
 - Verified: desktop turns 40s apart + /generation costs; offline tests pass.
-  Left: phone re-test.
+  Phone re-test: Gemini rounds 1.1-1.5s (was ~4s); one 9.9s Google outlier.
+  Possible follow-up (not done): hedge slow chat rounds like TTS/STT.
 
 ### 2026-09-19 · Claude Code · Gemini cache fix: volatile system messages -> user notes
 

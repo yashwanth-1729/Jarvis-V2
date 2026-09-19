@@ -517,8 +517,10 @@ there is no background process automatically rewriting documentation.
   `cache_control` is now sent only for `anthropic/` models
   (`_EXPLICIT_CACHE_PREFIXES`); the system-to-user-note conversion stays for
   both (`_MERGED_SYSTEM_PREFIXES`). Offline: openrouter_transport (37),
-  agent_context_budget, smoke pass. APK rebuilt and installed; phone re-test
-  pending.
+  agent_context_budget, smoke pass. APK rebuilt and installed. Phone re-test
+  (Telugu, 6 turns incl. a search): Gemini rounds 1.1-1.5s first output
+  (was 3.4-4.7s), plain turns 1.1-1.3s think / ~2.6s to first audio; one
+  Google-side outlier of 9.9s (0 reasoning tokens) on a single call.
 
 - **2026-09-19 — Speech recognition now listens in the selected language; Telugu
   recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed
