@@ -458,6 +458,12 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Sign-in result page redesigned.** The page the browser lands
+  on after Google/MCP sign-in (`app/connectors/pages.py`) now uses JARVIS's
+  tokens and brand mark, shows the connected account and a chip per granted
+  service, animates a tick (reduced-motion respected), and has a failure
+  variant with Google's reason. Previewed both variants in the browser pane.
+
 - **2026-09-19 — Google connector verified live with the built-in client.**
   The user created a "Desktop app" OAuth client (project voice-agent-new) and
   it was installed as the git-ignored `builtin_google.json`. A real sign-in

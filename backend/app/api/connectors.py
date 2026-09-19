@@ -8,7 +8,6 @@ handed to another machine that merely found the port.
 
 from __future__ import annotations
 
-import html
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -16,6 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from app.connectors import google as g
 from app.connectors import mcp_oauth
+from app.connectors import pages
 from app.connectors import registry
 from app.core.config import settings
 
@@ -69,12 +69,6 @@ async def google_start(payload: dict[str, Any], request: Request) -> dict[str, A
     return {"state": state, "auth_url": url, "opened": opened}
 
 
-_PAGE = """<!doctype html><meta charset="utf-8"><title>JARVIS</title>
-<style>body{{font:16px system-ui;background:#0f1115;color:#e8e8e8;display:grid;place-items:center;height:100vh;margin:0}}
-div{{max-width:28rem;text-align:center}}h1{{font-size:1.3rem}}</style>
-<div><h1>{title}</h1><p>{body}</p></div>"""
-
-
 @router.get("/google/callback", response_class=HTMLResponse, include_in_schema=False)
 async def google_callback(request: Request, state: str = "", code: str | None = None,
                           error: str | None = None) -> HTMLResponse:
@@ -83,10 +77,16 @@ async def google_callback(request: Request, state: str = "", code: str | None = 
     try:
         await g.finish_sign_in(state, code, error)
     except g.GoogleError as exc:
-        return HTMLResponse(_PAGE.format(title="Sign-in expired", body=html.escape(str(exc))), status_code=400)
-    return HTMLResponse(_PAGE.format(
-        title="Google connected",
-        body="You can close this tab and go back to JARVIS.",
+        return HTMLResponse(pages.render(ok=False, title="Sign-in link expired", lead=str(exc)), status_code=400)
+    outcome = g._results.get(state)  # peek; the app collects it via /google/result
+    if isinstance(outcome, str) or outcome is None:
+        return HTMLResponse(pages.render(ok=False, title="Google was not connected",
+                                         lead=outcome or "The sign-in did not finish."), status_code=400)
+    labels = {"gmail": "Gmail", "calendar": "Calendar", "drive": "Drive"}
+    return HTMLResponse(pages.render(
+        ok=True, title="Google connected",
+        lead="JARVIS can now use your Google account. Sending mail or deleting events always asks you first.",
+        account=outcome.email, items=[labels.get(s, s) for s in outcome.services],
     ))
 
 
@@ -143,9 +143,18 @@ async def mcp_oauth_callback(request: Request, state: str = "", code: str | None
     try:
         await mcp_oauth.finish(state, code, error)
     except mcp_oauth.OAuthError as exc:
-        return HTMLResponse(_PAGE.format(title="Sign-in expired", body=html.escape(str(exc))), status_code=400)
-    return HTMLResponse(_PAGE.format(title="Server connected",
-                                     body="You can close this tab and go back to JARVIS."))
+        return HTMLResponse(pages.render(ok=False, title="Sign-in link expired", lead=str(exc)), status_code=400)
+    outcome = mcp_oauth._results.get(state)  # peek; the app collects it via /mcp/oauth/result
+    if not isinstance(outcome, dict):
+        return HTMLResponse(pages.render(ok=False, title="Server was not connected",
+                                         lead=outcome or "The sign-in did not finish."), status_code=400)
+    from urllib.parse import urlsplit
+
+    return HTMLResponse(pages.render(
+        ok=True, title="Server connected",
+        lead="JARVIS can now use this server's tools. Anything that changes data asks you first.",
+        account=urlsplit(str(outcome.get("resource", ""))).netloc,
+    ))
 
 
 @router.get("/mcp/oauth/result", summary="Collect an MCP sign-in outcome (once)")
