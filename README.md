@@ -458,6 +458,17 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Fixed: clicking anything found by `browser_inspect` failed.**
+  Inspect registered the parsed accessibility-snapshot dict instead of a
+  Playwright locator, so every inspect -> click failed with "'dict' object
+  has no attribute 'click'" (only `browser_find` ids worked). Each inspected
+  element now registers `get_by_role(role, name=exact).nth(k)`. Verified live:
+  inspect example.com, click `[e1.2]` "Learn more" -> iana.org "Example
+  Domains"; system_tools_test 109 passed. Live MCP discovery also checked
+  (read-only): Notion and Linear support one-click sign-in with automatic
+  registration; GitHub's MCP needs a personal access token (no automatic
+  registration).
+
 - **2026-09-19 — One-click connectors: MCP sign-in and a built-in Google
   client slot.** New `backend/app/connectors/mcp_oauth.py` implements the MCP
   authorization spec: discovery from the server's 401 / RFC 9728 metadata,

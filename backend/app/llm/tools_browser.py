@@ -434,7 +434,23 @@ async def browser_inspect(payload: BrowserInspectInput) -> tuple[bool, str]:
     limited = found[:MAX_ELEMENTS_SHOWN]
 
     registry = _registry_for(handle.tab_id)
-    refs = registry.reset([Ref(node, _describe(node)) for node in limited])
+    # Each id must map to something clickable. These used to register the
+    # parsed snapshot dict itself, so every inspect -> click failed with
+    # "'dict' object has no attribute 'click'" (found 2026-09-19 when every
+    # model failed "follow the link on example.com"). A role+name locator,
+    # disambiguated by its position among identical matches, is the element.
+    seen: dict[tuple[str, str], int] = {}
+    items: list[Ref] = []
+    for node in limited:
+        key = (node["role"], node["name"])
+        index = seen.get(key, 0)
+        seen[key] = index + 1
+        if node["name"]:
+            locator = handle.page.get_by_role(node["role"], name=node["name"], exact=True)  # type: ignore[attr-defined]
+        else:
+            locator = handle.page.get_by_role(node["role"])  # type: ignore[attr-defined]
+        items.append(Ref(locator.nth(index), _describe(node)))
+    refs = registry.reset(items)
     rows = [f"  [{ref}] {_describe(node)}" for ref, node in zip(refs, limited)]
 
     header = f"Page: {await handle.page.title()} ({handle.page.url})\n{len(found)} interactive element(s)"  # type: ignore[attr-defined]
