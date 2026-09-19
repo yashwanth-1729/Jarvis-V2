@@ -256,13 +256,16 @@ async def main() -> int:
     a, b = openrouter._conversation_session_id(), openrouter._conversation_session_id()
     check("session_id is stable between turns", a == b, f"{a} vs {b}")
 
-    # 9. Gemini gets a cache breakpoint on the persona and thinking off;
+    # 9. Gemini keeps volatile system text out of its cached prefix and has thinking off;
     #    OpenAI-family requests are left as they were.
     msgs = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"}]
     gem = openrouter._mark_cache_breakpoint("google/gemini-2.5-flash", msgs)
-    check("Gemini persona carries cache_control",
-          gem[0]["content"][0].get("cache_control") == {"type": "ephemeral"}
-          and gem[0]["content"][0]["text"] == "persona", str(gem[0]))
+    check("Gemini persona stays a plain string (implicit caching, no breakpoint)",
+          gem[0]["content"] == "persona", str(gem[0]))
+    claude = openrouter._mark_cache_breakpoint("anthropic/claude-sonnet-5", msgs)
+    check("Anthropic persona carries cache_control",
+          claude[0]["content"][0].get("cache_control") == {"type": "ephemeral"}
+          and claude[0]["content"][0]["text"] == "persona", str(claude[0]))
     check("the caller's messages are not mutated", msgs[0]["content"] == "persona")
     later = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"},
              {"role": "system", "content": "Time: 12:01"}]

@@ -508,6 +508,17 @@ there is no background process automatically rewriting documentation.
   earlier single-run miss not reproduced). Offline: openrouter_transport (36),
   agent_context_budget, identity_turn, smoke pass. APK rebuilt and installed;
   not yet re-tested on the phone.
+- **2026-09-19 — Gemini: implicit caching instead of an explicit breakpoint.**
+  The phone re-test after the clock fix still showed ~3.2-4.0s Google-side
+  per call, and `/generation` costs showed a new explicit cache created (and
+  storage billed) on almost every phone call. With the clock now out of the
+  system instruction, Gemini's implicit caching works: turns 40s apart gave
+  ~87% cached, no write charges, 1.0-1.6s first output on every turn. So
+  `cache_control` is now sent only for `anthropic/` models
+  (`_EXPLICIT_CACHE_PREFIXES`); the system-to-user-note conversion stays for
+  both (`_MERGED_SYSTEM_PREFIXES`). Offline: openrouter_transport (37),
+  agent_context_budget, smoke pass. APK rebuilt and installed; phone re-test
+  pending.
 
 - **2026-09-19 — Speech recognition now listens in the selected language; Telugu
   recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed

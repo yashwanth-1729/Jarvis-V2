@@ -384,13 +384,19 @@ class WebSearchRouter:
         return bool(cls._YEAR_RE.search(lowered))
 
 
-#: Model families whose caching needs an explicit `cache_control` breakpoint.
-#: Measured on google/gemini-2.5-flash, 2026-09-19, same 6.6k-token prefix:
-#: without a breakpoint 0, 0, then 6130 cached (implicit caching is luck);
-#: with one, 6587/6589 cached on every call. On the phone Telugu turns showed
-#: 0% cached across a whole session before this. OpenAI-family models cache
-#: automatically and keep plain string content.
-_EXPLICIT_CACHE_PREFIXES = ("google/", "anthropic/")
+#: Model families that merge every system message into one system
+#: instruction (OpenRouter does this for Gemini and Anthropic), so volatile
+#: system text there would invalidate the cached prefix. See
+#: _mark_cache_breakpoint.
+_MERGED_SYSTEM_PREFIXES = ("google/", "anthropic/")
+
+#: Of those, the families that cache only with an explicit `cache_control`
+#: breakpoint. Gemini is deliberately NOT here: measured 2026-09-19, an
+#: explicit breakpoint made OpenRouter/Google create (and bill storage for) a
+#: new cache on almost every phone call, ~3.2-4.0s each, while implicit caching
+#: -- once the clock was out of the system instruction -- gave ~87% cached,
+#: no write charges, 1.0-1.6s first output on every turn 40s apart.
+_EXPLICIT_CACHE_PREFIXES = ("anthropic/",)
 
 #: Prefix for system messages re-sent as user role (see _mark_cache_breakpoint),
 #: so the model never mistakes app context for something the user said.
@@ -400,10 +406,9 @@ _CONTEXT_NOTE = "[JARVIS system note -- app context, not spoken by the user]\n"
 def _mark_cache_breakpoint(
     model: str, messages: Sequence[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Put a cache breakpoint on the leading system message (the byte-stable
-    persona -- see agent._build_persona_message) for models that need one.
+    """Keep the cached prefix byte-stable for models that merge system messages.
 
-    For those same models, every *later* system message (the live state block
+    For ``_MERGED_SYSTEM_PREFIXES`` models, every *later* system message (the live state block
     with the clock, the per-turn voice reminder) is sent as a labelled user
     message instead. OpenRouter folds all system messages into Gemini's single
     system instruction, so the clock landed inside the cached block and every
@@ -411,9 +416,12 @@ def _mark_cache_breakpoint(
     2026-09-19 on the phone, Google spent 3.6-4.7s per call and billed cache
     storage every time. With the state changing on each call, sent as system:
     3.9/3.9/3.8/3.9s; sent as a user-role note: 3.9/1.2/0.8/0.8s.
+
+    ``_EXPLICIT_CACHE_PREFIXES`` models additionally get a cache breakpoint on
+    the leading system message (the persona, agent._build_persona_message).
     """
     out = list(messages)
-    if out and model.startswith(_EXPLICIT_CACHE_PREFIXES):
+    if out and model.startswith(_MERGED_SYSTEM_PREFIXES):
         out[1:] = [
             {"role": "user", "content": _CONTEXT_NOTE + m["content"]}
             if m.get("role") == "system" and isinstance(m.get("content"), str)

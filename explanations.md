@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Gemini: drop explicit cache_control, keep notes
+
+- Phone still created a new explicit Gemini cache per call (billed storage,
+  ~3.5s). Implicit caching now works because the clock is no longer in the
+  system instruction: ~87% cached, no writes, ~1-1.6s. cache_control is sent
+  only for anthropic/ now; system->user-note conversion for google/+anthropic/.
+- Verified: desktop turns 40s apart + /generation costs; offline tests pass.
+  Left: phone re-test.
+
 ### 2026-09-19 · Claude Code · Gemini cache fix: volatile system messages -> user notes
 
 - Root cause of ~4s Gemini rounds on the phone: OpenRouter merges ALL system
