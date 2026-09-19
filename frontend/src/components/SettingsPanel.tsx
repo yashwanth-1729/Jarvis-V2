@@ -1,5 +1,6 @@
 "use client";
 
+import { ConnectorsSection } from "@/components/ConnectorsSection";
 import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
 import * as React from "react";
 
@@ -831,6 +832,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </section>
+
+          {/* -- connectors: Google + MCP ----------------------------------- */}
+          <ConnectorsSection />
 
           {/* -- destructive, kept apart from everything else --------------- */}
           <section className="border-t border-line pt-5">

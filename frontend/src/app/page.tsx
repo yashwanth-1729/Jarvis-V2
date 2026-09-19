@@ -23,6 +23,7 @@ import {
   toggleTask,
 } from "@/lib/api";
 import { drainAgentStore, seedAgentStore, sendProviderKey } from "@/lib/agentBridge";
+import { refreshConnectors } from "@/lib/connectors";
 import { localDashboard } from "@/lib/localDashboard";
 import { syncNativeNotifications } from "@/lib/nativeNotifications";
 import { reportLocation } from "@/lib/geo";
@@ -184,6 +185,9 @@ export default function CommandCenterPage() {
             seedingRef.current = true;
             // Credentials first: the runtime cannot answer anything without
             // them, and both belong to the same first-contact handshake.
+            // Connectors (Google, MCP) travel separately: a slow MCP server
+            // must not hold up the keys or the board.
+            void refreshConnectors();
             void sendProviderKey()
               .then((acknowledged) => acknowledged && seedAgentStore())
               .then((seeded) => {

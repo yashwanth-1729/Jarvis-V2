@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Connectors phase 2 (frontend)
+
+- New `frontend/src/lib/connectorCrypto.ts`, `lib/connectors.ts`,
+  `components/ConnectorsSection.tsx` (in SettingsPanel above "Erase local
+  data"); page.tsx calls `refreshConnectors()` beside `sendProviderKey()`.
+- Connectors deliberately NOT in `SYNCED_TABLES` (agentBridge/localDashboard
+  iterate that list). Own sync against a Supabase `connectors` table, SQL in
+  `docs/supabase/connectors.sql` (not yet applied).
+- `.claude/launch.json` gained `jarvis-backend-isolated` (scratch DB, no
+  Supabase) for UI previews that must not touch real data.
+
 ### 2026-09-19 · Claude Code · Connectors phase 1 (backend) + laptop model benchmark
 
 - New `backend/app/connectors/` (google.py, mcp_client.py, registry.py) and

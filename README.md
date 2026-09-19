@@ -458,6 +458,26 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Connectors, phase 2 (frontend): Settings > Connectors.**
+  Sync passphrase, Google card (client id/secret, service toggles,
+  Connect/Disconnect: the laptop backend opens Google's consent page in the
+  real browser), and MCP servers (add by URL + optional auth header, or by
+  command on the laptop; Test lists tools; per-tool on/off; Remove).
+  `lib/connectorCrypto.ts` seals secrets with AES-256-GCM under a
+  PBKDF2-SHA-256 (310k) key from the passphrase; `lib/connectors.ts` keeps
+  connectors in localStorage with their own last-write-wins Supabase sync
+  (separate `connectors` table, `deleted` flag; kept out of the record sync
+  so the agent bridge and dashboard never see it) and hands the opened set to
+  `/api/connectors/configure` on every connect. Verified in a browser preview
+  against an isolated backend (throwaway DB, no Supabase): passphrase, add +
+  test + save a local MCP server, live chat turns (read-only tool ran; write
+  tool asked first), per-tool toggle, removal (runtime 0 tools, row marked
+  deleted, secret wiped); crypto round-trip / wrong-passphrase / unique
+  envelope checked in Node; `tsc` clean; connectors_test 30/30. **Pending:**
+  creating the Supabase `connectors` table (`docs/supabase/connectors.sql`),
+  the user's Google Cloud OAuth client and a live sign-in, and native
+  desktop/Android builds.
+
 - **2026-09-19 — Connectors, phase 1 (backend): built-in Google connector and
   MCP client.** New `backend/app/connectors/` (design: `docs/connectors.md`).
   Google: OAuth installed-app sign-in with PKCE via the local backend

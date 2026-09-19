@@ -7,6 +7,20 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "frontend",
       "port": 3000
+    },
+    {
+      "name": "jarvis-backend-isolated",
+      "runtimeExecutable": "D:/Jarvis-2.0/backend/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "cwd": "backend",
+      "port": 8000,
+      "env": {
+        "JARVIS_DB_PATH": "D:/tmp/claude/D--Jarvis-2-0/f4306a6f-6bcb-4160-93e4-51aa33420ac4/scratchpad/preview.db",
+        "JARVIS_SYNC_ENABLED": "false",
+        "JARVIS_SCHEDULER_ENABLED": "false",
+        "SUPABASE_URL": "",
+        "SUPABASE_SERVICE_KEY": ""
+      }
     }
   ]
 }

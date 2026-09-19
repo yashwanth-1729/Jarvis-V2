@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse
 
 from app.connectors import google as g
 from app.connectors import registry
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 
@@ -56,7 +57,15 @@ async def google_start(payload: dict[str, Any], request: Request) -> dict[str, s
         )
     except g.GoogleError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    return {"state": state, "auth_url": url}
+    opened = False
+    if not settings.jarvis_android:
+        # The desktop webview cannot be trusted to hand a URL to the real
+        # browser, and Google refuses sign-in inside embedded webviews anyway,
+        # so the backend -- a normal process on this machine -- opens it.
+        import webbrowser
+
+        opened = webbrowser.open(url)
+    return {"state": state, "auth_url": url, "opened": opened}
 
 
 _PAGE = """<!doctype html><meta charset="utf-8"><title>JARVIS</title>
