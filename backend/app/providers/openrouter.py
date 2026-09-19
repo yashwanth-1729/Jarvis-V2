@@ -564,10 +564,12 @@ class OpenRouterChat:
         # One line per model round, so a slow voice turn can be split into
         # "the model was slow" vs "a tool was slow" from the phone's log.
         logger.info(
-            "chat round: %s first-output %.2fs, complete %.2fs, tools_called=%d, cached=%s/%s",
-            requested_model, first_at or 0.0, time.perf_counter() - started,
+            "chat round: %s via %s headers %.2fs, first-output %.2fs, complete %.2fs, "
+            "tools_called=%d, cached=%s/%s, gen=%s",
+            requested_model, state.upstream or "?", state.headers_at or 0.0,
+            first_at or 0.0, time.perf_counter() - started,
             len(calls), (state.usage or {}).get("cached_tokens"),
-            (state.usage or {}).get("prompt_tokens"),
+            (state.usage or {}).get("prompt_tokens"), state.generation_id,
         )
 
     async def _stream_once(
@@ -575,10 +577,12 @@ class OpenRouterChat:
     ) -> AsyncIterator[ChatChunk]:
         """One streaming attempt; accumulates into `state`, yields only real
         chunks, so the caller's "anything yielded yet?" check is exact."""
+        sent = time.perf_counter()
         async with _http().stream(
             "POST", "/chat/completions", json=payload, headers=_headers(),
             timeout=_timeout(settings.openrouter_chat_timeout),
         ) as response:
+            state.headers_at = time.perf_counter() - sent
             if response.status_code >= 400:
                 await response.aread()
                 if response.status_code == 429 or response.status_code >= 500:
@@ -596,6 +600,10 @@ class OpenRouterChat:
                 except json.JSONDecodeError:
                     continue
 
+                if not state.generation_id and event.get("id"):
+                    state.generation_id = str(event["id"])
+                if not state.upstream and event.get("provider"):
+                    state.upstream = str(event["provider"])
                 if event.get("usage"):
                     state.usage = _extract_usage(event["usage"])
 
@@ -642,6 +650,12 @@ class _StreamState:
         self.announced: set[int] = set()
         self.finish_reason: str | None = None
         self.usage: dict[str, int] = {}
+        #: Diagnostics for the per-round log: when response headers arrived
+        #: (network + OpenRouter queueing), the generation id (look up server
+        #: side latency via GET /generation?id=...), and the upstream provider.
+        self.headers_at: float | None = None
+        self.generation_id: str = ""
+        self.upstream: str = ""
 
 
 class _RetryableStatus(Exception):
