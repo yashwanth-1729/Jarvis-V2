@@ -234,9 +234,26 @@ class Settings(BaseSettings):
     #: Live-confirmed (2026-09-16) real model id on OpenRouter's
     #: /audio/transcriptions -- transcribed successfully and came back at
     #: ~44% of plain whisper-large-v3's cost for the same clip.
+    #: Grok STT since 2026-09-19. Measured on the same Telugu clips: Whisper
+    #: Turbo 19% accurate even with the language set (3% without -- one clip
+    #: came back as French), Whisper large-v3 56%, Grok STT 100%,
+    #: gpt-transcribe 99%; Hindi and English 94-99% on all of them. Grok is
+    #: also the cheapest of the accurate ones (~$0.10/hour of speech).
     openrouter_stt_model: str = Field(
-        default="openai/whisper-large-v3-turbo", alias="OPENROUTER_STT_MODEL"
+        default="x-ai/grok-stt-1.0", alias="OPENROUTER_STT_MODEL"
     )
+    #: Used when the main recognizer is down. A different vendor on purpose:
+    #: xAI also serves the Hindi/Telugu voices, so one xAI outage must not take
+    #: out both hearing and speaking.
+    openrouter_stt_fallback_model: str = Field(
+        default="openai/gpt-transcribe", alias="OPENROUTER_STT_FALLBACK_MODEL"
+    )
+    #: Transcribe in the language the user selected instead of letting the
+    #: recognizer guess, and never auto-switch the session language from what
+    #: it heard. Both caused live misfires: an unset language let Whisper
+    #: transcribe Telugu as French/Tamil/Hindi, and the auto-switch's
+    #: confidence guard never ran because OpenRouter reports no confidence.
+    jarvis_voice_strict_language: bool = Field(default=True, alias="JARVIS_VOICE_STRICT_LANGUAGE")
     #: Playback-rate multiplier sent to Kokoro/Grok's own `speed` parameter on
     #: every /audio/speech call. Confirmed live (2026-09-16): 1.3 measurably
     #: shortened identical text from 3.85s to 3.15s, so the vendor genuinely

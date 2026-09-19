@@ -631,11 +631,23 @@ class OpenRouterSTT:
         content_type: str = "audio/webm",
         language_code: str | None = None,
     ) -> Transcript:
+        try:
+            return await self._transcribe(self.model, audio, filename, language_code)
+        except (ProviderUnavailable, ProviderRateLimited) as exc:
+            fallback = settings.openrouter_stt_fallback_model
+            if not fallback or fallback == self.model:
+                raise
+            logger.warning("STT %s failed (%s); using fallback %s", self.model, exc, fallback)
+            return await self._transcribe(fallback, audio, filename, language_code)
+
+    async def _transcribe(
+        self, model: str, audio: bytes, filename: str, language_code: str | None,
+    ) -> Transcript:
         import base64 as _b64
 
         fmt = filename.rsplit(".", 1)[-1] if "." in filename else "webm"
         payload: dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "input_audio": {"data": _b64.b64encode(audio).decode("ascii"), "format": fmt},
         }
         if language_code:

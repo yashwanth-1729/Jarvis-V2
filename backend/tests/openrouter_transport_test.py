@@ -222,6 +222,25 @@ async def main() -> int:
     check("Gemini audio is wrapped as WAV", speech.content_type == "audio/wav" and speech.audio[:4] == b"RIFF",
           speech.content_type)
 
+    # 6h. STT: language is passed through, and an xAI outage falls back to
+    #     the other vendor's recognizer.
+    settings.openrouter_stt_model = "x-ai/grok-stt-1.0"
+    settings.openrouter_stt_fallback_model = "openai/gpt-transcribe"
+
+    def xai_down(request, n):
+        body = json.loads(request.content)
+        if body["model"].startswith("x-ai/"):
+            return httpx.Response(502, json={"error": {"message": "bad gateway"}})
+        return httpx.Response(200, json={"text": "సరే బాస్"})
+
+    seen = install(xai_down)
+    transcript = await OpenRouterSTT().transcribe(b"\x00" * 64, filename="a.wav", language_code="te-IN")
+    bodies = [json.loads(r.content) for r in seen]
+    check("STT falls back to the other vendor on an outage", transcript.text == "సరే బాస్" and bodies[-1]["model"] == "openai/gpt-transcribe",
+          str([b["model"] for b in bodies]))
+    check("the selected language reaches every STT request", all(b.get("language") == "te" for b in bodies),
+          str([b.get("language") for b in bodies]))
+
     # 7. One pool for every stage, with a real keep-alive.
     openrouter._test_transport = None
     openrouter._client = None

@@ -458,6 +458,23 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Speech recognition now listens in the selected language; Telugu
+  recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed
+  the selected language to the recognizer, so Whisper guessed per segment
+  (the same Telugu clip came back as French, Tamil script, Hindi script, or an
+  English translation), and the language auto-switch then changed the whole
+  session to the wrong guess -- its confidence guard never ran because
+  OpenRouter reports no confidence. New `JARVIS_VOICE_STRICT_LANGUAGE` (default
+  on) passes the session language to every transcription (websocket and
+  `/api/voice/transcribe`) and disables the auto-switch. Measured on the same
+  Telugu clips: Whisper Turbo 3% (no language) / 19% (with), Whisper large-v3
+  56%, **Grok STT 100%**, gpt-transcribe 99%, gpt-4o(-mini)-transcribe 97-98%,
+  Deepgram Nova-3 99%, Chirp 3 90%, MAI-Transcribe-2 92%; Hindi and English
+  90-99% on the accurate ones. Default STT is now `x-ai/grok-stt-1.0`
+  (~$0.10/hour of speech) with `openai/gpt-transcribe` as a different-vendor
+  fallback (`OPENROUTER_STT_FALLBACK_MODEL`) -- exercised live when a
+  congested connection timed out on xAI. 27 transport checks pass.
+
 - **2026-09-19 — Hindi now speaks with Grok Voice; backup voices for Hindi and
   Telugu.** A native speaker said Hindi sounded "Englishish": the cause was
   Kokoro's American `af_sky` voice reading Hindi with English pronunciation

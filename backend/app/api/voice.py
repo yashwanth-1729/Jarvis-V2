@@ -184,7 +184,9 @@ async def transcribe(
             audio,
             filename=file.filename or "audio.webm",
             content_type=file.content_type or "application/octet-stream",
-            language_code=language_code,
+            language_code=language_code or (
+                await speech.current_language() if settings.jarvis_voice_strict_language else None
+            ),
         )
     except ProviderError as exc:
         logger.warning("Transcription failed: %s", exc)

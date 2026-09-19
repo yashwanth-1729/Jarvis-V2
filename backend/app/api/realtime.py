@@ -814,7 +814,14 @@ class VoiceSession:
             await self.send({"type": "progress", "stage": "recognizing"})
             async with asyncio.timeout(RECOGNITION_TIMEOUT_SECONDS):
                 result = await stt.transcribe(
-                    audio, filename="segment.wav", content_type="audio/wav"
+                    audio, filename="segment.wav", content_type="audio/wav",
+                    # The language the user picked, not a guess -- see
+                    # `jarvis_voice_strict_language`.
+                    language_code=(
+                        self.language
+                        if settings.jarvis_voice_strict_language and self.language != AUTO_DETECT
+                        else None
+                    ),
                 )
         except ProviderOutOfCredit as exc:
             # Every spoken segment hits transcription, so an empty account
@@ -845,7 +852,8 @@ class VoiceSession:
         text, finished = strip_stop_word(result.text)
         if text:
             self._heard.append(text)
-            await self._follow_spoken_language(result)
+            if not settings.jarvis_voice_strict_language:
+                await self._follow_spoken_language(result)
 
         # Echo the running transcript so the screen keeps up with the speaker.
         combined = " ".join(self._heard).strip()
