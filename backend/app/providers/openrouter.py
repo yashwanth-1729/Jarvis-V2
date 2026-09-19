@@ -392,13 +392,34 @@ class WebSearchRouter:
 #: automatically and keep plain string content.
 _EXPLICIT_CACHE_PREFIXES = ("google/", "anthropic/")
 
+#: Prefix for system messages re-sent as user role (see _mark_cache_breakpoint),
+#: so the model never mistakes app context for something the user said.
+_CONTEXT_NOTE = "[JARVIS system note -- app context, not spoken by the user]\n"
+
 
 def _mark_cache_breakpoint(
     model: str, messages: Sequence[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Put a cache breakpoint on the leading system message (the byte-stable
-    persona -- see agent._build_persona_message) for models that need one."""
+    persona -- see agent._build_persona_message) for models that need one.
+
+    For those same models, every *later* system message (the live state block
+    with the clock, the per-turn voice reminder) is sent as a labelled user
+    message instead. OpenRouter folds all system messages into Gemini's single
+    system instruction, so the clock landed inside the cached block and every
+    turn that crossed a minute boundary created a brand-new cache: measured
+    2026-09-19 on the phone, Google spent 3.6-4.7s per call and billed cache
+    storage every time. With the state changing on each call, sent as system:
+    3.9/3.9/3.8/3.9s; sent as a user-role note: 3.9/1.2/0.8/0.8s.
+    """
     out = list(messages)
+    if out and model.startswith(_EXPLICIT_CACHE_PREFIXES):
+        out[1:] = [
+            {"role": "user", "content": _CONTEXT_NOTE + m["content"]}
+            if m.get("role") == "system" and isinstance(m.get("content"), str)
+            else m
+            for m in out[1:]
+        ]
     if (
         out
         and model.startswith(_EXPLICIT_CACHE_PREFIXES)

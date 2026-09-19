@@ -264,6 +264,15 @@ async def main() -> int:
           gem[0]["content"][0].get("cache_control") == {"type": "ephemeral"}
           and gem[0]["content"][0]["text"] == "persona", str(gem[0]))
     check("the caller's messages are not mutated", msgs[0]["content"] == "persona")
+    later = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"},
+             {"role": "system", "content": "Time: 12:01"}]
+    moved = openrouter._mark_cache_breakpoint("google/gemini-2.5-flash", later)
+    check("Gemini: later system messages become labelled user notes (clock out of the cache)",
+          moved[2]["role"] == "user" and moved[2]["content"].endswith("Time: 12:01")
+          and moved[2]["content"].startswith("[JARVIS system note"), str(moved[2]))
+    check("the leading persona stays the system message", moved[0]["role"] == "system")
+    check("OpenAI-family keeps later system messages as system",
+          openrouter._mark_cache_breakpoint("openai/gpt-4.1-nano", later)[2]["role"] == "system")
     check("OpenAI-family messages stay plain strings",
           openrouter._mark_cache_breakpoint("openai/gpt-4.1-nano", msgs) == msgs)
     bodies = []

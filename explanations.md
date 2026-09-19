@@ -128,6 +128,19 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Gemini cache fix: volatile system messages -> user notes
+
+- Root cause of ~4s Gemini rounds on the phone: OpenRouter merges ALL system
+  messages into Gemini's system instruction, so the state block's clock broke
+  the explicit cache every minute (new cache + storage charge per call).
+- `_mark_cache_breakpoint` now also re-sends later system messages as
+  labelled user notes for google/ and anthropic/ models. OpenAI path unchanged.
+- If you add a system message after the persona, it is fine: it is converted
+  for Gemini automatically. Do not put volatile text in the persona.
+- Verified: raw A/B, agent turns across minute boundaries with /generation cost
+  checks, tool reliability A/B 9/9 vs 9/9; offline tests pass. Left: phone test;
+  cache expires ~5 min after creation (one slow turn per 5 min).
+
 ### 2026-09-19 · Claude Code · Gemini prompt caching (cache_control breakpoint)
 
 - `openrouter.py`: `_mark_cache_breakpoint` wraps the leading system message

@@ -493,6 +493,21 @@ there is no background process automatically rewriting documentation.
   so the next phone log shows which round is slow. Also seen: Telugu queries
   hit English Wikipedia and get the wrong article for the knowledge card
   (results panel currently off; DuckDuckGo results the model reads are fine).
+- **2026-09-19 — Gemini turns ~1s again: the clock was breaking its cache.**
+  Per-round logs plus OpenRouter's `/generation` records showed Google itself
+  spending 3.6-4.7s on every phone call and billing cache storage each time:
+  OpenRouter folds every system message into Gemini's single system
+  instruction, so the live state block (with the clock) sat inside the cached
+  block and each turn that crossed a minute built a new cache. For `google/`
+  and `anthropic/` models, system messages after the persona are now sent as
+  user-role notes labelled `[JARVIS system note -- app context, not spoken by
+  the user]`. Measured with the state changing each call: as system
+  3.9/3.9/3.8/3.9s, as notes 3.9/1.2/0.8/0.8s; real agent turns 40s apart:
+  0.9-1.6s with no cache-write charge, except one rebuild when the ~5 minute
+  cache expired (~3.5s). Tool reliability unchanged (9/9 saved either way; one
+  earlier single-run miss not reproduced). Offline: openrouter_transport (36),
+  agent_context_budget, identity_turn, smoke pass. APK rebuilt and installed;
+  not yet re-tested on the phone.
 
 - **2026-09-19 — Speech recognition now listens in the selected language; Telugu
   recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed
