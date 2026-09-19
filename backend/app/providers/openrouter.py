@@ -203,6 +203,7 @@ def _conversation_session_id() -> str:
 
 async def _post_with_retry(
     url: str, json_body: dict[str, Any], *, read_timeout: float,
+    first_byte: asyncio.Event | None = None,
 ) -> httpx.Response:
     """One retry on a transport failure, one on a transient status (429/5xx).
 
@@ -212,21 +213,24 @@ async def _post_with_retry(
     is a stable rejection (bad payload/model/key) a retry cannot fix.
     """
     try:
-        response = await _post_timed(url, json_body, read_timeout)
+        response = await _post_timed(url, json_body, read_timeout, first_byte)
     except _TRANSPORT_ERRORS as exc:
         logger.warning("OpenRouter %s failed (%s); retrying once", url, _describe(exc))
-        return await _post_timed(url, json_body, read_timeout)
+        return await _post_timed(url, json_body, read_timeout, first_byte)
 
     if response.status_code == 429 or response.status_code >= 500:
         logger.warning(
             "OpenRouter %s returned %d; retrying once after backoff", url, response.status_code,
         )
         await asyncio.sleep(0.4)
-        return await _post_timed(url, json_body, read_timeout)
+        return await _post_timed(url, json_body, read_timeout, first_byte)
     return response
 
 
-async def _post_timed(url: str, json_body: dict[str, Any], read_timeout: float) -> httpx.Response:
+async def _post_timed(
+    url: str, json_body: dict[str, Any], read_timeout: float,
+    first_byte_event: asyncio.Event | None = None,
+) -> httpx.Response:
     """POST and read the whole body, recording time-to-first-byte separately.
 
     The audio endpoints answer with a chunked body, so first-byte vs last-byte
@@ -242,6 +246,8 @@ async def _post_timed(url: str, json_body: dict[str, Any], read_timeout: float) 
     started = time.perf_counter()
     response = await client.send(request, stream=True)
     first_byte = time.perf_counter() - started
+    if first_byte_event is not None:
+        first_byte_event.set()
     try:
         await response.aread()
     finally:
@@ -263,6 +269,11 @@ async def _hedged(label: str, attempt, hedge_after: float) -> httpx.Response:
     """Run `attempt()`; if it has not answered within `hedge_after`, fire an
     identical second request and take whichever succeeds first.
 
+    "Answered" means the first byte arrived, not the whole body: since
+    2026-09-19 a long Grok clip that starts in 0.7s but takes 3.9s to finish
+    no longer triggers a duplicate (7 of ~50 phone turns paid twice for
+    exactly that). `attempt` receives an Event it must set on first byte.
+
     For the audio endpoints only, where the tail is the problem: identical
     requests measured 0.8s one moment and 13s the next (a live voice turn sat
     silent 13s waiting on one TTS call while direct probes took ~1.5s). A
@@ -272,14 +283,20 @@ async def _hedged(label: str, attempt, hedge_after: float) -> httpx.Response:
     Never used for chat: that stream drives tool calls and would double-bill
     a large prompt.
     """
-    tasks: list[asyncio.Task] = [asyncio.create_task(attempt())]
+    began = asyncio.Event()
+    tasks: list[asyncio.Task] = [asyncio.create_task(attempt(began))]
     started = time.perf_counter()
+    waiter = asyncio.create_task(began.wait())
     try:
-        done, _ = await asyncio.wait(tasks, timeout=hedge_after)
-        if done:
-            return tasks[0].result()
-        logger.info("OpenRouter %s slow (>%.1fs); sending a hedge request", label, hedge_after)
-        tasks.append(asyncio.create_task(attempt()))
+        done, _ = await asyncio.wait(
+            [tasks[0], waiter], timeout=hedge_after, return_when=asyncio.FIRST_COMPLETED,
+        )
+        if tasks[0] in done or began.is_set():
+            # Audio has started arriving: a long clip still downloading is
+            # not a stall, and a duplicate would bill the whole clip twice.
+            return await tasks[0]
+        logger.info("OpenRouter %s slow (no first byte in %.1fs); sending a hedge request", label, hedge_after)
+        tasks.append(asyncio.create_task(attempt(asyncio.Event())))
         pending = set(tasks)
         fallback: httpx.Response | None = None
         error: BaseException | None = None
@@ -303,6 +320,7 @@ async def _hedged(label: str, attempt, hedge_after: float) -> httpx.Response:
         assert error is not None
         raise error
     finally:
+        waiter.cancel()
         for task in tasks:
             if not task.done():
                 task.cancel()
@@ -753,8 +771,9 @@ class OpenRouterSTT:
         try:
             response = await _hedged(
                 "STT",
-                lambda: _post_with_retry(
+                lambda began: _post_with_retry(
                     "/audio/transcriptions", payload, read_timeout=settings.openrouter_audio_timeout,
+                    first_byte=began,
                 ),
                 settings.openrouter_stt_hedge_seconds,
             )
@@ -841,8 +860,9 @@ class OpenRouterTTS:
         try:
             response = await _hedged(
                 "TTS",
-                lambda: _post_with_retry(
+                lambda began: _post_with_retry(
                     "/audio/speech", payload, read_timeout=settings.openrouter_audio_timeout,
+                    first_byte=began,
                 ),
                 settings.openrouter_tts_hedge_seconds,
             )

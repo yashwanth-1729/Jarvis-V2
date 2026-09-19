@@ -128,6 +128,21 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Cost cuts (web plugin, hedging, reply length) + laptop agent check
+
+- `OPENROUTER_WEB_PLUGIN` (default off) gates OpenRouter's paid web plugin in
+  agent.run_turn; search.search retries once on empty DuckDuckGo results.
+- `_hedged` now hedges only if no first byte arrived (attempt receives an
+  Event set in `_post_timed`); long clips no longer billed twice.
+- prompts.py: voice replies one sentence when enough, two max.
+- Laptop agent live check (read-only tasks, isolated DB): nano succeeds but is
+  slow (18-33s), calls get_weather on unrelated "right now" questions (the
+  get_weather description's "ALWAYS call this" wording), and answered from
+  stale memory when DDG returned nothing. Gemini (Telugu/Hindi path) gives up
+  after one error and hallucinated. Model benchmark for laptop tool turns is
+  next; MCP + connectors (custom servers + Google; definitions AND encrypted
+  tokens synced, per the user) after that.
+
 ### 2026-09-19 · Claude Code · Gemini: drop explicit cache_control, keep notes
 
 - Phone still created a new explicit Gemini cache per call (billed storage,

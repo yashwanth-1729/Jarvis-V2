@@ -458,6 +458,23 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-19 — Cost cuts: paid web plugin off, voice backups only on real
+  stalls, one-sentence spoken replies.** Key usage was $1.17 of $5 ($0.50 in
+  one day, much of it test runs). Three leaks fixed: (1) OpenRouter's paid
+  web-search plugin ($0.014/request on Gemini, $0.01 on nano, charged every
+  round) switched on for any "weather", "right now", "latest", "news" or
+  "current" -- now `OPENROUTER_WEB_PLUGIN` (default off); JARVIS's own free
+  `get_weather`/`web_search` cover it, and DuckDuckGo search now retries once
+  on an empty page. (2) Audio hedging fired when a clip had not *finished* in
+  2.5s, so long Grok sentences (0.7s to start, ~3.9s to finish) were billed
+  twice (7 of ~50 phone turns); it now fires only when no first byte arrived.
+  (3) Voice replies: one sentence when that covers it, two at most, no
+  restating details (Grok TTS is $15/M characters, the largest per-turn
+  cost). Measured on Gemini through the real agent: Telugu and Hindi 4/4
+  actions saved, 0 script leaks, one-sentence replies. Offline:
+  openrouter_transport (39, 2 new), agent_context_budget, identity_turn, smoke
+  pass. Desktop uses these on next backend start; Android rebuilt/installed.
+
 - **2026-09-19 — Telugu/Hindi replies: casual Tenglish/Hinglish, answered by
   Gemini 2.5 Flash.** A native speaker said Telugu replies felt "over Telugu",
   ungrammatical, and full of bookish words. The reply-language instructions

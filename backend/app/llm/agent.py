@@ -671,7 +671,10 @@ async def run_turn(
     if provider.name == "openrouter":
         from app.providers.openrouter import WebSearchRouter
 
-        extra_stream_kwargs["enable_web_search"] = WebSearchRouter.needs_live_information(user_text)
+        extra_stream_kwargs["enable_web_search"] = (
+            settings.openrouter_web_plugin
+            and WebSearchRouter.needs_live_information(user_text)
+        )
     stream_typed = not voice and len(user_text) >= settings.jarvis_typed_stream_chars
     if stream_typed:
         logger.info("Large typed prompt (%d chars): using progressive output", len(user_text))

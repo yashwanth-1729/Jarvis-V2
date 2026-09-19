@@ -275,6 +275,12 @@ class Settings(BaseSettings):
     #: Max results the `web` plugin fetches per search-enabled turn (OpenRouter
     #: default is 5; kept explicit so it is a knob, not a hidden default).
     openrouter_web_max_results: int = Field(default=5, alias="OPENROUTER_WEB_MAX_RESULTS")
+    #: OpenRouter's paid built-in web-search plugin. Off since 2026-09-19: it is
+    #: billed per request ($0.014 on Gemini 2.5 Flash, $0.01 on gpt-4.1-nano),
+    #: on every round of a turn, and it switched on for any "weather", "right
+    #: now", "latest", "news" or "current" -- ~10x the rest of the turn -- while
+    #: JARVIS's own free get_weather and web_search tools cover the same ground.
+    openrouter_web_plugin: bool = Field(default=False, alias="OPENROUTER_WEB_PLUGIN")
 
     #: DeepInfra hosts both the cloud STT (Whisper) and English/Hindi TTS
     #: (Kokoro) used when jarvis_voice_stack="cloud". One key, two models.

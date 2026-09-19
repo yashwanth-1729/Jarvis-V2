@@ -21,6 +21,7 @@ Two caveats, stated here rather than discovered later:
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
@@ -83,6 +84,22 @@ def _unwrap(url: str) -> str:
 
 
 async def search(query: str, limit: int = 5) -> list[Result]:
+    """Web results for `query`, retried once if the first page comes back empty.
+
+    DuckDuckGo's HTML endpoint intermittently answers a real query with no
+    results (measured 2026-09-19: "python latest release" empty, the same
+    kind of query a moment later fine). This is now the only web search the
+    voice turn has -- OpenRouter's paid plugin is off by default -- so one
+    cheap retry is worth it before telling the model there was nothing.
+    """
+    results = await _search_once(query, limit)
+    if not results:
+        await asyncio.sleep(0.6)
+        results = await _search_once(query, limit)
+    return results
+
+
+async def _search_once(query: str, limit: int) -> list[Result]:
     async with httpx.AsyncClient(follow_redirects=True) as client:
         response = await client.post(
             SEARCH_URL,

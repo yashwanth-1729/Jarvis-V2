@@ -175,6 +175,20 @@ async def main() -> int:
     await asyncio.sleep(0.4)
     check("a fast TTS answer sends no hedge", len(seen) == 1, f"{len(seen)} calls")
 
+    # 6c'. A long clip that STARTS fast but takes a while to finish is not a
+    #      stall: no duplicate (that would bill the whole clip twice).
+    class _SlowBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"first-part-"
+            await asyncio.sleep(0.6)
+            yield b"rest"
+
+    seen = install(lambda r, n: httpx.Response(200, stream=_SlowBody()))
+    speech = await OpenRouterTTS().synthesize("A long sentence that takes a while to stream.")
+    check("a slow-to-finish but fast-to-start TTS clip sends no hedge",
+          len(seen) == 1 and speech.audio == b"first-part-rest", f"{len(seen)} calls, {speech.audio!r}")
+    check("the paid web plugin is off by default", settings.openrouter_web_plugin is False)
+
     # 6d. STT hedge works the same way.
     settings.openrouter_stt_hedge_seconds = 0.2
 
