@@ -525,12 +525,16 @@ class OpenRouterChat:
         # token costs at most a duplicate prompt charge, far better than the
         # dead 10-second turn the user heard live.
         attempt = 0
+        started = time.perf_counter()
+        first_at: float | None = None
         while True:
             attempt += 1
             state = _StreamState()
             emitted = False
             try:
                 async for chunk in self._stream_once(payload, state):
+                    if first_at is None:
+                        first_at = time.perf_counter() - started
                     emitted = True
                     yield chunk
                 break
@@ -556,6 +560,14 @@ class OpenRouterChat:
         self._result = ChatResult(
             content="".join(state.content), tool_calls=calls,
             finish_reason=state.finish_reason, usage=state.usage,
+        )
+        # One line per model round, so a slow voice turn can be split into
+        # "the model was slow" vs "a tool was slow" from the phone's log.
+        logger.info(
+            "chat round: %s first-output %.2fs, complete %.2fs, tools_called=%d, cached=%s/%s",
+            requested_model, first_at or 0.0, time.perf_counter() - started,
+            len(calls), (state.usage or {}).get("cached_tokens"),
+            (state.usage or {}).get("prompt_tokens"),
         )
 
     async def _stream_once(

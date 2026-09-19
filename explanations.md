@@ -139,6 +139,9 @@ Medium, worth doing:
   the breakpoint sits on it, so anything volatile there kills the cache.
 - Verified: live probes + real-agent timing; offline transport (33), budget,
   smoke pass. APK rebuilt/installed. Left: user re-test; cold first turn ~4s.
+- Phone re-test: search turns 8-10s (Gemini rounds ~4s on phone). Added a
+  `chat round:` INFO log per model call to find out why. Open: Telugu
+  queries go to English Wikipedia (wrong knowledge-card article).
 
 ### 2026-09-19 · Claude Code · Telugu/Hindi reply quality: Tenglish register + Gemini for non-English
 

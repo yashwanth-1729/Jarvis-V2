@@ -486,7 +486,13 @@ there is no background process automatically rewriting documentation.
   requests also send `reasoning` (thinking off unless the turn asked for an
   effort) as a guard; it reported 0 reasoning tokens either way. Offline:
   openrouter_transport (33, 6 new), agent_context_budget, smoke pass. APK
-  rebuilt and installed; not yet re-tested on the phone by the user.
+  rebuilt and installed. Phone re-test: 95% cached, but search turns still
+  took 8-10s to first audio (Gemini ~4s per round on the phone vs ~1s median
+  on desktop; the search itself ~1.5s). `OpenRouterChat` now logs one
+  `chat round:` line per model call (first output, complete, tools, cached)
+  so the next phone log shows which round is slow. Also seen: Telugu queries
+  hit English Wikipedia and get the wrong article for the knowledge card
+  (results panel currently off; DuckDuckGo results the model reads are fine).
 
 - **2026-09-19 — Speech recognition now listens in the selected language; Telugu
   recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed
