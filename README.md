@@ -473,7 +473,20 @@ there is no background process automatically rewriting documentation.
   0 romanized, ~1.7s median first output in both languages; a routing check
   confirmed te-IN and hi-IN go to Gemini and en-IN to nano. Offline tests
   passed (agent_context_budget, openrouter_transport, identity_turn, smoke).
-  Android APK rebuilt and installed; not yet heard on the phone by the user.
+  Android APK rebuilt and installed; the user confirmed on the phone that the
+  Telugu quality is now great.
+- **2026-09-19 — Gemini replies now cached (Telugu/Hindi cheaper and faster).**
+  The phone log showed 0% prompt-cache hits on every Telugu turn and 5-6s
+  "think" time. Gemini on OpenRouter caches reliably only with an explicit
+  `cache_control` breakpoint (probe: 0, 0, 6130 cached without; 6587/6589 on
+  every call with), so `OpenRouterChat` now marks the byte-stable persona
+  system message for `google/` and `anthropic/` models; OpenAI-family requests
+  are unchanged. Real agent turns then measured 97-99% cached and ~1.1-1.5s to
+  the first token when warm; a cold first turn after idle is still ~4s. Gemini
+  requests also send `reasoning` (thinking off unless the turn asked for an
+  effort) as a guard; it reported 0 reasoning tokens either way. Offline:
+  openrouter_transport (33, 6 new), agent_context_budget, smoke pass. APK
+  rebuilt and installed; not yet re-tested on the phone by the user.
 
 - **2026-09-19 — Speech recognition now listens in the selected language; Telugu
   recognition fixed (Grok STT).** Two bugs stacked: `realtime.py` never passed

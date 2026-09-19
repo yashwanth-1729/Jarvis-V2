@@ -128,6 +128,18 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-19 · Claude Code · Gemini prompt caching (cache_control breakpoint)
+
+- `openrouter.py`: `_mark_cache_breakpoint` wraps the leading system message
+  with `cache_control: ephemeral` for `google/` and `anthropic/` models (phone
+  showed 0% cache on Gemini Telugu turns; with it 97-99%). Gemini requests also
+  carry `reasoning` ({max_tokens: 0} unless an effort was asked) -- a guard
+  only, measured 0 reasoning tokens either way.
+- Keep the first system message byte-stable (agent._build_persona_message);
+  the breakpoint sits on it, so anything volatile there kills the cache.
+- Verified: live probes + real-agent timing; offline transport (33), budget,
+  smoke pass. APK rebuilt/installed. Left: user re-test; cold first turn ~4s.
+
 ### 2026-09-19 · Claude Code · Telugu/Hindi reply quality: Tenglish register + Gemini for non-English
 
 - `app/core/languages.py`: `reply_directive` / `reply_reminder` rewritten for

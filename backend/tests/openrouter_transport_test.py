@@ -256,6 +256,29 @@ async def main() -> int:
     a, b = openrouter._conversation_session_id(), openrouter._conversation_session_id()
     check("session_id is stable between turns", a == b, f"{a} vs {b}")
 
+    # 9. Gemini gets a cache breakpoint on the persona and thinking off;
+    #    OpenAI-family requests are left as they were.
+    msgs = [{"role": "system", "content": "persona"}, {"role": "user", "content": "hi"}]
+    gem = openrouter._mark_cache_breakpoint("google/gemini-2.5-flash", msgs)
+    check("Gemini persona carries cache_control",
+          gem[0]["content"][0].get("cache_control") == {"type": "ephemeral"}
+          and gem[0]["content"][0]["text"] == "persona", str(gem[0]))
+    check("the caller's messages are not mutated", msgs[0]["content"] == "persona")
+    check("OpenAI-family messages stay plain strings",
+          openrouter._mark_cache_breakpoint("openai/gpt-4.1-nano", msgs) == msgs)
+    bodies = []
+    def capture(request: httpx.Request, _n: int) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, content=sse({"choices": [{"delta": {"content": "ok"}}]}),
+                              headers={"content-type": "text/event-stream"})
+    install(capture)
+    await collect(OpenRouterChat(), model="google/gemini-2.5-flash")
+    await collect(OpenRouterChat(), model="google/gemini-2.5-flash", reasoning_effort="high")
+    await collect(OpenRouterChat(), model="openai/gpt-4.1-nano")
+    check("Gemini ordinary turns disable thinking", bodies[0].get("reasoning") == {"max_tokens": 0}, str(bodies[0].get("reasoning")))
+    check("Gemini reasoning turns keep their effort", bodies[1].get("reasoning") == {"effort": "high"}, str(bodies[1].get("reasoning")))
+    check("nano requests carry no reasoning field", "reasoning" not in bodies[2])
+
     await openrouter.close_shared_client()
 
     print("\n" + "=" * 60)

@@ -384,6 +384,40 @@ class WebSearchRouter:
         return bool(cls._YEAR_RE.search(lowered))
 
 
+#: Model families whose caching needs an explicit `cache_control` breakpoint.
+#: Measured on google/gemini-2.5-flash, 2026-09-19, same 6.6k-token prefix:
+#: without a breakpoint 0, 0, then 6130 cached (implicit caching is luck);
+#: with one, 6587/6589 cached on every call. On the phone Telugu turns showed
+#: 0% cached across a whole session before this. OpenAI-family models cache
+#: automatically and keep plain string content.
+_EXPLICIT_CACHE_PREFIXES = ("google/", "anthropic/")
+
+
+def _mark_cache_breakpoint(
+    model: str, messages: Sequence[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Put a cache breakpoint on the leading system message (the byte-stable
+    persona -- see agent._build_persona_message) for models that need one."""
+    out = list(messages)
+    if (
+        out
+        and model.startswith(_EXPLICIT_CACHE_PREFIXES)
+        and out[0].get("role") == "system"
+        and isinstance(out[0].get("content"), str)
+    ):
+        out[0] = {
+            **out[0],
+            "content": [
+                {
+                    "type": "text",
+                    "text": out[0]["content"],
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+        }
+    return out
+
+
 class OpenRouterChat:
     """Talks to OpenRouter. Pooled client, one instance per process (via
     ``get_chat_provider``/``get_english_chat_provider`` when the cloud stack
@@ -418,7 +452,7 @@ class OpenRouterChat:
         requested_model = model or self.model
         payload: dict[str, Any] = {
             "model": requested_model,
-            "messages": list(messages),
+            "messages": _mark_cache_breakpoint(requested_model, messages),
             "stream": incremental,
             "max_tokens": max_tokens or settings.jarvis_max_tokens,
             # OpenAI-compatible streaming omits `usage` from every chunk
@@ -439,6 +473,15 @@ class OpenRouterChat:
             payload["plugins"] = [
                 {"id": "web", "max_results": settings.openrouter_web_max_results}
             ]
+        # Gemini 2.5 may decide to think on its own, which would add latency and
+        # billed tokens to voice turns. Measured 2026-09-19 it reported 0
+        # reasoning tokens either way (the slow ~4s first rounds seen then were
+        # cold cache, fixed by `_mark_cache_breakpoint`), so this is a guard,
+        # not the fix. Turns agent.reasoning_effort_for flags keep their effort.
+        if requested_model.startswith("google/"):
+            payload["reasoning"] = (
+                {"effort": reasoning_effort} if reasoning_effort else {"max_tokens": 0}
+            )
 
         self._result = ChatResult()
 
