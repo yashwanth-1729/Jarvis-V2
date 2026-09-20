@@ -16,8 +16,13 @@ highlights and limited backdrop blur. Controls have 12-18px corners; large
 surfaces use 20-28px. No purple gradients, pill buttons, invented metrics or
 generated imagery. Light/dark/system themes remain available inside Settings.
 Motion communicates screen changes, pressed controls, selection and task status.
-There is no decorative continuous animation or scroll hijacking. Reduced motion
-and reduced transparency get explicit fallbacks.
+The user also requested soft continuous glass motion: the voice control floats
+4px over six seconds, its frame drifts slowly over twelve seconds, and highlights
+pass across it over ten/eleven seconds. The dock highlight slides in 580ms.
+Animations use compositor transforms/opacity, not animated blur. Ambient loops
+pause when the document is hidden or voice covers the home screen. There is no
+scroll hijacking. Reduced motion disables all motion; reduced transparency
+removes the moving highlights and switches glass to solid surfaces.
 
 `PocketVoice.tsx` is presentation only; VoiceMode owns the real audio session.
 It exposes language, applicable voice choices, mute/send, stop reply and barge-in.

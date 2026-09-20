@@ -2,6 +2,7 @@
    Layers: content 0, dock/header 2, notice 40, settings 50, record sheets 100.
    Radius scale: controls 12px, surfaces 22px, sheets 28px. No pill buttons. */
 .desk-shell {
+  --ease-fluid:cubic-bezier(.22,1,.36,1); --ease-touch:cubic-bezier(.18,.85,.25,1.12);
   --paper:#e5eeeb; --card:#f4f8f6; --soft:#d2e3de; --text:#173c35;
   --muted:#4c6c63; --rule:#bacfc7; --signal:#21624f; --signal-soft:#c5e6d8;
   --glass:rgba(246,251,248,.73); --shine:rgba(255,255,255,.8); --shadow:rgba(32,74,60,.12);
@@ -30,8 +31,8 @@
 }
 .desk-shell * { box-sizing:border-box; }
 .desk-shell button,.desk-shell input,.desk-shell select,.desk-shell textarea { font:inherit; }
-.desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform 180ms cubic-bezier(.2,.8,.2,1),background-color 160ms,color 160ms; }
-.desk-shell button:active:not(:disabled) { transform:scale(.965); }
+.desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform 420ms var(--ease-touch),background-color 280ms ease,color 280ms ease; }
+.desk-shell button:active:not(:disabled) { transform:scale(.977); transition-duration:120ms; }
 .desk-shell button:disabled { opacity:.55; cursor:wait; }
 .desk-shell :focus-visible { outline:2px solid var(--signal); outline-offset:4px; }
 .desk-shell svg { flex-shrink:0; }
@@ -56,10 +57,14 @@
 .pocket-voice-space { flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; padding:6px 0 20px; }
 .pocket-speak { width:210px; height:200px; display:grid; place-items:center; position:relative; flex-shrink:0; border-radius:22px; }
 .pocket-glass-ring { position:absolute; width:178px; height:164px; border-radius:45%; border:1px solid var(--shine); transform:rotate(-26deg); background:linear-gradient(135deg,var(--shine),transparent 44%,var(--soft)); box-shadow:inset 4px 5px 12px var(--shine),inset -10px -7px 28px var(--shadow),0 22px 42px var(--shadow); }
+.pocket-glass-ring { overflow:hidden; }
+.pocket-glass-ring::before { content:""; pointer-events:none; position:absolute; inset:-55%; background:linear-gradient(112deg,transparent 38%,var(--shine) 49%,transparent 61%); opacity:0; transform:translateX(-55%); }
 .pocket-glass-ring::after { content:""; position:absolute; inset:14px; border-radius:inherit; border:1px solid var(--shine); }
 .pocket-glass-core { position:relative; display:grid; place-items:center; width:104px; height:104px; border-radius:32px; color:var(--signal); background:var(--glass); border:1px solid var(--shine); box-shadow:inset 0 2px 5px var(--shine),0 8px 24px var(--shadow); backdrop-filter:blur(12px); transform:rotate(8deg); }
-.pocket-glass-core svg { transform:rotate(-8deg); }
-.pocket-speak:active .pocket-glass-core { transform:rotate(0) scale(.94); }
+.pocket-glass-core { overflow:hidden; transition:transform 650ms var(--ease-fluid); }
+.pocket-glass-core::before { content:""; position:absolute; inset:-65%; pointer-events:none; background:linear-gradient(115deg,transparent 42%,var(--shine) 51%,transparent 59%); opacity:0; }
+.pocket-glass-core svg { position:relative; transform:rotate(-8deg); }
+.pocket-speak:active .pocket-glass-core { transform:rotate(3deg) scale(.98); }
 .pocket-voice-space h2 { margin:10px 0 5px; font-size:32px; letter-spacing:-1.4px; font-weight:650; line-height:1.2; }
 .pocket-voice-space p { font-size:13px; color:var(--muted); }
 .pocket-assistant-actions { display:grid; gap:12px; }
@@ -70,10 +75,13 @@
 .pocket-context small { display:block; color:var(--muted); font-size:11px; margin-bottom:4px; }
 .pocket-context strong { display:block; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pocket-context time { font-size:13px; font-variant-numeric:tabular-nums; }
-.pocket-dock { z-index:2; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); flex-shrink:0; margin:2px 24px 0; padding:6px; border-radius:24px; }
+.pocket-dock { position:relative; z-index:2; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); flex-shrink:0; margin:2px 24px 0; padding:6px; border-radius:24px; }
+.pocket-dock-selection { position:absolute; top:6px; bottom:6px; left:6px; width:calc((100% - 12px) / 3); border-radius:18px; border:1px solid var(--shine); background:var(--signal-soft); box-shadow:inset 0 1px 0 var(--shine),0 3px 12px var(--shadow); transition:transform 580ms var(--ease-fluid); pointer-events:none; }
+.pocket-dock[data-space="assistant"] .pocket-dock-selection { transform:translateX(100%); }
+.pocket-dock[data-space="library"] .pocket-dock-selection { transform:translateX(200%); }
 .pocket-dock button { position:relative; display:flex; flex-direction:column; gap:4px; align-items:center; min-height:64px; padding:7px 2px; font-size:10px; font-weight:600; color:var(--muted); border-radius:17px; }
 .pocket-dock button > span { display:grid; place-items:center; height:25px; transition:transform 200ms; }
-.pocket-dock [aria-current="page"] { background:var(--signal); color:hsl(var(--accent-ink)); box-shadow:0 3px 8px var(--shadow); }
+.pocket-dock [aria-current="page"] { color:var(--signal); }
 .pocket-dock [aria-current="page"] > span { transform:translateY(-1px); }
 .pocket-day-summary { display:flex; align-items:center; gap:26px; padding:4px 0 22px; }
 .pocket-day-summary > div > span { display:block; font-size:12px; color:var(--muted); }
@@ -106,7 +114,7 @@
 .pocket-library-intro { font-size:26px; font-weight:550; letter-spacing:-1px; line-height:1.3; margin:10px 0 26px; }
 .pocket-books { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:26px 18px; padding:0 2px 20px; }
 .pocket-book { text-align:left; min-width:0; }
-.pocket-book-cover { display:flex; flex-direction:column; align-items:flex-start; position:relative; min-height:177px; border-radius:5px 20px 20px 5px; padding:26px 18px 18px 25px; border-left:7px solid var(--rule); transform:perspective(700px) rotateY(-8deg); transition:transform 240ms; }
+.pocket-book-cover { display:flex; flex-direction:column; align-items:flex-start; position:relative; min-height:177px; border-radius:5px 20px 20px 5px; padding:26px 18px 18px 25px; border-left:7px solid var(--rule); transform:perspective(700px) rotateY(-8deg); transition:transform 650ms var(--ease-fluid); }
 .pocket-book-cover::before { content:""; position:absolute; right:5px; left:3px; bottom:-5px; height:4px; border:1px solid var(--rule); border-radius:0 0 12px 2px; background:var(--card); }
 .pocket-book-cover > svg:first-child { margin:auto 0; color:var(--signal); }
 .pocket-book-cover > span { font-size:11px; margin-top:20px; color:var(--muted); }
@@ -258,18 +266,30 @@
   .pocket-book:hover .pocket-book-cover { transform:perspective(700px) rotateY(-14deg) translateY(-3px); }
 }
 @media(prefers-reduced-motion:no-preference) {
-  .pocket-screen { animation:pocket-enter 240ms cubic-bezier(.2,.7,.2,1) backwards; }
-  .pocket-dock [aria-current="page"] > span { animation:pocket-select 260ms ease-out; }
-  .pocket-glass-ring { animation:pocket-settle 650ms cubic-bezier(.2,.7,.2,1) both; }
-  .desk-task[data-done="true"] .desk-check > span { animation:pocket-select 260ms ease-out; }
+  .pocket-screen { animation:pocket-enter 460ms var(--ease-fluid) backwards; }
+  .pocket-assistant-actions > :first-child { animation:pocket-enter 560ms var(--ease-fluid) 70ms backwards; }
+  .pocket-assistant-actions > :last-child { animation:pocket-enter 560ms var(--ease-fluid) 130ms backwards; }
+  .pocket-dock [aria-current="page"] > span { animation:pocket-select 480ms var(--ease-fluid); }
+  .pocket-glass-ring { animation:pocket-drift 12s ease-in-out infinite; }
+  .pocket-glass-ring::before { animation:pocket-reflection 10s ease-in-out infinite; }
+  .pocket-speak .pocket-glass-core { animation:pocket-float 6s ease-in-out infinite; }
+  .pocket-glass-core::before { animation:pocket-reflection 11s ease-in-out 1.5s infinite; }
+  .pocket-book { animation:pocket-enter 540ms var(--ease-fluid) backwards; }
+  .pocket-book:nth-child(2n) { animation-delay:70ms; }
+  .pocket-book:nth-child(n+3) { animation-delay:120ms; }
+  .desk-task[data-done="true"] .desk-check > span { animation:pocket-select 420ms var(--ease-fluid); }
   .desk-spin { animation:pocket-spin 1s linear infinite; }
   .desk-loading { animation:pocket-load 1.3s ease-in-out infinite alternate; }
 }
+.desk-shell[data-motion-paused="true"] *,.desk-shell[data-motion-paused="true"] *::before,.desk-shell[data-motion-paused="true"] *::after,
+.desk-shell[data-voice-open="true"] .pocket-content *,.desk-shell[data-voice-open="true"] .pocket-content *::before { animation-play-state:paused!important; }
 @media(prefers-reduced-motion:reduce) { .desk-shell *,.desk-shell *::before,.desk-shell *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
-@media(prefers-reduced-transparency:reduce) { .desk-shell .glass,.pocket-glass-core,.pocket-glass-ring { background:var(--card); backdrop-filter:none; -webkit-backdrop-filter:none; } }
+@media(prefers-reduced-transparency:reduce) { .desk-shell .glass,.pocket-glass-core,.pocket-glass-ring { background:var(--card); backdrop-filter:none; -webkit-backdrop-filter:none; } .pocket-glass-ring::before,.pocket-glass-core::before { display:none; } }
 @supports not (backdrop-filter:blur(1px)) { .desk-shell .glass { background:var(--card); } }
-@keyframes pocket-enter { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
-@keyframes pocket-select { 0% { transform:scale(.82); } 65% { transform:scale(1.08); } 100% { transform:scale(1); } }
-@keyframes pocket-settle { from { opacity:0; transform:rotate(-38deg) scale(.88); } to { opacity:1; transform:rotate(-26deg) scale(1); } }
+@keyframes pocket-enter { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:none; } }
+@keyframes pocket-select { 0% { transform:translateY(2px) scale(.94); } 100% { transform:translateY(-1px) scale(1); } }
+@keyframes pocket-drift { 0%,100% { transform:rotate(-26deg) translateY(0); } 50% { transform:rotate(-17deg) translateY(-4px); } }
+@keyframes pocket-float { 0%,100% { translate:0 0; } 50% { translate:0 -4px; } }
+@keyframes pocket-reflection { 0%,18% { transform:translateX(-58%) rotate(-8deg); opacity:0; } 40% { opacity:.55; } 68%,100% { transform:translateX(58%) rotate(8deg); opacity:0; } }
 @keyframes pocket-spin { to { transform:rotate(360deg); } }
 @keyframes pocket-load { from { opacity:.4; } to { opacity:.8; } }

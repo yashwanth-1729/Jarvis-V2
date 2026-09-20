@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-20 · Codex · Softer glass motion
+
+- User requested softer, more continuous glass animation. Added slow bounded
+  voice-control drift/float/reflections, a shared sliding dock highlight,
+  slower eased presses and staggered screen controls. Scope remains /mobile/.
+- Ambient animation pauses on visibilitychange and behind voice mode. Reduced
+  motion/transparency still respected. No new dependencies or engine changes.
+- TypeScript and diff checks passed; browser confirmed 12s live drift, 580ms
+  dock transition, navigation and no 390px overflow. No new APK build/install.
+  Prior untracked Android launch config remains untouched.
+
 ### 2026-09-20 · Codex · Replace mobile dashboard with pocket application
 
 - User rejected the previous UI as a recolor and explicitly requested a full

@@ -33,11 +33,18 @@ export function MobileDesk() {
   const [notebook, setNotebook] = React.useState("notes-long-term");
   const [chatVisited, setChatVisited] = React.useState(false);
   const [voiceNotice, setVoiceNotice] = React.useState(false);
+  const [motionPaused, setMotionPaused] = React.useState(false);
   const [theme, setTheme] = React.useState<"system" | "light" | "dark">("system");
   const date = useClock();
   const contentRef = React.useRef<HTMLElement>(null);
   const headingRef = React.useRef<HTMLHeadingElement>(null);
   const firstRender = React.useRef(true);
+  React.useEffect(() => {
+    const update = () => setMotionPaused(document.hidden);
+    update();
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
   React.useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
     if (firstRender.current) { firstRender.current = false; return; }
@@ -51,7 +58,7 @@ export function MobileDesk() {
   const mode = { local: app.recordsLocal };
   const title = screen ? SCREEN_TITLE[screen] : space === "assistant" ? "JARVIS" : space === "day" ? "My day" : "Library";
   const ready = !app.loading && app.status !== "offline" && !app.localOnly;
-  return <div className="desk-shell" data-theme={theme}>
+  return <div className="desk-shell" data-theme={theme} data-motion-paused={motionPaused} data-voice-open={app.voiceOpen}>
     <a className="desk-skip" href="#desk-content">Skip to content</a>
     <div className="desk-app">
       <header className="pocket-header">
@@ -75,7 +82,7 @@ export function MobileDesk() {
           </>)}
         </div>}
       </main>
-      {!screen && <nav className="pocket-dock glass" aria-label="Main navigation">{SPACES.map(({ id, label, icon: Icon }) => <button key={id} aria-current={space === id ? "page" : undefined} onClick={() => setSpace(id)}><span><Icon size={22} strokeWidth={1.7} /></span>{label}</button>)}</nav>}
+      {!screen && <nav className="pocket-dock glass" data-space={space} aria-label="Main navigation"><span className="pocket-dock-selection" aria-hidden="true" />{SPACES.map(({ id, label, icon: Icon }) => <button key={id} aria-current={space === id ? "page" : undefined} onClick={() => setSpace(id)}><span><Icon size={22} strokeWidth={1.7} /></span>{label}</button>)}</nav>}
     </div>
     {voiceNotice && <div className="desk-notice glass" role="status"><Mic size={22} /><div><strong>Voice is not ready yet</strong><p>Check your connection and credentials in Settings, then allow microphone access.</p><button className="desk-text-button" onClick={() => { setVoiceNotice(false); app.setSettingsOpen(true); }}>Open settings<ArrowUpRight size={16} /></button></div><button className="desk-icon-button" aria-label="Dismiss voice notice" onClick={() => setVoiceNotice(false)}><X size={20} /></button></div>}
     {app.settingsOpen && <SettingsPanel onClose={() => app.setSettingsOpen(false)} appearance={<label className="pocket-theme glass">Appearance<select aria-label="Appearance" value={theme} onChange={event => { const value = event.target.value as typeof theme; setTheme(value); try { localStorage.setItem("jarvis.mobile-desk.theme", value); } catch { /* Optional persistence. */ } }}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>} />}
