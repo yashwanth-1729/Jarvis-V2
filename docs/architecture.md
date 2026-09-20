@@ -71,6 +71,22 @@ announcements and native Sentinel are separate paths.
 
 ## Responsive page layout
 
+The independent `/mobile/` experience uses `components/mobile-desk` and a
+route-scoped stylesheet; it does not replace `/` during design comparison.
+`useCommandCenter` contains the existing shared page controller: store ownership,
+startup retries, provider-key handoff, agent seeding/draining, notification refresh
+and mutations remain the same. Each mounted route owns one controller and one
+SyncBanner. New task presentation uses the existing `records` and RecordEditor
+contracts. Schedule, Notes, Chat, Settings and Voice reuse the established
+components. Chat remains mounted while hidden after its first visit. The
+existing temporary voice-surface suppression remains in effect.
+
+The new route scopes color and typography tokens below `.desk-shell`, supports
+light/dark/system preferences and reduced motion, and lazy-loads Settings/Voice.
+`tests/mobile-desk-fixture.mjs` is a loopback-only, volatile API fixture for UI
+checks, never a production data store. The new route and its self-hosted Manrope
+font are included by the existing native static-export workflow.
+
 Below 1,024 CSS pixels the shared UI uses the mobile bottom navigation and card
 layout. `Dashboard` owns one vertical scroll container; its header and brief do
 not shrink to accommodate long lists. Schedule section filters remain sticky,

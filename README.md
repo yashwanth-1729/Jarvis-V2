@@ -76,6 +76,22 @@ release does not update its bundled frontend; a new Windows release was not buil
 
 ## Mobile interface
 
+An independent mobile redesign is available at **`/mobile/`** for comparison
+with the existing `/` interface. It uses Manrope, porcelain/ink surfaces and a
+vermilion accent, with Today, Tasks, Schedule, Notes and Chat destinations.
+The Today page derives its agenda and task list from actual dashboard records.
+Task editing, reminders, notes, connections and voice use the existing services;
+no sample records are inserted into the app. Light/dark/system appearance is a
+local preference. Both routes share `useCommandCenter` for data ownership,
+startup, refresh, native notifications and agent handoff. The default native
+launch route is unchanged while the competing designs are evaluated.
+
+For an isolated design preview, run `node tests/mobile-desk-fixture.mjs` from
+`frontend/`, then run the dev server with
+`NEXT_PUBLIC_API_BASE=http://127.0.0.1:8101`. Its development-only banner labels
+sample records. The fixture uses memory only and makes no provider or cloud
+requests. Do not use that API override for a production/native build.
+
 Phones and tablets below 1,024 px use a dedicated navigation bar: Tasks, Schedule,
 Voice, Notes, and Chat. The workspace uses a shared JARVIS mark, midnight surfaces,
 pale blue actions, editorial headings and a quieter connection/sync area. Inter
@@ -450,6 +466,20 @@ not a percentile benchmark, a comparison against the old implementation, or a
 microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
+
+### 2026-09-20: Independent mobile desk design
+
+- Added `/mobile/` with a new Today agenda, compact task controls, persistent
+  voice access, five-destination navigation and scoped light/dark themes.
+- Reused record editors and extracted the existing page controller without
+  changing its data/voice behavior. Chat stays mounted after first visiting it
+  so drafts and in-flight replies survive navigation.
+- Verified TypeScript, task creation/search against disposable in-memory
+  fixtures, reminder editor opening, draft retention, and 320-pixel layouts
+  including visible editor actions at 320 × 500. No real records were modified.
+- This is a parallel web route. No Android APK installation is implied.
+- The final native static web export passed with `/mobile/` and its bundled
+  font. Two existing hook-dependency warnings remain in Chat and VoiceMode.
 
 For every app change, update the relevant README sections and append a short
 entry here describing the resulting behavior. Update `docs/architecture.md` when

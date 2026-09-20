@@ -128,6 +128,24 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-20 · Codex · Independent mobile redesign at /mobile/
+
+- User requested a fresh mobile UI and said Claude is building a competing
+  design. Codex owns `app/mobile/` and `components/mobile-desk/`; `/` retains
+  its original rendered layout so the two can be compared independently.
+- Moved the original page's controller mechanically to `lib/useCommandCenter.ts`
+  and reused it in both routes. Please retain this shared controller if editing
+  the root page; do not copy its data and lifecycle logic back into two places.
+- New palette/type/layout, real-data Today overview, custom task UI, reused
+  schedule/notes/reminder editors, persistent chat draft, lazy Settings/Voice.
+- TypeScript and isolated browser checks passed: task creation/search, reminder
+  editor, chat draft across tabs, 320px width and 320×500 editor reachability.
+  Tests used `tests/mobile-desk-fixture.mjs`; no user records/provider calls.
+- Native launch still uses `/`. No APK installed as part of this design pass.
+- Final `npm run build:native` passed, exporting `/mobile/`; existing Chat and
+  VoiceMode hook-dependency warnings remain. The preview is labelled sample
+  data and uses an isolated backend override, not a saved production setting.
+
 ### 2026-09-19 · Claude Code · MCP OAuth + built-in Google client slot
 
 - `connectors/mcp_oauth.py` (discover/register/start/finish/refresh);
