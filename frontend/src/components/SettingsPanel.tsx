@@ -45,7 +45,7 @@ type ProbeState = "idle" | "checking" | "ok" | "fail";
  * into an APK puts it in every copy of the file. Entering them here means one
  * build works against a home laptop today and a VPS later.
  */
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+export function SettingsPanel({ onClose, appearance }: { onClose: () => void; appearance?: React.ReactNode }) {
   const [place, setPlace] = React.useState<RememberedLocation | null>(null);
   const [placeName, setPlaceName] = React.useState("");
   const [locating, setLocating] = React.useState(false);
@@ -303,6 +303,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4">
+          {appearance}
           {/* -- runtime ---------------------------------------------------- */}
           <section className="space-y-2">
             <label htmlFor="backend-url" className="block text-sm font-medium text-ink">

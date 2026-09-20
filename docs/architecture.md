@@ -73,6 +73,16 @@ announcements and native Sentinel are separate paths.
 
 The independent `/mobile/` experience uses `components/mobile-desk` and a
 route-scoped stylesheet; it does not replace `/` during design comparison.
+It now has Assistant, My day and Library as full-height spaces. Chat, tasks,
+schedule/reminders and notebook contents open as focused subviews with a back
+button. ScheduleBoard/NotesWorkspace accept optional initial selections; their
+default desktop behavior is unchanged. SettingsPanel accepts optional appearance
+content inside its existing focus-trapped dialog. RecordEditor is presented as
+a bottom sheet by scoped CSS, retaining validation/deletion confirmation.
+VoiceMode's opt-in `presentation="pocket"` renders PocketVoice instead of the HUD,
+but both use the same VoiceSession and callbacks. The pocket presentation avoids
+loading the WebGL core, uses real session levels, and preserves language, voice,
+mute/send, interrupt and half-duplex controls. No transport or provider changes.
 `useCommandCenter` contains the existing shared page controller: store ownership,
 startup retries, provider-key handoff, agent seeding/draining, notification refresh
 and mutations remain the same. Each mounted route owns one controller and one

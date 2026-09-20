@@ -128,6 +128,25 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-20 · Codex · Replace mobile dashboard with pocket application
+
+- User rejected the previous UI as a recolor and explicitly requested a full
+  layout change, glassmorphism, micro-interactions and user-supplied artwork.
+  `/mobile/` now starts in Assistant; three primary spaces replace the five-tab
+  feed. My day uses a timeline and Library has notebook covers. Details have
+  back buttons, editors use bottom sheets, chat drafts survive navigation.
+- `PocketVoice` renders real VoiceMode state without the old HUD/WebGL core.
+  Session transport/providers/half-duplex behavior are unchanged. ScheduleBoard,
+  NotesWorkspace and SettingsPanel gained optional entry/presentation props;
+  their existing callers retain defaults. Source styles are route-scoped.
+- TypeScript and 12 offline presentation assertions passed. Browser checks
+  used disposable fixtures: task save, reminder and notebook selection, draft
+  retention, light/dark, 320px width and 320x500 sheet actions. Native static
+  export passed; two existing hook warnings remain. No live provider calls.
+- Install was stopped when the user changed the brief. No APK/on-device claim.
+  The already-untracked `tauri.android.conf.json` was not edited or included in
+  this UI commit. Artwork is pending the user; prompt in docs/mobile-pocket.md.
+
 ### 2026-09-20 · Codex · Independent mobile redesign at /mobile/
 
 - User requested a fresh mobile UI and said Claude is building a competing

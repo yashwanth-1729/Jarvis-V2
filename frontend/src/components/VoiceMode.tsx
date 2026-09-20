@@ -3,6 +3,7 @@
 import { AudioLines, ChevronDown, CircleAlert, Languages, Mic, MicOff, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import * as React from "react";
+import { PocketVoice } from "@/components/mobile-desk/PocketVoice";
 
 import { HudRings, HudTelemetry } from "@/components/HudLayer";
 import { VoiceSession } from "@/lib/realtime";
@@ -79,6 +80,7 @@ let exchangeCounter = 0;
 const nextId = () => `x${Date.now()}-${exchangeCounter++}`;
 
 interface VoiceModeProps {
+  presentation?: "hud" | "pocket";
   open: boolean;
   onClose: () => void;
   onRefresh: (domains: string[]) => void;
@@ -105,6 +107,7 @@ export function VoiceMode({
   onRefresh,
   onSurface,
   panelOpen = false,
+  presentation = "hud",
 }: VoiceModeProps) {
   const [state, setState] = React.useState<VoiceSessionState>("idle");
   const [level, setLevel] = React.useState(0);
@@ -344,6 +347,16 @@ export function VoiceMode({
   // turn together the instant JARVIS starts speaking.
   const accent = speaking ? "#ff2a2a" : "#22b8ff";
   const lastUser = [...exchanges].reverse().find((e) => e.role === "user");
+
+  if (presentation === "pocket") return <PocketVoice
+    state={state} level={level} status={statusCopy}
+    hint={listeningMuted ? "Unmute to keep talking" : speaking ? (bargeIn ? "Talk to interrupt" : "Mic pauses until I finish") : state === "thinking" ? progress || "Working on your request" : state === "listening" ? "Just talk. I’m listening." : state === "hearing" ? "Go on…" : "Connecting to your assistant"}
+    userText={lastUser?.text} reply={live || (exchanges.at(-1)?.role === "jarvis" ? exchanges.at(-1)?.text : undefined)} error={error}
+    language={language} languages={languages} voice={voice} voices={CLOUD_ENGINE_LANGUAGES.has(language) ? [] : voices}
+    muted={micMuted} bargeIn={bargeIn} onLanguage={changeLanguage} onVoice={changeVoice}
+    onMute={() => { const next = !micMuted; setMicMuted(next); sessionRef.current?.setMuted(next); }}
+    onBargeIn={() => setBargeIn(value => !value)} onInterrupt={() => sessionRef.current?.interrupt()} onClose={onClose}
+  />;
 
   return (
     <div

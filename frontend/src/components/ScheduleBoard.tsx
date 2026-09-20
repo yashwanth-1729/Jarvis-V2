@@ -87,13 +87,15 @@ export function ScheduleBoard({
   today,
   mode,
   onChanged,
+  initialSection = "routine",
 }: {
   schedule: GroupedSchedule;
   today: ScheduleEvent[];
   mode: RecordsMode;
   onChanged: () => void;
+  initialSection?: Section;
 }) {
-  const [section, setSection] = React.useState<Section>("routine");
+  const [section, setSection] = React.useState<Section>(initialSection);
   const [editing, setEditing] = React.useState<Editing>(null);
   const current = todayIndex();
 

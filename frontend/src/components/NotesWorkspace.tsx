@@ -29,10 +29,10 @@ const MEMORY_VIEWS: Array<{value: MemoryView; label: string}> = [
 ];
 const text = (values: RecordValues, key: string) => String(values[key] ?? "").trim();
 
-export function NotesWorkspace({ideas, memories, pages = [], mode, onChanged}: {
-  ideas: Idea[]; memories: Memory[]; pages?: NotePage[]; mode: RecordsMode; onChanged: () => void;
+export function NotesWorkspace({ideas, memories, pages = [], mode, onChanged, initialPage = "notes-long-term"}: {
+  ideas: Idea[]; memories: Memory[]; pages?: NotePage[]; mode: RecordsMode; onChanged: () => void; initialPage?: string;
 }) {
-  const [selected, setSelected] = React.useState("notes-long-term");
+  const [selected, setSelected] = React.useState(initialPage);
   const [query, setQuery] = React.useState("");
   const [editingPage, setEditingPage] = React.useState<NotePage | "new" | null>(null);
   const [savedPage, setSavedPage] = React.useState<NotePage | null>(null);
