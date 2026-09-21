@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · Pocket record sheet + schedule board restyle
+
+- All of it is CSS in `mobile-desk.css` under `.desk-shell`; no shared
+  component markup changed, so desktop keeps its dialog and board.
+- Footer markup is [Delete][div: Cancel, Save] -- the rules depend on that
+  shape; if RecordEditor's footer changes, revisit.
+- `useSpaceSlide` now writes `--slide-push` and stretches the dock pill from
+  its trailing edge; keep deformation on containers, never on type.
+
 ### 2026-09-21 · Claude Code · App-wide motion rules
 
 - `DeskTasks.tsx`: filter/sort/clear/toggle/edit wrapped in withTransition;

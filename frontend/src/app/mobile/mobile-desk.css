@@ -37,13 +37,13 @@
 .desk-shell * { box-sizing:border-box; }
 .desk-shell button,.desk-shell input,.desk-shell select,.desk-shell textarea { font:inherit; }
 .desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform var(--t-quick) var(--ease-out),background-color var(--t-quick) var(--ease-soft),color var(--t-quick) var(--ease-soft); }
-.desk-shell button:active:not(:disabled) { transform:scale(.966); transition-duration:var(--t-press);
+.desk-shell button:active:not(:disabled) { transform:scale(.986,.944); transition-duration:var(--t-press);
   transition-timing-function:cubic-bezier(.2,.8,.3,1); }
 .desk-shell button:not(:active) { transition-duration:var(--t-elastic);
   transition-timing-function:var(--ease-elastic); }
 /* Anything that reads as a card gets the same give as a button. */
 .desk-shell .pocket-context:active,.desk-shell .pocket-type:active,
-.desk-shell .pocket-book:active { transform:scale(.978); transition-duration:var(--t-press); }
+.desk-shell .pocket-book:active { transform:scale(.99,.962); transition-duration:var(--t-press); }
 .desk-shell button:disabled { opacity:.55; cursor:wait; }
 .desk-shell :focus-visible { outline:2px solid var(--signal); outline-offset:4px; }
 .desk-shell svg { flex-shrink:0; }
@@ -282,12 +282,62 @@
 .desk-shell .ui-segmented > button { color:var(--muted); border-radius:12px; background:none; min-height:44px; padding:9px; font-size:11px; }
 .desk-shell .ui-segmented [aria-checked="true"] { color:hsl(var(--accent-ink)); background:var(--signal); box-shadow:none; }
 .desk-shell .board-toolbar { background:var(--paper); border:0; padding:0 0 16px; }
-.desk-shell .board-toolbar .ui-segmented { width:100%; justify-content:space-between; }
+/* --- Schedule board on a phone -------------------------------------------
+   The shared board is a desktop toolbar: a wrapping row of sections with a
+   New entry button floated beside them. On 375px that runs off the edge, so
+   the sections become one swipeable rail and the action gets its own row. */
+.desk-shell .board-toolbar {
+  display:grid !important; gap:12px; padding:0 0 14px; background:none; border:0;
+  position:static !important;
+}
+.desk-shell .board-toolbar .ui-segmented {
+  width:auto; display:flex; flex-wrap:nowrap !important; gap:8px; overflow-x:auto; scrollbar-width:none;
+  scroll-snap-type:x proximity; padding:5px; margin:0 -2px;
+  background:var(--card); border:1px solid var(--rule); border-radius:18px;
+}
+.desk-shell .board-toolbar .ui-segmented::-webkit-scrollbar { display:none; }
+.desk-shell .board-toolbar .ui-segmented > * {
+  flex:0 0 auto; scroll-snap-align:center; min-height:44px; padding:0 16px;
+  border-radius:13px; font-size:14px; font-weight:600; white-space:nowrap;
+}
 .desk-shell .board-toolbar .tnum { display:none; }
+/* The action is a full-width target under the rail, not a floating button. */
+.desk-shell .board-toolbar > button,.desk-shell .board-toolbar .ui-button:not(.ui-segmented *) {
+  width:100%; min-height:50px; border-radius:15px; justify-content:center;
+  background:var(--signal); color:var(--card); font-weight:650; font-size:15px;
+}
+.desk-shell[data-theme="dark"] .board-toolbar > button { color:#0d2620; }
+/* Empty states: a card of the same family as everything else, never a dashed box. */
+.desk-shell .agenda-view > div[class*="rounded"]:has(> svg),
+.desk-shell .schedule-board [class*="border-dashed"] {
+  border-style:solid !important; border-color:var(--rule) !important;
+  background:var(--card) !important; border-radius:22px !important; padding:34px 22px !important;
+}
 .desk-shell .schedule-board,.desk-shell .schedule-days,.desk-shell .notes-workspace { padding:0; }
 .desk-shell .agenda-view { background:none; padding:0; }
 .desk-shell .agenda-intro { display:none; }
-.desk-shell .schedule-board .schedule-card > div:last-of-type { background:var(--glass); border-color:var(--rule); border-radius:18px; }
+.desk-shell .schedule-board .schedule-card { padding:4px 0; align-items:stretch; }
+.desk-shell .schedule-board .schedule-card > div:last-of-type {
+  background:var(--card); border:1px solid var(--rule); border-radius:18px;
+  padding:14px 16px; box-shadow:0 6px 18px -14px var(--shadow);
+  transition:transform var(--t-elastic) var(--ease-elastic),border-color var(--t-quick) var(--ease-soft);
+}
+.desk-shell .schedule-board .schedule-card:active > div:last-of-type { transform:scale(.99,.965); transition-duration:var(--t-press); }
+/* The time reads as a rail down the left, tabular so the rows line up. */
+.desk-shell .schedule-board .schedule-start { font-size:15px; font-weight:650; font-variant-numeric:tabular-nums; }
+.desk-shell .schedule-board .schedule-end { font-size:12px; font-variant-numeric:tabular-nums; }
+.desk-shell .schedule-board .schedule-title { font-size:15px; font-weight:600; }
+/* "no time" was set in mono at 9.6px, which read as debug output. */
+.desk-shell .schedule-board .schedule-card > div:first-of-type span:not(.schedule-start):not(.schedule-end) {
+  font-family:inherit; font-size:12px; color:var(--muted);
+}
+/* Timeline markers belong to this palette, not the shared blue accent. */
+.desk-shell .schedule-board [class*="rounded-full"] { background-color:var(--signal); }
+.desk-shell .schedule-board .schedule-card [class*="rounded-full"] { box-shadow:0 0 0 3px var(--paper); }
+/* The timeline node/connector is painted from the desktop palette
+   (a slate blue) and read as a foreign dot here. */
+.desk-shell .schedule-board .schedule-card::before,
+.desk-shell .schedule-board .schedule-card::after { background:var(--signal) !important; }
 .desk-shell .schedule-board .schedule-start,.desk-shell .schedule-board .schedule-title,.desk-shell .schedule-day-heading h3 { color:var(--text); }
 .desk-shell .schedule-board .schedule-end { color:var(--muted); }
 .desk-shell .weekday-picker button { min-height:60px; border-radius:14px; background:var(--glass); color:var(--muted); border-color:var(--rule); }
@@ -358,10 +408,77 @@
 .pocket-chat-loading { color:var(--muted); font-size:13px; padding:20px 0; }
 .desk-shell .prose-jarvis { font-size:15px; line-height:1.7; }
 .desk-shell .sync-notice { font-size:11px; background:var(--card); border-color:var(--rule); }
-.desk-shell .record-backdrop { align-items:flex-end; padding:0; }
-.desk-shell .record-dialog { max-width:560px; max-height:calc(100dvh - env(safe-area-inset-top) - 20px); border-radius:28px 28px 0 0; background:var(--card); border-color:var(--rule); padding-bottom:env(safe-area-inset-bottom); }
-.desk-shell .record-dialog input,.desk-shell .record-dialog textarea,.desk-shell .record-dialog select,.desk-shell .settings-dialog input { font-size:16px; border-radius:12px; background:var(--paper); color:var(--text); border-color:var(--rule); }
-.desk-shell .record-dialog > header,.desk-shell .record-dialog > footer,.desk-shell .settings-dialog > header,.desk-shell .settings-dialog > footer { background:var(--card); border-color:var(--rule); }
+/* --- Record sheet (task card, schedule block, note) -------------------------
+   The shared editor is a desktop dialog; on the phone it becomes a proper
+   bottom sheet: a grab handle, one column of generously sized fields, and a
+   full-width commit button under your thumb. Restyled here rather than in the
+   shared component so the desktop dialog is untouched. */
+.desk-shell .record-backdrop { align-items:flex-end; padding:0; background:rgba(8,22,19,.55); backdrop-filter:blur(3px); }
+.desk-shell .record-dialog {
+  max-width:560px; max-height:calc(100dvh - env(safe-area-inset-top) - 12px);
+  border:0; border-radius:30px 30px 0 0; background:var(--card);
+  box-shadow:0 -24px 60px -20px rgba(6,20,16,.55);
+  padding-bottom:max(12px,env(safe-area-inset-bottom));
+}
+/* The handle: says "drag me down" before any copy has to. */
+.desk-shell .record-dialog::before {
+  content:""; position:absolute; top:9px; left:50%; width:38px; height:4px; margin-left:-19px;
+  border-radius:99px; background:var(--rule); opacity:.9;
+}
+.desk-shell .record-dialog > header {
+  background:var(--card); border:0; padding:24px 22px 8px;
+}
+.desk-shell .record-dialog > header h2,.desk-shell .record-dialog > header > div:first-child {
+  font-size:25px; letter-spacing:-.6px; font-weight:650; color:var(--text);
+}
+.desk-shell .record-dialog > div { padding:6px 22px 14px; }
+.desk-shell .record-field { display:grid; gap:7px; margin-bottom:18px; }
+.desk-shell .record-field > span:first-child,.desk-shell .record-field > label:first-child {
+  font-size:12px; font-weight:600; letter-spacing:.02em; color:var(--muted);
+}
+.desk-shell .record-dialog input,.desk-shell .record-dialog textarea,
+.desk-shell .record-dialog select,.desk-shell .settings-dialog input {
+  width:100%; min-height:52px; font-size:16px; border-radius:15px; padding:0 15px;
+  background:var(--paper); color:var(--text); border:1px solid var(--rule);
+  transition:border-color var(--t-quick) var(--ease-soft),box-shadow var(--t-quick) var(--ease-soft);
+}
+.desk-shell .record-dialog textarea { padding:14px 15px; min-height:104px; line-height:1.6; }
+.desk-shell .record-dialog input:focus,.desk-shell .record-dialog textarea:focus,
+.desk-shell .record-dialog select:focus {
+  outline:none; border-color:var(--signal); box-shadow:0 0 0 3px var(--signal-soft);
+}
+/* Native select chrome reads as "web form"; this reads as the rest of the app. */
+.desk-shell .record-dialog select {
+  appearance:none; -webkit-appearance:none; padding-right:42px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 20px) calc(50% + 2px),calc(100% - 14px) calc(50% + 2px);
+  background-size:6px 6px,6px 6px; background-repeat:no-repeat;
+}
+.desk-shell .record-dialog input[type="datetime-local"],
+.desk-shell .record-dialog input[type="date"],
+.desk-shell .record-dialog input[type="time"] { font-variant-numeric:tabular-nums; }
+/* Footer: the shared editor renders [Delete] [Cancel | Save]. On a phone the
+   commit action belongs under the thumb, full width, with the rest as text. */
+.desk-shell .record-dialog > footer {
+  background:var(--card); border:0; border-top:1px solid var(--rule);
+  display:grid; grid-template-columns:1fr; gap:6px; padding:14px 22px 6px;
+}
+.desk-shell .record-dialog > footer > div {
+  order:1; display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:center; width:100%;
+}
+.desk-shell .record-dialog > footer > div > button:last-child {
+  min-height:54px; width:100%; border-radius:16px;
+  background:var(--signal); color:var(--card); font-size:16px; font-weight:650;
+}
+.desk-shell[data-theme="dark"] .record-dialog > footer > div > button:last-child { color:#0d2620; }
+.desk-shell .record-dialog > footer > div > button:first-child {
+  min-height:48px; background:none; color:var(--muted); font-size:15px; font-weight:600; padding:0 4px;
+}
+/* Delete steps back under the commit row: reachable, never the default. */
+.desk-shell .record-dialog > footer > button {
+  order:2; justify-self:start; min-height:44px; background:none; border:0;
+  color:var(--critical); font-size:14px; font-weight:600; padding:0;
+}
 .desk-shell .settings-dialog { border-radius:24px; background:var(--card); }
 .desk-shell .settings-dialog > div > section { background:var(--card); border-color:var(--rule); border-radius:16px; }
 .pocket-live { position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; background:var(--paper); color:var(--text); animation:pocket-live-in 320ms var(--ease-out) both; padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left)); }
@@ -465,8 +582,15 @@
 @media(prefers-reduced-motion:reduce) { .pocket-sculpture-response { transform:none!important; } }
 @media(prefers-reduced-transparency:reduce) { .desk-shell .glass,.pocket-glass-core,.pocket-glass-ring { background:var(--card); backdrop-filter:none; -webkit-backdrop-filter:none; } .pocket-glass-ring::before,.pocket-glass-core::before { display:none; } }
 @supports not (backdrop-filter:blur(1px)) { .desk-shell .glass { background:var(--card); } }
-@keyframes pocket-enter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
-@keyframes pocket-live-in { from { opacity:0; transform:translateY(14px) scale(.985); } to { opacity:1; transform:none; } }
+/* Even a list row stretches a little along the way it travels. */
+@keyframes pocket-enter {
+  0% { opacity:0; transform:translateY(8px) scale(.995,1.02); }
+  70% { opacity:1; transform:translateY(-1px) scale(1.002,.997); }
+  100% { opacity:1; transform:none; } }
+@keyframes pocket-live-in {
+  0% { opacity:0; transform:translateY(18px) scale(.985,1.03); }
+  60% { opacity:1; transform:translateY(-3px) scale(1.003,.994); }
+  100% { opacity:1; transform:none; } }
 @keyframes pocket-screen-in { from { opacity:0; transform:translateY(10px) scale(.982); } to { opacity:1; transform:none; } }
 @keyframes pocket-status { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
 @keyframes pocket-breathe { 0%,100% { transform:scale(1.06); } 50% { transform:scale(1.13); } }
@@ -561,15 +685,23 @@
              opacity var(--t-quick) var(--ease-soft);
 }
 .desk-shell .desk-task:active,.desk-shell .desk-tabs button:active,
-.desk-shell .desk-check:active:not(:disabled) { transform:scale(.978); transition-duration:var(--t-press); }
+.desk-shell .desk-check:active:not(:disabled) { transform:scale(.99,.958); transition-duration:var(--t-press); }
 /* The checkbox mark itself springs, so completing something feels physical. */
 .desk-shell .desk-check > span { transition:transform var(--t-elastic) var(--ease-elastic); }
-.desk-shell .desk-task[data-done="true"] .desk-check > span { transform:scale(1.06); }
+.desk-shell .desk-task[data-done="true"] .desk-check > span { animation:pocket-pop 380ms var(--ease-elastic); }
 /* Selected states settle rather than switching. */
 .desk-shell .desk-tabs button[aria-pressed="true"],
 .desk-shell [aria-current="page"] { transition-duration:var(--t-move); }
 
 @keyframes pocket-vt-fade-out { to { opacity:0; } }
 @keyframes pocket-vt-fade-in { from { opacity:0; } }
-@keyframes pocket-vt-notice { from { opacity:0; transform:translateY(16px) scale(.96); } to { opacity:1; transform:none; } }
-@keyframes pocket-sheet-in { from { opacity:0; transform:translateY(22px) scale(.99); } to { opacity:1; transform:none; } }
+@keyframes pocket-vt-notice {
+  0% { opacity:0; transform:translateY(20px) scale(.97,1.05); }
+  58% { opacity:1; transform:translateY(-4px) scale(1.012,.985); }
+  100% { opacity:1; transform:none; } }
+@keyframes pocket-sheet-in {
+  0% { opacity:0; transform:translateY(26px) scale(.985,1.035); }
+  62% { opacity:1; transform:translateY(-3px) scale(1.004,.992); }
+  100% { opacity:1; transform:none; } }
+
+@keyframes pocket-pop { 0% { transform:scale(.82,1.12); } 45% { transform:scale(1.14,.9); } 100% { transform:none; } }

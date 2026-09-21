@@ -550,6 +550,23 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — Record sheet and schedule board redesigned for the phone;
+  motion now deforms with speed.** The shared desktop editor becomes a real
+  bottom sheet: grab handle, 25px title, one column of 52px rounded fields
+  with a focus ring, the native select replaced by an app-styled control, and
+  a footer where Save is a full-width pill, Cancel is text and Delete steps
+  down to its own row. The schedule board's wrapping desktop toolbar becomes
+  one swipeable section rail plus a full-width New entry; blocks are cards
+  with a tabular time rail, and the timeline node no longer paints in the
+  desktop's slate blue. Elasticity is now squash-and-stretch rather than
+  uniform scaling: the dock pill leans into its direction while travelling
+  (measured 1.16x wide / 0.93x tall at speed, recovering through 1.10 -> 1.05
+  -> 1.00 as it lands), presses squash against the finger, and sheets,
+  notices, rows and the checkbox mark all stretch along their path and
+  settle. All restyling is scoped to `.desk-shell`, so the desktop dialog and
+  board are untouched. Checked in the browser pane with seeded preview
+  records, removed afterwards.
+
 - **2026-09-21 — The motion rules now cover the whole app, not one button.**
   Written against shared shapes so a new component inherits them: any named
   element travels to its new position (`::view-transition-group(*)`, 360ms);

@@ -52,9 +52,20 @@ export function useSpaceSlide(index: number, enabled: boolean, onIndex?: (next: 
         ? -rubberBand(-raw * width, width) / width
         : raw > 2 ? 2 + rubberBand((raw - 2) * width, width) / width : raw;
       track.style.transform = `translate3d(${-position * 100}%,0,0)`;
-      pill.style.transform = `translate3d(${position * 100}%,0,0)`;
+      // Squash and stretch: the faster the pill travels, the more it leans
+      // into its direction, leading edge ahead of the trailing one, and it
+      // recovers as the spring settles. Deformation is kept to the pill and
+      // other containers -- stretching type just looks broken.
+      const push = Math.max(-1, Math.min(1, velocity / 3.2));
+      const stretch = 1 + Math.abs(push) * 0.16;
+      const squash = 1 - Math.abs(push) * 0.07;
+      pill.style.transformOrigin = push > 0 ? "left center" : "right center";
+      pill.style.transform =
+        `translate3d(${position * 100}%,0,0) scale(${stretch.toFixed(3)},${squash.toFixed(3)})`;
       // How hard the surface is moving right now, for the glass to answer to.
       shell?.style.setProperty("--slide-energy", Math.min(1, Math.abs(velocity) / 3).toFixed(3));
+      // Signed, so anything else that wants to lean can lean the right way.
+      shell?.style.setProperty("--slide-push", push.toFixed(3));
       // Glass and depth read this: highlights slide with real movement
       // instead of drifting on an unrelated timer.
       shell?.style.setProperty("--space-position", position.toFixed(4));
