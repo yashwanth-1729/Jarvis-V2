@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { withTransition } from "./transition";
 import { ArrowUpRight, Check, CircleAlert, ListFilter, Loader2, Minus, Plus, Search, X } from "lucide-react";
 import { RecordEditor, type FieldSpec } from "@/components/RecordEditor";
 import { createTask, deleteTask, updateTask, type RecordsMode } from "@/lib/records";
@@ -43,8 +44,13 @@ export function DeskTaskRow({ task, onEdit, onToggle }: { task: Task; onEdit: (t
     catch (err) { setError(err instanceof Error ? err.message : "Could not update this task."); }
     finally { inFlight.current = false; setPending(false); }
   }
-  return <li className="desk-task" data-active={active} data-done={done}>
-    <button type="button" className="desk-check" disabled={pending} onClick={() => void advance()} aria-label={`${STATUS_LABEL[task.status]} task: ${task.title}`}>
+  // A stable name per row lets the browser carry the row to its new place
+  // when the list is filtered, sorted or a status changes, instead of
+  // cross-fading two different lists. Names must be valid CSS identifiers.
+  const identity = `task-${String(task.uid ?? task.id).replace(/[^A-Za-z0-9_-]/g, "")}`;
+  return <li className="desk-task" data-active={active} data-done={done}
+    style={{ viewTransitionName: identity } as React.CSSProperties}>
+    <button type="button" className="desk-check" disabled={pending} onClick={() => withTransition(() => void advance(), "filter")} aria-label={`${STATUS_LABEL[task.status]} task: ${task.title}`}>
       <span>{pending ? <Loader2 size={14} className="desk-spin" /> : done ? <Check size={14} /> : active ? <Minus size={14} /> : null}</span>
     </button>
     <button type="button" className="desk-task-copy" onClick={() => onEdit(task)} aria-label={`Edit task: ${task.title}`}>
@@ -68,10 +74,10 @@ export function DeskTasks({ tasks, mode, onChanged, onToggle }: {
     return (a.due_date || "9999").localeCompare(b.due_date || "9999");
   });
   return <>
-    <div className="desk-section-title"><p>{tasks.filter(task => task.status !== "COMPLETED").length} open tasks</p><button className="desk-button" onClick={() => setEditing("new")}><Plus size={17} /> Add task</button></div>
-    <label className="desk-search"><Search size={19} /><span className="sr-only">Search tasks</span><input aria-label="Search tasks" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a task" />{query && <button aria-label="Clear search" onClick={() => setQuery("")}><X size={18} /></button>}</label>
-    <div className="desk-task-filters"><div className="desk-tabs" aria-label="Task filters">{[["open", "Open"], ["active", "In progress"], ["all", "All"]].map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div><label className="desk-sort"><ListFilter size={17} /><span className="sr-only">Sort tasks</span><select value={sort} onChange={event => setSort(event.target.value)}><option value="due">Due date</option><option value="priority">Priority</option><option value="newest">Newest</option></select></label></div>
-    {visible.length ? <ul className="desk-task-list">{visible.map(task => <DeskTaskRow key={task.uid ?? task.id} task={task} onEdit={setEditing} onToggle={onToggle} />)}</ul> : <div className="desk-empty"><Check size={28} /><h2>{query ? "No matching tasks" : "Room for what’s next."}</h2><p>{query ? "Try a different search or another filter." : "Add a task here, or ask JARVIS to remember it."}</p><button className="desk-text-button" onClick={() => query ? setQuery("") : setEditing("new")}>{query ? "Clear search" : "Add your first task"}<ArrowUpRight size={17} /></button></div>}
+    <div className="desk-section-title"><p>{tasks.filter(task => task.status !== "COMPLETED").length} open tasks</p><button className="desk-button" onClick={() => withTransition(() => setEditing("new"), "open")}><Plus size={17} /> Add task</button></div>
+    <label className="desk-search"><Search size={19} /><span className="sr-only">Search tasks</span><input aria-label="Search tasks" value={query} onChange={event => setQuery(event.target.value)} placeholder="Find a task" />{query && <button aria-label="Clear search" onClick={() => withTransition(() => setQuery(""), "filter")}><X size={18} /></button>}</label>
+    <div className="desk-task-filters"><div className="desk-tabs" aria-label="Task filters">{[["open", "Open"], ["active", "In progress"], ["all", "All"]].map(([value, label]) => <button key={value} aria-pressed={filter === value} onClick={() => withTransition(() => setFilter(value), "filter")}>{label}</button>)}</div><label className="desk-sort"><ListFilter size={17} /><span className="sr-only">Sort tasks</span><select value={sort} onChange={event => { const next = event.target.value; withTransition(() => setSort(next), "filter"); }}><option value="due">Due date</option><option value="priority">Priority</option><option value="newest">Newest</option></select></label></div>
+    {visible.length ? <ul className="desk-task-list">{visible.map(task => <DeskTaskRow key={task.uid ?? task.id} task={task} onEdit={setEditing} onToggle={onToggle} />)}</ul> : <div className="desk-empty"><Check size={28} /><h2>{query ? "No matching tasks" : "Room for what’s next."}</h2><p>{query ? "Try a different search or another filter." : "Add a task here, or ask JARVIS to remember it."}</p><button className="desk-text-button" onClick={() => withTransition(() => query ? setQuery("") : setEditing("new"), "open")}>{query ? "Clear search" : "Add your first task"}<ArrowUpRight size={17} /></button></div>}
     <DeskTaskEditor task={editing} mode={mode} onChanged={onChanged} onClose={() => setEditing(null)} />
   </>;
 }

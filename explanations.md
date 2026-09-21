@@ -128,6 +128,16 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · App-wide motion rules
+
+- `DeskTasks.tsx`: filter/sort/clear/toggle/edit wrapped in withTransition;
+  rows get `view-transition-name: task-<sanitised uid>`.
+- `MobileDesk.tsx`: settings, voice and the notice go through the same path.
+- `mobile-desk.css`: an app-wide block keyed on shared shapes (lists, rows,
+  sheets, controls) so new components inherit the behaviour.
+- Codex: give any repeated item a stable `view-transition-name` and wrap the
+  state change in `withTransition` -- that is the whole pattern.
+
 ### 2026-09-21 · Claude Code · View-transition choreography + elastic controls
 
 - New `transition.ts`; `openScreen`/back wrapped in `withTransition`.

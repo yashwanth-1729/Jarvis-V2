@@ -71,8 +71,11 @@ export function MobileDesk() {
   }
   const closeScreen = () => withTransition(() => setScreen(null), "back");
   const setSettingsOpen = app.setSettingsOpen;
-  const closeSettings = React.useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
-  function openVoice() { if (app.voiceAvailable) app.setVoiceOpen(true); else setVoiceNotice(true); }
+  const closeSettings = React.useCallback(() => withTransition(() => setSettingsOpen(false), "back"), [setSettingsOpen]);
+  function openVoice() {
+    if (app.voiceAvailable) withTransition(() => app.setVoiceOpen(true), "open");
+    else withTransition(() => setVoiceNotice(true), "notice");
+  }
   const mode = { local: app.recordsLocal };
   const title = screen ? SCREEN_TITLE[screen] : space === "assistant" ? "JARVIS" : space === "day" ? "My day" : "Library";
   const ready = !app.loading && app.status !== "offline" && !app.localOnly;
@@ -82,7 +85,7 @@ export function MobileDesk() {
       <header className="pocket-header">
         {screen ? <button className="desk-icon-button glass" onClick={closeScreen} aria-label="Go back"><ArrowLeft size={21} /></button> : <span className="pocket-monogram" aria-hidden="true"><AudioLines size={22} /></span>}
         <div className="pocket-heading"><h1 ref={headingRef} tabIndex={-1}>{title}</h1>{!screen && <span>{space === "assistant" ? "Personal intelligence" : date?.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }) || "Your space"}</span>}</div>
-        <button className="desk-icon-button glass" onClick={() => app.setSettingsOpen(true)} aria-label="Open settings"><Settings2 size={20} /></button>
+        <button className="desk-icon-button glass" onClick={() => withTransition(() => app.setSettingsOpen(true), "open")} aria-label="Open settings"><Settings2 size={20} /></button>
       </header>
       {process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_API_BASE === "http://127.0.0.1:8101" && <div className="desk-fixture-label">Design preview · Sample records</div>}
       <SyncBanner enabled={app.recordsLocal} onSynced={app.handleSynced} />
@@ -110,9 +113,9 @@ export function MobileDesk() {
       </main>
       {!screen && <nav className="pocket-dock glass" data-space={space} aria-label="Main navigation"><span ref={selectionRef} className="pocket-dock-selection" aria-hidden="true" />{SPACES.map(({ id, label, icon: Icon }) => <button key={id} aria-current={space === id ? "page" : undefined} onClick={() => setSpace(id)}><span><Icon size={22} strokeWidth={1.7} /></span>{label}</button>)}</nav>}
     </div>
-    {voiceNotice && <div className="desk-notice glass" role="status"><Mic size={22} /><div><strong>Voice is not ready yet</strong><p>Check your connection and credentials in Settings, then allow microphone access.</p><button className="desk-text-button" onClick={() => { setVoiceNotice(false); app.setSettingsOpen(true); }}>Open settings<ArrowUpRight size={16} /></button></div><button className="desk-icon-button" aria-label="Dismiss voice notice" onClick={() => setVoiceNotice(false)}><X size={20} /></button></div>}
+    {voiceNotice && <div className="desk-notice glass" role="status"><Mic size={22} /><div><strong>Voice is not ready yet</strong><p>Check your connection and credentials in Settings, then allow microphone access.</p><button className="desk-text-button" onClick={() => withTransition(() => { setVoiceNotice(false); app.setSettingsOpen(true); }, "open")}>Open settings<ArrowUpRight size={16} /></button></div><button className="desk-icon-button" aria-label="Dismiss voice notice" onClick={() => withTransition(() => setVoiceNotice(false), "back")}><X size={20} /></button></div>}
     {app.settingsOpen && <SettingsPanel presentation="pocket" onClose={closeSettings} appearance={<fieldset className="pocket-appearance"><legend>Choose your look</legend>{(["system", "light", "dark"] as const).map(value => <label key={value} data-theme-choice={value}><input type="radio" name="appearance" value={value} checked={theme === value} onChange={() => { setTheme(value); try { localStorage.setItem("jarvis.mobile-desk.theme", value); } catch { /* Optional persistence. */ } }} /><span className="pocket-theme-preview" aria-hidden="true"><i /><i /><i /></span><span>{value === "system" ? "System" : value === "light" ? "Light" : "Dark"}</span></label>)}</fieldset>} />}
-    {app.voiceOpen && <VoiceMode open presentation="pocket" onClose={() => app.setVoiceOpen(false)} onRefresh={domains => app.handleAgentRefresh(domains as RefreshDomain[])} onSurface={app.setSurface} panelOpen={false} />}
+    {app.voiceOpen && <VoiceMode open presentation="pocket" onClose={() => withTransition(() => app.setVoiceOpen(false), "back")} onRefresh={domains => app.handleAgentRefresh(domains as RefreshDomain[])} onSurface={app.setSurface} panelOpen={false} />}
   </div>;
 }
 

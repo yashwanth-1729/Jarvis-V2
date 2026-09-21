@@ -514,3 +514,62 @@
 @keyframes pocket-vt-new { from { opacity:0; transform:scale(1.02) translateY(10px); } to { opacity:1; transform:none; } }
 @keyframes pocket-vt-old-back { from { opacity:1; transform:none; } to { opacity:0; transform:scale(1.03) translateY(8px); } }
 @keyframes pocket-vt-new-back { from { opacity:0; transform:scale(.98) translateY(-6px); } to { opacity:1; transform:none; } }
+
+/* ---------------------------------------------------------------------------
+   The app-wide motion rule set.
+
+   One idea applies everywhere: nothing appears or disappears on the spot.
+   What leaves settles back and fades, what arrives rises in, what merely
+   moved is carried to its new place, and anything you touch gives a little
+   and springs back. These rules are deliberately written against shared
+   shapes (lists, rows, sheets, controls) rather than single components, so a
+   new component inherits the behaviour instead of needing its own animation.
+   --------------------------------------------------------------------------- */
+@media(prefers-reduced-motion:no-preference) {
+  /* Any named element -- task rows, cards, the chat portal -- travels to its
+     new position rather than cross-fading in place. */
+  ::view-transition-group(*) { animation-duration:360ms; animation-timing-function:cubic-bezier(.32,.72,0,1); }
+  /* A filtered or sorted list: the set changes but the surface does not, so
+     the frame should not slide -- only its contents. */
+  [data-transition="filter"]::view-transition-old(root) { animation:pocket-vt-fade-out 180ms cubic-bezier(.4,0,.2,1) both; }
+  [data-transition="filter"]::view-transition-new(root) { animation:pocket-vt-fade-in 260ms cubic-bezier(.32,.72,0,1) 30ms backwards; }
+  /* A notice is an interjection: it drops in from the edge it lives on. */
+  [data-transition="notice"]::view-transition-new(root) { animation:pocket-vt-notice 320ms cubic-bezier(.34,1.42,.5,1) backwards; }
+
+  /* Lists: items arrive in sequence, close enough to read as one movement. */
+  .desk-task-list > li,.pocket-book,.desk-agenda li,.pocket-list > li {
+    animation:pocket-enter 300ms cubic-bezier(.32,.72,0,1) backwards;
+  }
+  .desk-task-list > li:nth-child(2),.pocket-list > li:nth-child(2) { animation-delay:35ms; }
+  .desk-task-list > li:nth-child(3),.pocket-list > li:nth-child(3) { animation-delay:70ms; }
+  .desk-task-list > li:nth-child(4),.pocket-list > li:nth-child(4) { animation-delay:100ms; }
+  .desk-task-list > li:nth-child(n+5),.pocket-list > li:nth-child(n+5) { animation-delay:125ms; }
+
+  /* Sheets and dialogs rise from the bottom edge they belong to. */
+  .desk-shell .settings-dialog,.desk-shell .record-sheet,.desk-shell dialog { animation:pocket-sheet-in 360ms cubic-bezier(.32,.72,0,1) backwards; }
+  .desk-notice { animation:pocket-vt-notice 340ms cubic-bezier(.34,1.42,.5,1) backwards; }
+  .desk-empty,.desk-error,.desk-inline-error { animation:pocket-enter 280ms cubic-bezier(.32,.72,0,1) backwards; }
+}
+
+/* Controls: everything you can touch has the same give, whether it is a
+   button, a row, a checkbox, a tab or a select. */
+.desk-shell .desk-task,.desk-shell .desk-search,.desk-shell label,
+.desk-shell select,.desk-shell .desk-tabs button {
+  transition:transform var(--t-elastic) var(--ease-elastic),
+             background-color var(--t-quick) var(--ease-soft),
+             border-color var(--t-quick) var(--ease-soft),
+             opacity var(--t-quick) var(--ease-soft);
+}
+.desk-shell .desk-task:active,.desk-shell .desk-tabs button:active,
+.desk-shell .desk-check:active:not(:disabled) { transform:scale(.978); transition-duration:var(--t-press); }
+/* The checkbox mark itself springs, so completing something feels physical. */
+.desk-shell .desk-check > span { transition:transform var(--t-elastic) var(--ease-elastic); }
+.desk-shell .desk-task[data-done="true"] .desk-check > span { transform:scale(1.06); }
+/* Selected states settle rather than switching. */
+.desk-shell .desk-tabs button[aria-pressed="true"],
+.desk-shell [aria-current="page"] { transition-duration:var(--t-move); }
+
+@keyframes pocket-vt-fade-out { to { opacity:0; } }
+@keyframes pocket-vt-fade-in { from { opacity:0; } }
+@keyframes pocket-vt-notice { from { opacity:0; transform:translateY(16px) scale(.96); } to { opacity:1; transform:none; } }
+@keyframes pocket-sheet-in { from { opacity:0; transform:translateY(22px) scale(.99); } to { opacity:1; transform:none; } }

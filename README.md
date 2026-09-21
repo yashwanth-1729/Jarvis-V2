@@ -550,6 +550,22 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — The motion rules now cover the whole app, not one button.**
+  Written against shared shapes so a new component inherits them: any named
+  element travels to its new position (`::view-transition-group(*)`, 360ms);
+  task rows carry `view-transition-name:task-<uid>`, so filtering, sorting,
+  searching and completing move the rows that stayed and fade only what
+  actually changed; list items arrive staggered (0/35/70/100/125ms); sheets
+  and dialogs rise from their edge; notices drop in elastically; empty and
+  error states enter rather than appear; every control (buttons, rows, tabs,
+  checkboxes, selects, search) shares one press-and-release spring, and a
+  completed checkbox settles at 1.06. Settings, voice and notices open and
+  close through the same choreography as screens, with `filter`, `open`,
+  `back` and `notice` each getting their own character. Verified in the
+  browser pane with seeded preview rows (removed afterwards): switching a
+  filter produced movement groups for the rows that stayed
+  (task-preview-a/b) while the surface only cross-faded.
+
 - **2026-09-21 — Screens hand over instead of cutting; controls are elastic.**
   `transition.ts` routes screen changes through the View Transitions API, so
   the outgoing screen fades and settles back (240ms) while the new one rises
