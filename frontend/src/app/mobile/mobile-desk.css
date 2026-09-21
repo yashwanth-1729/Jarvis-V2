@@ -35,7 +35,9 @@
 .desk-shell * { box-sizing:border-box; }
 .desk-shell button,.desk-shell input,.desk-shell select,.desk-shell textarea { font:inherit; }
 .desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform var(--t-quick) var(--ease-out),background-color var(--t-quick) var(--ease-soft),color var(--t-quick) var(--ease-soft); }
-.desk-shell button:active:not(:disabled) { transform:scale(.97); transition-duration:var(--t-press); }
+.desk-shell button:active:not(:disabled) { transform:scale(.966); transition-duration:var(--t-press);
+  transition-timing-function:cubic-bezier(.2,.8,.3,1); }
+.desk-shell button:not(:active) { transition-timing-function:cubic-bezier(.18,.9,.28,1.06); }
 .desk-shell button:disabled { opacity:.55; cursor:wait; }
 .desk-shell :focus-visible { outline:2px solid var(--signal); outline-offset:4px; }
 .desk-shell svg { flex-shrink:0; }
@@ -53,9 +55,10 @@
 .pocket-screen { min-height:100%; }
 .pocket-content[data-pager="true"] { display:flex; flex-direction:column; padding:0; overflow:hidden; }
 .pocket-content[data-pager="true"] > .desk-error { margin:12px 24px; flex-shrink:0; }
-.pocket-pages-viewport { flex:1; min-height:0; overflow:hidden; }
+.pocket-pages-viewport { flex:1; min-height:0; overflow:hidden; perspective:1200px; }
 .pocket-pages-viewport[hidden] { display:none; }
-.pocket-pages-track { display:flex; width:100%; height:100%; transform:translateX(-100%); will-change:transform; }
+.pocket-pages-track { display:flex; width:100%; height:100%; transform:translate3d(-100%,0,0); will-change:transform;
+  touch-action:pan-y; transition:none; }
 .pocket-dock-selection { will-change:transform; }
 /* A backdrop-filter recomposites its whole backdrop every frame. During a
    slide that is the difference between 60fps and visible stutter, so the
@@ -64,7 +67,30 @@
 .desk-shell[data-sliding="true"] .pocket-glass-core,
 .desk-shell[data-sliding="true"] .chat-composer { backdrop-filter:none; -webkit-backdrop-filter:none; }
 .desk-shell[data-sliding="true"] .pocket-page { pointer-events:none; }
-.pocket-page { flex:0 0 100%; min-width:0; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:12px 24px 20px; scrollbar-width:none; }
+/* Specular sweep bound to the live drag position, not to a loop. */
+.pocket-dock::after { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:linear-gradient(105deg,transparent 38%,var(--shine) 50%,transparent 62%);
+  opacity:calc(.12 + var(--slide-energy,0) * .5);
+  transform:translateX(calc((var(--space-position,1) - 1) * 46%));
+  transition:opacity 260ms var(--ease-soft); }
+.pocket-dock { overflow:hidden; }
+/* Large-title collapse: the heading condenses and a hairline appears as
+   the live page scrolls. --scroll-depth is written per frame by
+   useScrollDepth, so this tracks the finger rather than snapping on a
+   threshold. Transform and opacity only. */
+.pocket-header { transition:none; }
+.pocket-heading h1 { transform-origin:left center;
+  transform:scale(calc(1 - var(--scroll-depth,0) * .14)) translateY(calc(var(--scroll-depth,0) * 1px)); }
+.pocket-heading > span { opacity:calc(1 - var(--scroll-depth,0) * 1.4);
+  transform:translateY(calc(var(--scroll-depth,0) * -4px)); }
+.pocket-header::after { content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+  background:var(--rule); opacity:var(--scroll-depth,0); pointer-events:none; }
+.pocket-header { position:relative; }
+
+.pocket-page { flex:0 0 100%; min-width:0; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:12px 24px 20px; scrollbar-width:none;
+  transition:opacity 220ms var(--ease-soft),transform 220ms var(--ease-out); }
+.desk-shell[data-sliding="true"] .pocket-page { transition:none; }
+.desk-shell[data-sliding="true"] .pocket-page[aria-hidden="true"] { opacity:.82; transform:scale(.975); }
 .pocket-page[data-space="assistant"] { display:flex; flex-direction:column; }
 .pocket-page .pocket-assistant { min-height:440px; }
 .pocket-page[aria-hidden="true"] *,.pocket-page[aria-hidden="true"] *::before { animation-play-state:paused!important; }
@@ -411,7 +437,7 @@
   .pocket-sculpture-thinking i:nth-child(3) { animation-delay:240ms; }
   .pocket-sculpture[data-state="speaking"] .pocket-sculpture-aura { animation:pocket-breathe 2.6s var(--ease-soft) infinite; }
   .pocket-sculpture[data-state="hearing"]:not([data-muted="true"]) .pocket-sculpture-center { animation:pocket-listen 2.4s var(--ease-soft) infinite; }
-  .pocket-screen { animation:pocket-enter 300ms var(--ease-out) backwards; }
+  .pocket-screen { animation:pocket-screen-in 340ms var(--ease-out) backwards; }
   .pocket-assistant-actions > :first-child { animation:pocket-enter 320ms var(--ease-out) 40ms backwards; }
   .pocket-assistant-actions > :last-child { animation:pocket-enter 320ms var(--ease-out) 80ms backwards; }
   .pocket-loop-art { animation:pocket-art-float 10s ease-in-out infinite; }
@@ -435,6 +461,7 @@
 @supports not (backdrop-filter:blur(1px)) { .desk-shell .glass { background:var(--card); } }
 @keyframes pocket-enter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 @keyframes pocket-live-in { from { opacity:0; transform:translateY(14px) scale(.985); } to { opacity:1; transform:none; } }
+@keyframes pocket-screen-in { from { opacity:0; transform:translateY(10px) scale(.982); } to { opacity:1; transform:none; } }
 @keyframes pocket-status { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
 @keyframes pocket-breathe { 0%,100% { transform:scale(1.06); } 50% { transform:scale(1.13); } }
 @keyframes pocket-listen { 0%,100% { transform:scale(1); } 50% { transform:scale(1.05); } }

@@ -550,6 +550,23 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — Mobile motion is physics now, not durations.** New
+  `spring.ts` (fixed 1/120s integrator, velocity carried through every
+  interruption, iOS rubber-band helper) drives paging: `useSpaceSlide` follows
+  the finger one-to-one, resists past the first/last space, and throws the
+  track with the speed it left your hand (capped at 4.5 spaces/s so a hard
+  flick cannot expose a void). The dock pill rides the same value, and the
+  live position is published as `--space-position` / `--slide-energy`, so the
+  dock's specular sweep tracks real movement instead of a timer; the page
+  being left recedes slightly for depth. `useScrollDepth` publishes
+  `--scroll-depth` from the live page, collapsing the large title and fading
+  in a hairline as you scroll. Press now rebounds instead of ramping.
+  Measured in the browser pane: drag tracks 22px of finger as 22.01px of
+  movement; a 1200px/s flick settles 0.32 -> 0.48 -> 0.70 -> 0.85 -> 0.92 ->
+  0.96 -> 1.00 with no overshoot past the edge; scroll depth 0 -> 0.38 scales
+  the title to 0.947. Not yet installed on the phone (no cable; wireless
+  debugging unpaired).
+
 - **2026-09-21 — Voice mode has motion now.** The screen enters as a sheet
   (320ms), the status line and each transcript line animate in (keyed on their
   text so a change re-triggers), level bars respond in 90ms from their centre

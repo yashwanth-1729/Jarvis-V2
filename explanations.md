@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · Spring physics + gesture paging (mobile)
+
+- New `spring.ts` and `useScrollDepth.ts`; `useSpaceSlide.ts` rewritten from
+  a WAAPI duration animation to a spring with pointer dragging.
+- `linearSlide.ts` is still used by SettingsPanel -- left in place.
+- Codex: the track is finger-driven, so do not add a CSS transition to
+  `.pocket-pages-track`; `--space-position`, `--slide-energy` and
+  `--scroll-depth` on `.desk-shell` are the hooks for any new motion.
+
 ### 2026-09-21 · Claude Code · Voice-mode motion
 
 - `mobile-desk.css`: pocket-live-in, pocket-status, pocket-breathe,

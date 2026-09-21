@@ -12,6 +12,7 @@ import { useCommandCenter, type CommandCenter } from "@/lib/useCommandCenter";
 import type { NotePage, RefreshDomain, ScheduleEvent } from "@/types";
 import { DeskTasks } from "./DeskTasks";
 import { useSpaceSlide } from "./useSpaceSlide";
+import { useScrollDepth } from "./useScrollDepth";
 
 const SettingsPanel = dynamic(() => import("@/components/SettingsPanel").then(m => m.SettingsPanel));
 const VoiceMode = dynamic(() => import("@/components/VoiceMode").then(m => m.VoiceMode), { ssr: false });
@@ -31,7 +32,14 @@ export function MobileDesk() {
   const app = useCommandCenter();
   const [space, setSpace] = React.useState<Space>("assistant");
   const [screen, setScreen] = React.useState<Screen>(null);
-  const { trackRef, selectionRef } = useSpaceSlide(SPACES.findIndex(item => item.id === space), screen === null);
+  // A drag settles on its own space; React is told after the fact so the
+  // movement never waits on a render.
+  const shellRef = React.useRef<HTMLDivElement>(null);
+  const { trackRef, selectionRef } = useSpaceSlide(
+    SPACES.findIndex(item => item.id === space), screen === null,
+    next => setSpace(SPACES[next].id),
+  );
+  useScrollDepth(shellRef);
   const [notebook, setNotebook] = React.useState("notes-long-term");
   const [chatVisited, setChatVisited] = React.useState(false);
   const [voiceNotice, setVoiceNotice] = React.useState(false);
@@ -62,7 +70,7 @@ export function MobileDesk() {
   const mode = { local: app.recordsLocal };
   const title = screen ? SCREEN_TITLE[screen] : space === "assistant" ? "JARVIS" : space === "day" ? "My day" : "Library";
   const ready = !app.loading && app.status !== "offline" && !app.localOnly;
-  return <div className="desk-shell" data-theme={theme} data-motion-paused={motionPaused} data-voice-open={app.voiceOpen}>
+  return <div ref={shellRef} className="desk-shell" data-theme={theme} data-motion-paused={motionPaused} data-voice-open={app.voiceOpen}>
     <a className="desk-skip" href="#desk-content">Skip to content</a>
     <div className="desk-app" aria-hidden={app.settingsOpen || app.voiceOpen ? true : undefined} ref={element => { if (element) element.inert = app.settingsOpen || app.voiceOpen; }}>
       <header className="pocket-header">
