@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · View-transition choreography + elastic controls
+
+- New `transition.ts`; `openScreen`/back wrapped in `withTransition`.
+- Codex: `view-transition-name` must stay unique per rendered element --
+  `.pocket-type` and `.desk-chat:not([hidden])` share `chat-portal` on
+  purpose (only one is rendered at a time). Any rule on a
+  `::view-transition-*` pseudo must use literal easings, not `.desk-shell`
+  custom properties: an unresolvable var() voids the declaration silently.
+
 ### 2026-09-21 · Claude Code · Spring physics + gesture paging (mobile)
 
 - New `spring.ts` and `useScrollDepth.ts`; `useSpaceSlide.ts` rewritten from

@@ -5,7 +5,9 @@
   --ease-fluid:cubic-bezier(.22,1,.36,1); --ease-touch:cubic-bezier(.18,.85,.25,1.12);
   /* iOS-style: movement decelerates hard, fades stay symmetric. */
   --ease-out:cubic-bezier(.32,.72,0,1); --ease-soft:cubic-bezier(.4,0,.2,1);
-  --t-press:110ms; --t-quick:180ms; --t-move:280ms; --t-surface:340ms;
+  --t-press:110ms; --t-quick:180ms; --t-move:280ms; --t-surface:340ms; --t-elastic:420ms;
+  /* Overshoots 1 and settles back: the 'give' of a real control. */
+  --ease-elastic:cubic-bezier(.34,1.42,.5,1);
   --paper:#e5eeeb; --card:#f4f8f6; --soft:#d2e3de; --text:#173c35;
   --muted:#4c6c63; --rule:#bacfc7; --signal:#21624f; --signal-soft:#c5e6d8;
   --glass:rgba(246,251,248,.73); --shine:rgba(255,255,255,.8); --shadow:rgba(32,74,60,.12);
@@ -37,7 +39,11 @@
 .desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform var(--t-quick) var(--ease-out),background-color var(--t-quick) var(--ease-soft),color var(--t-quick) var(--ease-soft); }
 .desk-shell button:active:not(:disabled) { transform:scale(.966); transition-duration:var(--t-press);
   transition-timing-function:cubic-bezier(.2,.8,.3,1); }
-.desk-shell button:not(:active) { transition-timing-function:cubic-bezier(.18,.9,.28,1.06); }
+.desk-shell button:not(:active) { transition-duration:var(--t-elastic);
+  transition-timing-function:var(--ease-elastic); }
+/* Anything that reads as a card gets the same give as a button. */
+.desk-shell .pocket-context:active,.desk-shell .pocket-type:active,
+.desk-shell .pocket-book:active { transform:scale(.978); transition-duration:var(--t-press); }
 .desk-shell button:disabled { opacity:.55; cursor:wait; }
 .desk-shell :focus-visible { outline:2px solid var(--signal); outline-offset:4px; }
 .desk-shell svg { flex-shrink:0; }
@@ -477,3 +483,34 @@
 
 /* Think dots travel rather than only fading: the wait reads as progress. */
 @keyframes pocket-thought { 0%,100% { opacity:.3; transform:translateY(0); } 50% { opacity:1; transform:translateY(-5px); } }
+
+/* ---------------------------------------------------------------------------
+   Screen choreography (View Transitions).
+
+   The outgoing screen keeps its picture while the incoming one arrives, so
+   content hands over softly instead of cutting. Anything sharing a
+   `view-transition-name` morphs between its two positions -- which is how
+   "Type instead" grows into the chat surface and shrinks back on the way out.
+   Unsupported browsers and reduced motion skip all of it (see transition.ts).
+   --------------------------------------------------------------------------- */
+@media(prefers-reduced-motion:no-preference) {
+  /* These pseudo-elements hang off <html>, where .desk-shell's custom
+     properties do not exist -- a var() that fails to substitute voids the
+     whole declaration, which silently disabled all of this. Literal curves. */
+  ::view-transition-group(root) { animation-duration:340ms; }
+  ::view-transition-old(root) { animation:pocket-vt-old 240ms cubic-bezier(.4,0,.2,1) both; }
+  ::view-transition-new(root) { animation:pocket-vt-new 340ms cubic-bezier(.32,.72,0,1) 40ms backwards; }
+  [data-transition="back"]::view-transition-old(root) { animation:pocket-vt-old-back 240ms cubic-bezier(.4,0,.2,1) both; }
+  [data-transition="back"]::view-transition-new(root) { animation:pocket-vt-new-back 340ms cubic-bezier(.32,.72,0,1) 40ms backwards; }
+  /* The morphing pair: the button's box travels to the chat panel's box. */
+  ::view-transition-group(chat-portal) { animation-duration:380ms; animation-timing-function:cubic-bezier(.32,.72,0,1); }
+  ::view-transition-group(pocket-header),::view-transition-group(pocket-dock) { animation-duration:340ms; animation-timing-function:cubic-bezier(.32,.72,0,1); }
+  .pocket-type { view-transition-name:chat-portal; }
+  .desk-chat:not([hidden]) { view-transition-name:chat-portal; }
+  .pocket-header { view-transition-name:pocket-header; }
+  .pocket-dock { view-transition-name:pocket-dock; }
+}
+@keyframes pocket-vt-old { from { opacity:1; transform:none; } to { opacity:0; transform:scale(.97) translateY(-4px); } }
+@keyframes pocket-vt-new { from { opacity:0; transform:scale(1.02) translateY(10px); } to { opacity:1; transform:none; } }
+@keyframes pocket-vt-old-back { from { opacity:1; transform:none; } to { opacity:0; transform:scale(1.03) translateY(8px); } }
+@keyframes pocket-vt-new-back { from { opacity:0; transform:scale(.98) translateY(-6px); } to { opacity:1; transform:none; } }

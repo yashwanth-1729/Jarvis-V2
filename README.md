@@ -550,6 +550,21 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — Screens hand over instead of cutting; controls are elastic.**
+  `transition.ts` routes screen changes through the View Transitions API, so
+  the outgoing screen fades and settles back (240ms) while the new one rises
+  in (340ms), with a separate reversed pair for going back. "Type instead"
+  and the chat surface share `view-transition-name:chat-portal`, so the button
+  morphs into the chat panel (380ms) rather than being replaced; the header
+  and dock keep their own groups so they never flicker. Buttons and cards now
+  release on cubic-bezier(.34,1.42,.5,1) over 420ms -- past normal size, then
+  settle. Unsupported browsers and reduced motion fall back to an instant
+  swap. **Trap avoided:** these pseudo-elements hang off `<html>`, where
+  `.desk-shell`'s custom properties do not resolve, and a failed var() voids
+  the whole declaration -- every rule there uses literal curves. Verified in
+  the browser pane: pocket-vt-old/new on open, -back pair on close, the
+  chat-portal group at 380ms, elastic release curve applied.
+
 - **2026-09-21 — Mobile motion is physics now, not durations.** New
   `spring.ts` (fixed 1/120s integrator, velocity carried through every
   interruption, iOS rubber-band helper) drives paging: `useSpaceSlide` follows

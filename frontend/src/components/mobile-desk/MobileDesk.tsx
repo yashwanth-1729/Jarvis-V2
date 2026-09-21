@@ -13,6 +13,7 @@ import type { NotePage, RefreshDomain, ScheduleEvent } from "@/types";
 import { DeskTasks } from "./DeskTasks";
 import { useSpaceSlide } from "./useSpaceSlide";
 import { useScrollDepth } from "./useScrollDepth";
+import { withTransition } from "./transition";
 
 const SettingsPanel = dynamic(() => import("@/components/SettingsPanel").then(m => m.SettingsPanel));
 const VoiceMode = dynamic(() => import("@/components/VoiceMode").then(m => m.VoiceMode), { ssr: false });
@@ -63,7 +64,12 @@ export function MobileDesk() {
   React.useEffect(() => {
     try { const saved = localStorage.getItem("jarvis.mobile-desk.theme"); if (saved === "light" || saved === "dark") setTheme(saved); } catch { /* Session preference still works. */ }
   }, []);
-  function openScreen(next: Screen) { if (next === "chat") setChatVisited(true); setScreen(next); }
+  function openScreen(next: Screen) {
+    // Chat is mounted first so the browser has both sides to morph between.
+    if (next === "chat") setChatVisited(true);
+    withTransition(() => setScreen(next), "open");
+  }
+  const closeScreen = () => withTransition(() => setScreen(null), "back");
   const setSettingsOpen = app.setSettingsOpen;
   const closeSettings = React.useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
   function openVoice() { if (app.voiceAvailable) app.setVoiceOpen(true); else setVoiceNotice(true); }
@@ -74,7 +80,7 @@ export function MobileDesk() {
     <a className="desk-skip" href="#desk-content">Skip to content</a>
     <div className="desk-app" aria-hidden={app.settingsOpen || app.voiceOpen ? true : undefined} ref={element => { if (element) element.inert = app.settingsOpen || app.voiceOpen; }}>
       <header className="pocket-header">
-        {screen ? <button className="desk-icon-button glass" onClick={() => setScreen(null)} aria-label="Go back"><ArrowLeft size={21} /></button> : <span className="pocket-monogram" aria-hidden="true"><AudioLines size={22} /></span>}
+        {screen ? <button className="desk-icon-button glass" onClick={closeScreen} aria-label="Go back"><ArrowLeft size={21} /></button> : <span className="pocket-monogram" aria-hidden="true"><AudioLines size={22} /></span>}
         <div className="pocket-heading"><h1 ref={headingRef} tabIndex={-1}>{title}</h1>{!screen && <span>{space === "assistant" ? "Personal intelligence" : date?.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }) || "Your space"}</span>}</div>
         <button className="desk-icon-button glass" onClick={() => app.setSettingsOpen(true)} aria-label="Open settings"><Settings2 size={20} /></button>
       </header>
