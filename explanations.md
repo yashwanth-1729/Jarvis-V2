@@ -128,6 +128,14 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · Android opens /mobile/
+
+- Added `frontend/src-tauri/tauri.android.conf.json` (Android-only config
+  merge) so the APK loads `mobile/index.html`. Codex: this is the only place
+  the native launch route is set; the desktop config is untouched.
+- Built + installed the green pocket UI on the phone; user confirmed it
+  loads. No source changes to the mobile UI itself.
+
 ### 2026-09-21 · Codex · Mobile motion, settings, chat and voice artwork
 
 - `/mobile/`: retained horizontal spaces with `linearSlide`/`useSpaceSlide`,
