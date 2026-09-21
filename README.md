@@ -550,6 +550,18 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — Voice mode has motion now.** The screen enters as a sheet
+  (320ms), the status line and each transcript line animate in (keyed on their
+  text so a change re-triggers), level bars respond in 90ms from their centre
+  and dim when the session is idle, the sculpture follows audio in 110ms
+  instead of 160ms linear, and each state has its own weight: listening leans
+  in and pulses, speaking breathes, muted recedes, thinking dots travel rather
+  than only fading. All transform/opacity; the existing reduced-motion and
+  page-hidden rules still switch it all off. Verified in the browser pane that
+  the five new keyframes load. **Voice mode being 'weird/not working' on the
+  phone is NOT diagnosed yet** -- the handshake path (key -> voice config ->
+  voiceAvailable) reads correct, so it needs device logs.
+
 - **2026-09-21 — Mobile motion retuned for a native feel.** Space navigation
   used `easing: "linear"` at 320ms per space (640ms across two), which read as
   mechanical; it now uses cubic-bezier(.32,.72,0,1) at 300ms, with each extra

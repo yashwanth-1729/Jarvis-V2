@@ -128,6 +128,15 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · Voice-mode motion
+
+- `mobile-desk.css`: pocket-live-in, pocket-status, pocket-breathe,
+  pocket-listen; pocket-thought now travels; level bars scale from centre.
+- `PocketVoice.tsx`: status/hint/transcript keyed by text so each change
+  re-triggers its entrance; `.pocket-live-state` reports a "muted" state.
+- Codex: visual design untouched, only motion. Voice mode failing on the
+  phone is still open -- needs logcat once wireless debugging is paired.
+
 ### 2026-09-21 · Claude Code · Mobile motion (nav easing, press, blur during slide)
 
 - `linearSlide.ts`: iOS ease-out + sub-linear duration; position() now solves

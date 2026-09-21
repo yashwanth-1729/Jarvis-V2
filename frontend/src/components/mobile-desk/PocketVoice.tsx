@@ -41,10 +41,12 @@ export function PocketVoice({ state, level, status, hint, userText, reply, error
       {voices.length > 0 && <label>Speaking voice<select value={voice} onChange={e => onVoice(e.target.value)}>{voices.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
     </div>
     <div className="pocket-live-body">
-      <div className="pocket-live-state" data-state={state}><VoiceSculpture state={state} level={level} muted={muted} /><h2 role="status">{status}</h2><p>{hint}</p>
+      <div className="pocket-live-state" data-state={muted && state === "hearing" ? "muted" : state}><VoiceSculpture state={state} level={level} muted={muted} />
+        {/* Keyed on the text so each new status animates in rather than swapping silently. */}
+        <h2 key={status} role="status">{status}</h2><p key={hint}>{hint}</p>
         <div className="pocket-level" aria-label="Audio level" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(audioLevel * 100)}>{[.45,.75,1,.7,.5,.9,.65].map((weight,i) => <i key={i} style={{ transform: `scaleY(${active ? .15 + audioLevel * weight * 2 : .13})` }} />)}</div>
       </div>
-      {(userText || reply) && <div className="pocket-transcript glass">{userText && <p><small>You</small>{userText}</p>}{reply && <p><small>JARVIS</small>{reply}</p>}</div>}
+      {(userText || reply) && <div className="pocket-transcript glass">{userText && <p key={userText}><small>You</small>{userText}</p>}{reply && <p key={reply}><small>JARVIS</small>{reply}</p>}</div>}
       {error && <p className="desk-error" role="alert">{error}</p>}
     </div>
     <footer><div className="pocket-live-actions"><button className="glass" onClick={onMute} aria-pressed={muted}>{muted ? <MicOff size={22} /> : <Mic size={22} />}{muted ? "Unmute" : "Mute & send"}</button><button className="glass" onClick={onInterrupt} disabled={state !== "speaking" && state !== "thinking"}><Square size={20} />Stop reply</button></div><button className="pocket-barge" role="switch" aria-checked={bargeIn} onClick={onBargeIn}><span>Allow voice interruption</span><span>{bargeIn ? "On" : "Off"}</span></button></footer>
