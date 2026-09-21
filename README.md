@@ -550,6 +550,18 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — Mobile motion retuned for a native feel.** Space navigation
+  used `easing: "linear"` at 320ms per space (640ms across two), which read as
+  mechanical; it now uses cubic-bezier(.32,.72,0,1) at 300ms, with each extra
+  space adding 70ms, and an interrupted slide reads its position through the
+  same curve so fast taps blend instead of snapping. Press feedback 420ms ->
+  110ms, surfaces 650ms -> 340ms, entrances 460-560ms -> 300-320ms with 6px
+  travel. The shell sets `data-sliding` while the track moves and drops
+  backdrop-filter on the dock, glass core and composer for that window (a
+  backdrop-filter recomposites its backdrop every frame). Verified in the
+  browser pane: 300ms/cubic-bezier applied, blur none while sliding and back
+  to blur(18px) after, flag cleared, track landing exactly on the page.
+
 - **2026-09-21 — Android launches the `/mobile/` interface.** New
   `frontend/src-tauri/tauri.android.conf.json` sets the main window's url to
   `mobile/index.html` for Android builds only; desktop still opens `/`.

@@ -15,10 +15,16 @@ export function useSpaceSlide(index: number, enabled: boolean) {
     if (!enabled || !trackRef.current || !selectionRef.current) return;
     const preference = matchMedia("(prefers-reduced-motion: reduce)");
     reduce.current = preference.matches;
+    // While the track moves, the shell drops its frosted-glass blur: a
+    // backdrop-filter repaints its whole backdrop every frame, which is what
+    // made an otherwise GPU-only translate stutter on the phone.
+    const shell = trackRef.current.closest<HTMLElement>(".desk-shell");
     const controller = createLinearSlide([
       { element: trackRef.current, percent: -100 },
       { element: selectionRef.current, percent: 100 },
-    ], latest.current);
+    ], latest.current, active => {
+      if (shell) shell.dataset.sliding = active ? "true" : "false";
+    });
     slide.current = controller;
     const update = () => {
       reduce.current = preference.matches;

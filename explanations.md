@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Claude Code · Mobile motion (nav easing, press, blur during slide)
+
+- `linearSlide.ts`: iOS ease-out + sub-linear duration; position() now solves
+  the same bezier so interrupts blend. `useSpaceSlide` toggles
+  `.desk-shell[data-sliding]`.
+- `mobile-desk.css`: motion tokens (--t-press/quick/move/surface, --ease-out,
+  --ease-soft), shorter entrances, will-change on the two moving layers, and
+  backdrop-filter suspended while sliding.
+- Codex: the green pocket UI's visual design is untouched; only timings,
+  easings and the blur-during-slide rule changed.
+
 ### 2026-09-21 · Claude Code · Android opens /mobile/
 
 - Added `frontend/src-tauri/tauri.android.conf.json` (Android-only config

@@ -3,6 +3,9 @@
    Radius scale: controls 12px, surfaces 22px, sheets 28px. No pill buttons. */
 .desk-shell {
   --ease-fluid:cubic-bezier(.22,1,.36,1); --ease-touch:cubic-bezier(.18,.85,.25,1.12);
+  /* iOS-style: movement decelerates hard, fades stay symmetric. */
+  --ease-out:cubic-bezier(.32,.72,0,1); --ease-soft:cubic-bezier(.4,0,.2,1);
+  --t-press:110ms; --t-quick:180ms; --t-move:280ms; --t-surface:340ms;
   --paper:#e5eeeb; --card:#f4f8f6; --soft:#d2e3de; --text:#173c35;
   --muted:#4c6c63; --rule:#bacfc7; --signal:#21624f; --signal-soft:#c5e6d8;
   --glass:rgba(246,251,248,.73); --shine:rgba(255,255,255,.8); --shadow:rgba(32,74,60,.12);
@@ -31,8 +34,8 @@
 }
 .desk-shell * { box-sizing:border-box; }
 .desk-shell button,.desk-shell input,.desk-shell select,.desk-shell textarea { font:inherit; }
-.desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform 420ms var(--ease-touch),background-color 280ms ease,color 280ms ease; }
-.desk-shell button:active:not(:disabled) { transform:scale(.977); transition-duration:120ms; }
+.desk-shell button { cursor:pointer; touch-action:manipulation; transition:transform var(--t-quick) var(--ease-out),background-color var(--t-quick) var(--ease-soft),color var(--t-quick) var(--ease-soft); }
+.desk-shell button:active:not(:disabled) { transform:scale(.97); transition-duration:var(--t-press); }
 .desk-shell button:disabled { opacity:.55; cursor:wait; }
 .desk-shell :focus-visible { outline:2px solid var(--signal); outline-offset:4px; }
 .desk-shell svg { flex-shrink:0; }
@@ -52,7 +55,15 @@
 .pocket-content[data-pager="true"] > .desk-error { margin:12px 24px; flex-shrink:0; }
 .pocket-pages-viewport { flex:1; min-height:0; overflow:hidden; }
 .pocket-pages-viewport[hidden] { display:none; }
-.pocket-pages-track { display:flex; width:100%; height:100%; transform:translateX(-100%); }
+.pocket-pages-track { display:flex; width:100%; height:100%; transform:translateX(-100%); will-change:transform; }
+.pocket-dock-selection { will-change:transform; }
+/* A backdrop-filter recomposites its whole backdrop every frame. During a
+   slide that is the difference between 60fps and visible stutter, so the
+   blur is swapped for its solid fallback until the movement settles. */
+.desk-shell[data-sliding="true"] .glass,
+.desk-shell[data-sliding="true"] .pocket-glass-core,
+.desk-shell[data-sliding="true"] .chat-composer { backdrop-filter:none; -webkit-backdrop-filter:none; }
+.desk-shell[data-sliding="true"] .pocket-page { pointer-events:none; }
 .pocket-page { flex:0 0 100%; min-width:0; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:12px 24px 20px; scrollbar-width:none; }
 .pocket-page[data-space="assistant"] { display:flex; flex-direction:column; }
 .pocket-page .pocket-assistant { min-height:440px; }
@@ -68,7 +79,7 @@
 .pocket-glass-ring::before { content:""; pointer-events:none; position:absolute; inset:-55%; background:linear-gradient(112deg,transparent 38%,var(--shine) 49%,transparent 61%); opacity:0; transform:translateX(-55%); }
 .pocket-glass-ring::after { content:""; position:absolute; inset:14px; border-radius:inherit; border:1px solid var(--shine); }
 .pocket-glass-core { position:relative; display:grid; place-items:center; width:104px; height:104px; border-radius:32px; color:var(--signal); background:var(--glass); border:1px solid var(--shine); box-shadow:inset 0 2px 5px var(--shine),0 8px 24px var(--shadow); backdrop-filter:blur(12px); transform:rotate(8deg); }
-.pocket-glass-core { overflow:hidden; transition:transform 650ms var(--ease-fluid); }
+.pocket-glass-core { overflow:hidden; transition:transform var(--t-surface) var(--ease-out); }
 .pocket-glass-core::before { content:""; position:absolute; inset:-65%; pointer-events:none; background:linear-gradient(115deg,transparent 42%,var(--shine) 51%,transparent 59%); opacity:0; }
 .pocket-glass-core svg { position:relative; transform:rotate(-8deg); }
 .pocket-speak:active .pocket-glass-core { transform:rotate(3deg) scale(.98); }
@@ -91,7 +102,7 @@
 .pocket-dock[data-space="assistant"] .pocket-dock-selection { transform:translateX(100%); }
 .pocket-dock[data-space="library"] .pocket-dock-selection { transform:translateX(200%); }
 .pocket-dock button { position:relative; display:flex; flex-direction:column; gap:4px; align-items:center; min-height:64px; padding:7px 2px; font-size:10px; font-weight:600; color:var(--muted); border-radius:17px; }
-.pocket-dock button > span { display:grid; place-items:center; height:25px; transition:transform 200ms; }
+.pocket-dock button > span { display:grid; place-items:center; height:25px; transition:transform var(--t-move) var(--ease-out); }
 .pocket-dock [aria-current="page"] { color:var(--signal); }
 .pocket-dock [aria-current="page"] > span { transform:translateY(-1px); }
 .pocket-day-summary { display:flex; align-items:center; gap:26px; padding:4px 0 22px; }
@@ -125,7 +136,7 @@
 .pocket-library-intro { font-size:26px; font-weight:550; letter-spacing:-1px; line-height:1.3; margin:10px 0 26px; }
 .pocket-books { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:26px 18px; padding:0 2px 20px; }
 .pocket-book { text-align:left; min-width:0; }
-.pocket-book-cover { display:flex; flex-direction:column; align-items:flex-start; position:relative; min-height:177px; border-radius:5px 20px 20px 5px; padding:26px 18px 18px 25px; border-left:7px solid var(--rule); transform:perspective(700px) rotateY(-8deg); transition:transform 650ms var(--ease-fluid); }
+.pocket-book-cover { display:flex; flex-direction:column; align-items:flex-start; position:relative; min-height:177px; border-radius:5px 20px 20px 5px; padding:26px 18px 18px 25px; border-left:7px solid var(--rule); transform:perspective(700px) rotateY(-8deg); transition:transform var(--t-surface) var(--ease-out); }
 .pocket-book-cover::before { content:""; position:absolute; right:5px; left:3px; bottom:-5px; height:4px; border:1px solid var(--rule); border-radius:0 0 12px 2px; background:var(--card); }
 .pocket-book-cover > svg:first-child { margin:auto 0; color:var(--signal); }
 .pocket-book-cover > span { font-size:11px; margin-top:20px; color:var(--muted); }
@@ -391,18 +402,18 @@
   .pocket-sculpture-thinking i { animation:pocket-thought 1.5s ease-in-out infinite; }
   .pocket-sculpture-thinking i:nth-child(2) { animation-delay:150ms; }
   .pocket-sculpture-thinking i:nth-child(3) { animation-delay:300ms; }
-  .pocket-screen { animation:pocket-enter 460ms var(--ease-fluid) backwards; }
-  .pocket-assistant-actions > :first-child { animation:pocket-enter 560ms var(--ease-fluid) 70ms backwards; }
-  .pocket-assistant-actions > :last-child { animation:pocket-enter 560ms var(--ease-fluid) 130ms backwards; }
+  .pocket-screen { animation:pocket-enter 300ms var(--ease-out) backwards; }
+  .pocket-assistant-actions > :first-child { animation:pocket-enter 320ms var(--ease-out) 40ms backwards; }
+  .pocket-assistant-actions > :last-child { animation:pocket-enter 320ms var(--ease-out) 80ms backwards; }
   .pocket-loop-art { animation:pocket-art-float 10s ease-in-out infinite; }
   .pocket-glass-ring { animation:pocket-drift 12s ease-in-out infinite; }
   .pocket-glass-ring::before { animation:pocket-reflection 10s ease-in-out infinite; }
   .pocket-speak .pocket-glass-core { animation:pocket-float 6s ease-in-out infinite; }
   .pocket-glass-core::before { animation:pocket-reflection 11s ease-in-out 1.5s infinite; }
-  .pocket-book { animation:pocket-enter 540ms var(--ease-fluid) backwards; }
-  .pocket-book:nth-child(2n) { animation-delay:70ms; }
-  .pocket-book:nth-child(n+3) { animation-delay:120ms; }
-  .desk-task[data-done="true"] .desk-check > span { animation:pocket-select 420ms var(--ease-fluid); }
+  .pocket-book { animation:pocket-enter 320ms var(--ease-out) backwards; }
+  .pocket-book:nth-child(2n) { animation-delay:40ms; }
+  .pocket-book:nth-child(n+3) { animation-delay:80ms; }
+  .desk-task[data-done="true"] .desk-check > span { animation:pocket-select 280ms var(--ease-out); }
   .desk-spin { animation:pocket-spin 1s linear infinite; }
   .desk-loading { animation:pocket-load 1.3s ease-in-out infinite alternate; }
 }
@@ -413,7 +424,7 @@
 @media(prefers-reduced-motion:reduce) { .pocket-sculpture-response { transform:none!important; } }
 @media(prefers-reduced-transparency:reduce) { .desk-shell .glass,.pocket-glass-core,.pocket-glass-ring { background:var(--card); backdrop-filter:none; -webkit-backdrop-filter:none; } .pocket-glass-ring::before,.pocket-glass-core::before { display:none; } }
 @supports not (backdrop-filter:blur(1px)) { .desk-shell .glass { background:var(--card); } }
-@keyframes pocket-enter { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:none; } }
+@keyframes pocket-enter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 @keyframes pocket-art-float { 0%,100% { transform:translateY(0) rotate(-3deg); } 50% { transform:translateY(-5px) rotate(3deg); } }
 @keyframes pocket-orbit { from { transform:rotate(0); } to { transform:rotate(360deg); } }
 @keyframes pocket-aura { 0%,100% { transform:scale(.92); } 50% { transform:scale(1.1); } }
