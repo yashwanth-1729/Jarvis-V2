@@ -550,6 +550,14 @@ changes. Record checks actually run and distinguish source changes from installe
 builds. Repository guidance in `AGENTS.md` makes this part of future agent work;
 there is no background process automatically rewriting documentation.
 
+- **2026-09-21 — Android launches the `/mobile/` interface.** New
+  `frontend/src-tauri/tauri.android.conf.json` sets the main window's url to
+  `mobile/index.html` for Android builds only; desktop still opens `/`.
+  Built and installed on the phone (43.7 MB) with Codex's green pocket UI
+  (signal #21624f on mint paper, dark mode, animated voice); the user
+  confirmed it loads. Delete that file and rebuild to put the phone back on
+  the original interface.
+
 - **2026-09-19 — Sign-in result page redesigned.** The page the browser lands
   on after Google/MCP sign-in (`app/connectors/pages.py`) now uses JARVIS's
   tokens and brand mark, shows the connected account and a chip per granted
