@@ -1,8 +1,10 @@
 "use client";
 
 import { ConnectorsSection } from "@/components/ConnectorsSection";
-import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
+import { ArrowLeft, Check, Eye, EyeOff, Loader2, X } from "lucide-react";
 import * as React from "react";
+import { SettingsHome, SETTINGS_PAGES, type SettingsPage } from "./mobile-desk/SettingsHome";
+import { createLinearSlide } from "./mobile-desk/linearSlide";
 
 import {
   GEMINI_KEY_STORAGE,
@@ -45,7 +47,19 @@ type ProbeState = "idle" | "checking" | "ok" | "fail";
  * into an APK puts it in every copy of the file. Entering them here means one
  * build works against a home laptop today and a VPS later.
  */
-export function SettingsPanel({ onClose, appearance }: { onClose: () => void; appearance?: React.ReactNode }) {
+export function SettingsPanel({ onClose, appearance, presentation = "dialog" }: { onClose: () => void; appearance?: React.ReactNode; presentation?: "dialog" | "pocket" }) {
+  const pocket = presentation === "pocket";
+  const [page, setPage] = React.useState<SettingsPage | null>(null);
+  // Retain outgoing detail content until the next category opens.
+  const [category, setCategory] = React.useState<SettingsPage>("appearance");
+  const show = (id: SettingsPage) => !pocket || category === id;
+  const openPage = (id: SettingsPage) => { setCategory(id); setPage(id); };
+  const pageRef = React.useRef(page);
+  pageRef.current = page;
+  const settingsTrack = React.useRef<HTMLDivElement>(null);
+  const detailRef = React.useRef<HTMLDivElement | null>(null);
+  const settingsHeading = React.useRef<HTMLHeadingElement>(null);
+  const settingsSlide = React.useRef<ReturnType<typeof createLinearSlide> | null>(null);
   const [place, setPlace] = React.useState<RememberedLocation | null>(null);
   const [placeName, setPlaceName] = React.useState("");
   const [locating, setLocating] = React.useState(false);
@@ -151,19 +165,50 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
   const [runtimeHasGeminiKey, setRuntimeHasGeminiKey] = React.useState<boolean | null>(null);
   const [runtimeHasOpenRouterKey, setRuntimeHasOpenRouterKey] = React.useState<boolean | null>(null);
   const [confirmReset, setConfirmReset] = React.useState(false);
+  const draft = JSON.stringify([backend, supabaseUrl, supabaseKey, providerKey, geminiKey, openrouterKey, syncBackend, sldtDatasetId, sldtRepo, sldtBranch, sldtPathPrefix, sldtWriteMode, sldtProxyUrl, sldtDirectToken]);
+  const originalDraft = React.useRef(draft);
+  const dirty = draft !== originalDraft.current;
 
   const dialogRef = React.useRef<HTMLDivElement>(null);
 
   // Escape closes, and focus moves in on open so a keyboard or screen-reader
   // user is not left behind on the page underneath.
   React.useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        if (pocket && pageRef.current) setPage(null);
+        else onClose();
+      }
+      if (event.key === "Tab") {
+        const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]') || []).filter(element => !element.closest('[hidden], [inert]') && element.getClientRects().length);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (!first) { event.preventDefault(); return; }
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => { window.removeEventListener("keydown", onKey); if (previous?.isConnected) previous.focus(); };
+  }, [onClose, pocket]);
+
+  React.useLayoutEffect(() => {
+    if (!pocket || !settingsTrack.current) return;
+    const controller = createLinearSlide([{ element: settingsTrack.current, percent: -100 }], 0);
+    settingsSlide.current = controller;
+    const preference = matchMedia("(prefers-reduced-motion: reduce)");
+    const settle = () => { if (preference.matches || document.hidden) controller.move(pageRef.current ? 1 : 0, true); };
+    preference.addEventListener("change", settle);
+    document.addEventListener("visibilitychange", settle);
+    return () => { controller.dispose(); settingsSlide.current = null; preference.removeEventListener("change", settle); document.removeEventListener("visibilitychange", settle); };
+  }, [pocket]);
+  React.useLayoutEffect(() => {
+    if (!pocket) return;
+    settingsSlide.current?.move(page ? 1 : 0, matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (page) detailRef.current?.scrollTo({ top: 0 });
+    settingsHeading.current?.focus({ preventScroll: true });
+  }, [page, pocket]);
 
   // Ask the runtime whether it actually has a key. Saving one is silent
   // otherwise: a mistyped or unsaved key looks identical to a working one,
@@ -266,18 +311,18 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
 
   return (
     <div
-      className="mobile-ui fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-0"
+      className={cn("mobile-ui fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-0", pocket && "pocket-settings")}
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
     >
       {/* Scrim strong enough to isolate the sheet, and clicking it dismisses. */}
-      <button
+      {!pocket && <button
         type="button"
         aria-label="Close settings"
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-surface-0/70 backdrop-blur-sm"
-      />
+      />}
 
       <div
         ref={dialogRef}
@@ -289,23 +334,27 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
         )}
       >
         <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3">
-          <h2 id="settings-title" className="flex-1 font-display text-[20px] font-semibold text-ink">
-            Connections
+          {pocket && <button className="desk-icon-button glass" aria-label={page ? "Back to settings" : "Close settings"} onClick={() => page ? setPage(null) : onClose()}><ArrowLeft size={21} /></button>}
+          <h2 ref={settingsHeading} tabIndex={-1} id="settings-title" className="flex-1 font-display text-[20px] font-semibold text-ink">
+            {pocket ? (page ? SETTINGS_PAGES.find(item => item.id === page)?.title : "Settings") : "Connections"}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close settings"
-            className="-mr-1 inline-flex h-11 w-11 items-center justify-center rounded text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className={cn("-mr-1 inline-flex h-11 w-11 items-center justify-center rounded text-ink-dim hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50", pocket && "pocket-settings-close")}
           >
             <X aria-hidden className="h-4 w-4" strokeWidth={2} />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4">
-          {appearance}
+        <div className={pocket ? "pocket-settings-viewport" : "contents"}>
+        <div ref={settingsTrack} className={pocket ? "pocket-settings-track" : "contents"}>
+          {pocket && <div className="pocket-settings-page" aria-hidden={!!page} ref={element => { if (element) element.inert = !!page; }}><SettingsHome onOpen={openPage} /></div>}
+        <div ref={element => { detailRef.current = element; if (element) element.inert = pocket && !page; }} aria-hidden={pocket && !page ? true : undefined} className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4", pocket && "pocket-settings-page pocket-settings-detail")}>
+          <section hidden={!show("appearance")} className="pocket-setting-section">{appearance}{pocket && <p className="pocket-setting-help">Follows this device’s theme when System is selected. Changes apply immediately.</p>}</section>
           {/* -- runtime ---------------------------------------------------- */}
-          <section className="space-y-2">
+          <section hidden={!show("runtime")} className="pocket-setting-section space-y-2">
             <label htmlFor="backend-url" className="block text-sm font-medium text-ink">
               JARVIS runtime
             </label>
@@ -353,6 +402,8 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
               </p>
             )}
 
+          </section>
+          <section hidden={!show("location")} className="pocket-setting-section space-y-2">
             <label className="block pt-3 text-sm font-medium text-ink">
               Location
             </label>
@@ -400,8 +451,10 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
               </button>
             </div>
 
+          </section>
+          <section hidden={!show("providers")} className="pocket-setting-section space-y-2">
             <label htmlFor="provider-key" className="block pt-3 text-sm font-medium text-ink">
-              Provider key
+              {pocket ? "Sarvam API key" : "Provider key"}
             </label>
             <p className="text-xs leading-relaxed text-ink-dim">
               Your Sarvam key. Needed for the assistant and voice; the board works
@@ -532,7 +585,7 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
           </section>
 
           {/* -- sync ------------------------------------------------------- */}
-          <section className="space-y-2 border-t border-line pt-5">
+          <section hidden={!show("sync")} className="pocket-setting-section space-y-2 border-t border-line pt-5">
             <label className="block text-sm font-medium text-ink">Sync backend</label>
             <p className="text-xs leading-relaxed text-ink-dim">
               Carries your board between devices. Nothing is stored here until you sync.
@@ -835,10 +888,11 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
           </section>
 
           {/* -- connectors: Google + MCP ----------------------------------- */}
-          <ConnectorsSection />
+          <section hidden={!show("connectors")} className="pocket-setting-section"><ConnectorsSection /></section>
 
           {/* -- destructive, kept apart from everything else --------------- */}
-          <section className="border-t border-line pt-5">
+          <section hidden={!show("device")} className="pocket-setting-section border-t border-line pt-5">
+            {pocket && <div className="pocket-storage-warning"><h3>Reset this device</h3><p>Removes this device’s local copy. Changes that have not synced will be lost. Your remote data is not erased.</p></div>}
             {confirmReset ? (
               <div className="space-y-2">
                 <p className="text-xs text-ink">
@@ -872,11 +926,14 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
             )}
           </section>
         </div>
+        </div>
+        </div>
 
         {/* The sheet is `fixed`, so it sits outside the shell's safe-area
             padding and has to inset its own footer — otherwise Save sits under
             the gesture bar, which is where a thumb naturally lands. */}
         <footer
+          hidden={pocket && !dirty}
           className={
             "flex items-center justify-end gap-2 border-t border-line px-4 py-3 " +
             "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
@@ -894,7 +951,7 @@ export function SettingsPanel({ onClose, appearance }: { onClose: () => void; ap
             onClick={save}
             className="inline-flex h-11 items-center rounded bg-accent px-5 text-sm font-semibold text-accent-ink hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
-            Save &amp; reload
+            {pocket ? "Save & restart" : "Save & reload"}
           </button>
         </footer>
       </div>

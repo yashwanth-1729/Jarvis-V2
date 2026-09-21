@@ -73,16 +73,26 @@ announcements and native Sentinel are separate paths.
 
 The independent `/mobile/` experience uses `components/mobile-desk` and a
 route-scoped stylesheet; it does not replace `/` during design comparison.
-It now has Assistant, My day and Library as full-height spaces. Chat, tasks,
+It now has Assistant, My day and Library as retained full-height spaces. A small
+Web Animations controller moves the horizontal track and dock from their current
+position at a shared linear rate. Each page owns vertical scrolling; inactive
+pages are inert and hidden from accessibility navigation. Chat, tasks,
 schedule/reminders and notebook contents open as focused subviews with a back
 button. ScheduleBoard/NotesWorkspace accept optional initial selections; their
 default desktop behavior is unchanged. SettingsPanel accepts optional appearance
-content inside its existing focus-trapped dialog. RecordEditor is presented as
+content and `presentation="pocket"` for grouped full-screen settings navigation;
+its existing form state, save/reload, location and connector handlers stay shared.
+Chat's optional pocket presentation similarly keeps its streaming/audio/history
+controller. The desktop installed-path AgentRunStatus widget is not rendered in
+the mobile route. RecordEditor is presented as
 a bottom sheet by scoped CSS, retaining validation/deletion confirmation.
 VoiceMode's opt-in `presentation="pocket"` renders PocketVoice instead of the HUD,
 but both use the same VoiceSession and callbacks. The pocket presentation avoids
 loading the WebGL core, uses real session levels, and preserves language, voice,
-mute/send, interrupt and half-duplex controls. No transport or provider changes.
+mute/send, interrupt and half-duplex controls. VoiceSculpture uses the supplied
+image with compositor motion; session state controls accents and measured level
+controls scale. It never generates audio or synthetic level values. No transport
+or provider changes.
 `useCommandCenter` contains the existing shared page controller: store ownership,
 startup retries, provider-key handoff, agent seeding/draining, notification refresh
 and mutations remain the same. Each mounted route owns one controller and one

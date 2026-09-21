@@ -34,6 +34,18 @@ createServer(async (req, res) => {
   else if (path === "/api/dashboard") result = dashboard();
   else if (path === "/api/voice/config") result = { enabled: false };
   else if (path === "/api/chat/history") result = [];
+  else if (path === "/api/chat" && req.method === "POST") {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    const reply = "Here’s a simple plan for the rest of your day.\n\nStart with **one focused task**, then leave a little room for a break.\n\n- Finish the mobile layout\n- Review your notes\n- Take your evening walk\n\nThis is a simulated reply from the isolated design preview, not a live model.";
+    const chunks = reply.match(/.{1,24}(?:\s|$)|.{1,24}/gs) || [reply];
+    let index = 0;
+    const timer = setInterval(() => {
+      if (index < chunks.length) res.write(`event: text\ndata: ${JSON.stringify({ text: chunks[index++] })}\n\n`);
+      else { clearInterval(timer); res.end('event: done\ndata: {"refresh":[]}\n\n'); }
+    }, 120);
+    res.on("close", () => clearInterval(timer));
+    return;
+  }
   else if (path === "/api/briefs/generate") result = brief;
   else if (path === "/api/reminders" && req.method === "GET") result = reminders;
   else if (path === "/api/reminders" && req.method === "POST") { const row = { ...body, id: nextId++, target_at: null, fired_at: null, created_at: stamp }; reminders.push(row); result = row; }

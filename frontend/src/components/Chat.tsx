@@ -3,6 +3,10 @@
 import {
   CircleAlert,
   ArrowUpRight,
+  ArrowUp,
+  CalendarDays,
+  Lightbulb,
+  ListChecks,
   CornerDownLeft,
   Eraser,
   Loader2,
@@ -12,6 +16,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import * as React from "react";
+import Image from "next/image";
 
 import { intentSurface, readSurface, type SurfaceDescriptor } from "@/lib/surfaces";
 import ReactMarkdown from "react-markdown";
@@ -42,6 +47,7 @@ let messageCounter = 0;
 const nextId = () => `m${Date.now()}-${messageCounter++}`;
 
 interface ChatProps {
+  presentation?: "console" | "pocket";
   onRefresh: (domains: RefreshDomain[]) => void;
   /**
    * A tool result that names an interface to open.
@@ -53,7 +59,9 @@ interface ChatProps {
   onSurface: (surface: SurfaceDescriptor) => void;
 }
 
-export function Chat({ onRefresh, onSurface }: ChatProps) {
+export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatProps) {
+  const pocket = presentation === "pocket";
+  const [confirmClear, setConfirmClear] = React.useState(false);
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [streaming, setStreaming] = React.useState(false);
@@ -68,6 +76,12 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const composerRef = React.useRef<HTMLTextAreaElement>(null);
   const pinnedRef = React.useRef(true);
+  React.useLayoutEffect(() => {
+    if (!pocket || !composerRef.current) return;
+    const field = composerRef.current;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(152, Math.max(52, field.scrollHeight))}px`;
+  }, [input, pocket]);
 
   /* ---------------------------------------------------------------- history */
 
@@ -254,7 +268,7 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
         composerRef.current?.focus();
       }
     },
-    [onRefresh, patchAssistant, streaming],
+    [onRefresh, onSurface, patchAssistant, streaming],
   );
 
   /**
@@ -346,7 +360,7 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void send(input);
     }
@@ -360,10 +374,10 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
   return (
     <section
       aria-label="JARVIS console"
-      className="mobile-ui chat-page relative flex h-full min-h-0 flex-col border-r border-line bg-surface-1/70"
+      className={cn("mobile-ui chat-page relative flex h-full min-h-0 flex-col border-r border-line bg-surface-1/70", pocket && "pocket-chat")}
     >
       <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-4">
-        <div className="chat-heading"><BrandMark /><div><strong>JARVIS</strong><small>{streaming ? "Working on it…" : "A little clarity, whenever you need it."}</small></div></div>
+        {pocket ? <span className="pocket-chat-status">{streaming ? "JARVIS is working" : "Your conversation"}</span> : <div className="chat-heading"><BrandMark /><div><strong>JARVIS</strong><small>{streaming ? "Working on it…" : "A little clarity, whenever you need it."}</small></div></div>}
         <span
           aria-hidden
           className={cn(
@@ -374,7 +388,7 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
         <Button
           variant="ghost"
           size="xs"
-          onClick={reset}
+          onClick={() => pocket ? setConfirmClear(true) : void reset()}
           disabled={!messages.length}
           className="ml-auto"
           title="Clear conversation"
@@ -383,6 +397,7 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
           Clear
         </Button>
       </header>
+      {pocket && confirmClear && <div className="pocket-chat-confirm glass" role="alert"><p>Clear this conversation? This removes the saved chat history.</p><div><button className="desk-text-button" onClick={() => setConfirmClear(false)}>Keep it</button><button className="desk-button" onClick={() => { setConfirmClear(false); void reset(); }}>Clear chat</button></div></div>}
 
       <ScrollArea
         ref={scrollRef}
@@ -390,9 +405,10 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
         className="chat-scroll min-h-0 flex-1 px-4 py-4"
       >
         {showIntro ? (
-          <Intro onPick={(value) => void send(value)} />
+          pocket ? <PocketChatIntro onPick={(value) => void send(value)} /> : <Intro onPick={(value) => void send(value)} />
         ) : (
-          <div className="space-y-6">
+          <div className="chat-messages space-y-6">
+            {pocket && !historyLoaded && <div className="pocket-chat-loading" role="status">Opening conversation…</div>}
             {messages.map((message) => (
               <MessageBlock
                 key={message.id}
@@ -417,7 +433,7 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
 
         <div
           className={cn(
-            "rounded-lg border bg-surface-2 transition-colors duration-150",
+            "chat-composer rounded-lg border bg-surface-2 transition-colors duration-150",
             "focus-within:border-accent/40",
             micState === "recording"
               ? "border-critical/50"
@@ -428,10 +444,11 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
         >
           <Textarea
             ref={composerRef}
+            aria-label="Message JARVIS"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={onKeyDown}
-            rows={2}
+            rows={pocket ? 1 : 2}
             maxLength={20000}
             placeholder={
               micState === "recording"
@@ -443,7 +460,7 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
             className="max-h-48 px-3 pb-1 pt-2.5 text-[16px] md:text-base"
             disabled={streaming}
           />
-          <div className="flex items-center gap-2 px-2 pb-2">
+          <div className="chat-composer-actions flex items-center gap-2 px-2 pb-2">
             {voiceEnabled && (
               <Button
                 variant="ghost"
@@ -472,8 +489,9 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
                 )}
               </Button>
             )}
+            {pocket && <span className="pocket-composer-hint">{micState === "recording" ? "Listening to your message" : micState === "transcribing" ? "Turning speech into text" : "Ask, plan or remember"}</span>}
 
-            <span className="hidden font-mono text-2xs text-ink-faint lg:inline">
+            <span className={cn("hidden font-mono text-2xs text-ink-faint", !pocket && "lg:inline")}>
               {micState === "recording" ? (
                 <span className="text-critical">recording…</span>
               ) : micState === "transcribing" ? (
@@ -489,9 +507,9 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
 
             <div className="ml-auto">
               {streaming ? (
-                <Button size="xs" variant="secondary" onClick={stop} title="Stop generating">
+                <Button size="xs" variant="secondary" onClick={stop} title="Stop generating" aria-label="Stop generating" className={pocket ? "pocket-send" : undefined}>
                   <Square className="h-2.5 w-2.5 fill-current" />
-                  Stop
+                  {!pocket && "Stop"}
                 </Button>
               ) : (
                 <Button
@@ -500,9 +518,10 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
                   onClick={() => void send(input)}
                   disabled={!input.trim() || busyMic}
                   title="Send (Enter)"
+                  aria-label="Send message"
+                  className={pocket ? "pocket-send" : undefined}
                 >
-                  Send
-                  <CornerDownLeft className="h-3 w-3" />
+                  {pocket ? <ArrowUp size={21} /> : <>Send<CornerDownLeft className="h-3 w-3" /></>}
                 </Button>
               )}
             </div>
@@ -511,6 +530,15 @@ export function Chat({ onRefresh, onSurface }: ChatProps) {
       </footer>
     </section>
   );
+}
+
+function PocketChatIntro({ onPick }: { onPick: (value: string) => void }) {
+  const prompts = [
+    { title: "Plan my day", text: SUGGESTIONS[0], icon: ListChecks },
+    { title: "Check my schedule", text: SUGGESTIONS[1], icon: CalendarDays },
+    { title: "Explore an idea", text: SUGGESTIONS[2], icon: Lightbulb },
+  ];
+  return <div className="pocket-chat-intro"><Image src="/mobile/sea-glass-loop.png" width={96} height={96} unoptimized alt="" /><h2>Start a conversation</h2><p>Something to plan, a thought to untangle<br />or a detail to remember.</p><div className="pocket-chat-prompts">{prompts.map(({ title, text, icon: Icon }) => <button key={title} className="glass" onClick={() => onPick(text)}><Icon size={20} strokeWidth={1.6} /><span>{title}</span><ArrowUpRight size={17} /></button>)}</div></div>;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -128,6 +128,23 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-21 · Codex · Mobile motion, settings, chat and voice artwork
+
+- `/mobile/`: retained horizontal spaces with `linearSlide`/`useSpaceSlide`,
+  synchronized dock at 320ms per space, rapid retargeting from current progress,
+  inert offscreen pages. Library now opens Reminders directly.
+- Added user-supplied PNG unchanged under `frontend/public/mobile/`. No image
+  generation. VoiceSculpture is presentation-only, with real-level response,
+  state accents, continuous transforms and reduced-motion/visibility handling.
+- SettingsPanel/Chat accept opt-in pocket presentation; desktop remains default.
+  Settings has grouped navigation, appearance previews and preserved form drafts.
+  Chat has a compact composer, readable themed messages and clear confirmation.
+  The desktop-only installed-path AgentRunStatus widget is absent from mobile.
+- Checked 15 motion + 18 voice assertions, TypeScript, focused lint and browser
+  fixtures (no real data/provider calls). Real-device voice and APK installation
+  are not covered. Native build validation is in docs/mobile-pocket.md.
+  Existing untracked `tauri.android.conf.json` is not part of this change.
+
 ### 2026-09-20 · Codex · Softer glass motion
 
 - User requested softer, more continuous glass animation. Added slow bounded

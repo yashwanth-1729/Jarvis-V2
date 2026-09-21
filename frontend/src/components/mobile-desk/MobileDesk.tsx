@@ -2,15 +2,16 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { ArrowLeft, ArrowUpRight, AudioLines, Bell, BookOpen, CalendarDays, ChevronRight, CircleAlert, Clock3, Keyboard, Layers3, ListChecks, Mic, Plus, Settings2, X } from "lucide-react";
 import { Chat } from "@/components/Chat";
-import { AgentRunStatus } from "@/components/AgentRunStatus";
 import { ScheduleBoard } from "@/components/ScheduleBoard";
 import { NotesWorkspace } from "@/components/NotesWorkspace";
 import { SyncBanner } from "@/components/SyncBanner";
 import { useCommandCenter, type CommandCenter } from "@/lib/useCommandCenter";
 import type { NotePage, RefreshDomain, ScheduleEvent } from "@/types";
 import { DeskTasks } from "./DeskTasks";
+import { useSpaceSlide } from "./useSpaceSlide";
 
 const SettingsPanel = dynamic(() => import("@/components/SettingsPanel").then(m => m.SettingsPanel));
 const VoiceMode = dynamic(() => import("@/components/VoiceMode").then(m => m.VoiceMode), { ssr: false });
@@ -30,6 +31,7 @@ export function MobileDesk() {
   const app = useCommandCenter();
   const [space, setSpace] = React.useState<Space>("assistant");
   const [screen, setScreen] = React.useState<Screen>(null);
+  const { trackRef, selectionRef } = useSpaceSlide(SPACES.findIndex(item => item.id === space), screen === null);
   const [notebook, setNotebook] = React.useState("notes-long-term");
   const [chatVisited, setChatVisited] = React.useState(false);
   const [voiceNotice, setVoiceNotice] = React.useState(false);
@@ -54,13 +56,15 @@ export function MobileDesk() {
     try { const saved = localStorage.getItem("jarvis.mobile-desk.theme"); if (saved === "light" || saved === "dark") setTheme(saved); } catch { /* Session preference still works. */ }
   }, []);
   function openScreen(next: Screen) { if (next === "chat") setChatVisited(true); setScreen(next); }
+  const setSettingsOpen = app.setSettingsOpen;
+  const closeSettings = React.useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
   function openVoice() { if (app.voiceAvailable) app.setVoiceOpen(true); else setVoiceNotice(true); }
   const mode = { local: app.recordsLocal };
   const title = screen ? SCREEN_TITLE[screen] : space === "assistant" ? "JARVIS" : space === "day" ? "My day" : "Library";
   const ready = !app.loading && app.status !== "offline" && !app.localOnly;
   return <div className="desk-shell" data-theme={theme} data-motion-paused={motionPaused} data-voice-open={app.voiceOpen}>
     <a className="desk-skip" href="#desk-content">Skip to content</a>
-    <div className="desk-app">
+    <div className="desk-app" aria-hidden={app.settingsOpen || app.voiceOpen ? true : undefined} ref={element => { if (element) element.inert = app.settingsOpen || app.voiceOpen; }}>
       <header className="pocket-header">
         {screen ? <button className="desk-icon-button glass" onClick={() => setScreen(null)} aria-label="Go back"><ArrowLeft size={21} /></button> : <span className="pocket-monogram" aria-hidden="true"><AudioLines size={22} /></span>}
         <div className="pocket-heading"><h1 ref={headingRef} tabIndex={-1}>{title}</h1>{!screen && <span>{space === "assistant" ? "Personal intelligence" : date?.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }) || "Your space"}</span>}</div>
@@ -68,26 +72,40 @@ export function MobileDesk() {
       </header>
       {process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_API_BASE === "http://127.0.0.1:8101" && <div className="desk-fixture-label">Design preview · Sample records</div>}
       <SyncBanner enabled={app.recordsLocal} onSynced={app.handleSynced} />
-      <main id="desk-content" ref={contentRef} className="pocket-content" data-screen={screen || space}>
+      <main id="desk-content" ref={contentRef} className="pocket-content" data-screen={screen || space} data-pager={!screen}>
         {(app.error || app.localOnly) && <div className="desk-error" role="alert"><CircleAlert size={18} /><div><strong>{app.localOnly ? "Using saved data" : "Connection unavailable"}</strong><p>You can retry without changing your records.</p><button onClick={() => void app.refresh()} disabled={app.refreshing}>{app.refreshing ? "Connecting…" : "Reconnect"}</button></div></div>}
-        {chatVisited && <div className="desk-chat" hidden={screen !== "chat"}><Chat onRefresh={app.handleAgentRefresh} onSurface={app.setSurface} /><AgentRunStatus /></div>}
-        {screen !== "chat" && <div key={screen || space} className="pocket-screen">
-          {!screen && space === "assistant" && <Assistant app={app} date={date} ready={ready} openVoice={openVoice} openScreen={openScreen} />}
-          {(screen || space !== "assistant") && (app.loading && !app.state ? <div className="desk-loading" role="status"><div /><div /><div /><span className="sr-only">Loading your records</span></div> : !app.state ? <div className="desk-empty"><Layers3 size={36} /><h2>Your records are safe.</h2><p>Connect to JARVIS to open your saved data.</p><button className="desk-button" onClick={() => app.setSettingsOpen(true)}>Open settings</button></div> : <>
-            {!screen && space === "day" && <Day app={app} date={date} openScreen={openScreen} />}
-            {!screen && space === "library" && <Library app={app} onOpen={uid => { setNotebook(uid); openScreen("notes"); }} />}
+        {chatVisited && <div className="desk-chat" hidden={screen !== "chat"}><Chat presentation="pocket" onRefresh={app.handleAgentRefresh} onSurface={app.setSurface} /></div>}
+        <div className="pocket-pages-viewport" hidden={!!screen}>
+          <div className="pocket-pages-track" ref={trackRef}>
+            {SPACES.map(({ id, label }) => <div key={id} className="pocket-page" data-space={id} aria-label={label} aria-hidden={space !== id || !!screen} ref={element => { if (element) element.inert = space !== id || !!screen; }}>
+              {id === "assistant" ? <Assistant app={app} date={date} ready={ready} openVoice={openVoice} openScreen={openScreen} /> : <RecordsReady app={app}>
+                {id === "day" ? <Day app={app} date={date} openScreen={openScreen} /> : <Library app={app} onReminders={() => openScreen("reminders")} onOpen={uid => { setNotebook(uid); openScreen("notes"); }} />}
+              </RecordsReady>}
+            </div>)}
+          </div>
+        </div>
+        {screen && screen !== "chat" && <div key={screen} className="pocket-screen">
+          <RecordsReady app={app}>
+            {app.state && <>
             {screen === "tasks" && <DeskTasks tasks={app.state.tasks} mode={mode} onChanged={app.handleRecordChanged} onToggle={app.handleToggleTask} />}
             {(screen === "schedule" || screen === "reminders") && <ScheduleBoard key={screen} initialSection={screen === "reminders" ? "reminders" : "routine"} schedule={app.state.schedule} today={app.state.today} mode={mode} onChanged={app.handleRecordChanged} />}
             {screen === "notes" && <NotesWorkspace initialPage={notebook} ideas={app.state.ideas} memories={app.state.memories} pages={app.state.note_pages} mode={mode} onChanged={app.handleRecordChanged} />}
-          </>)}
+            </>}
+          </RecordsReady>
         </div>}
       </main>
-      {!screen && <nav className="pocket-dock glass" data-space={space} aria-label="Main navigation"><span className="pocket-dock-selection" aria-hidden="true" />{SPACES.map(({ id, label, icon: Icon }) => <button key={id} aria-current={space === id ? "page" : undefined} onClick={() => setSpace(id)}><span><Icon size={22} strokeWidth={1.7} /></span>{label}</button>)}</nav>}
+      {!screen && <nav className="pocket-dock glass" data-space={space} aria-label="Main navigation"><span ref={selectionRef} className="pocket-dock-selection" aria-hidden="true" />{SPACES.map(({ id, label, icon: Icon }) => <button key={id} aria-current={space === id ? "page" : undefined} onClick={() => setSpace(id)}><span><Icon size={22} strokeWidth={1.7} /></span>{label}</button>)}</nav>}
     </div>
     {voiceNotice && <div className="desk-notice glass" role="status"><Mic size={22} /><div><strong>Voice is not ready yet</strong><p>Check your connection and credentials in Settings, then allow microphone access.</p><button className="desk-text-button" onClick={() => { setVoiceNotice(false); app.setSettingsOpen(true); }}>Open settings<ArrowUpRight size={16} /></button></div><button className="desk-icon-button" aria-label="Dismiss voice notice" onClick={() => setVoiceNotice(false)}><X size={20} /></button></div>}
-    {app.settingsOpen && <SettingsPanel onClose={() => app.setSettingsOpen(false)} appearance={<label className="pocket-theme glass">Appearance<select aria-label="Appearance" value={theme} onChange={event => { const value = event.target.value as typeof theme; setTheme(value); try { localStorage.setItem("jarvis.mobile-desk.theme", value); } catch { /* Optional persistence. */ } }}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>} />}
+    {app.settingsOpen && <SettingsPanel presentation="pocket" onClose={closeSettings} appearance={<fieldset className="pocket-appearance"><legend>Choose your look</legend>{(["system", "light", "dark"] as const).map(value => <label key={value} data-theme-choice={value}><input type="radio" name="appearance" value={value} checked={theme === value} onChange={() => { setTheme(value); try { localStorage.setItem("jarvis.mobile-desk.theme", value); } catch { /* Optional persistence. */ } }} /><span className="pocket-theme-preview" aria-hidden="true"><i /><i /><i /></span><span>{value === "system" ? "System" : value === "light" ? "Light" : "Dark"}</span></label>)}</fieldset>} />}
     {app.voiceOpen && <VoiceMode open presentation="pocket" onClose={() => app.setVoiceOpen(false)} onRefresh={domains => app.handleAgentRefresh(domains as RefreshDomain[])} onSurface={app.setSurface} panelOpen={false} />}
   </div>;
+}
+
+function RecordsReady({ app, children }: { app: CommandCenter; children: React.ReactNode }) {
+  if (app.loading && !app.state) return <div className="desk-loading" role="status"><div /><div /><div /><span className="sr-only">Loading your records</span></div>;
+  if (!app.state) return <div className="desk-empty"><Layers3 size={36} /><h2>Your records are safe.</h2><p>Connect to JARVIS to open your saved data.</p><button className="desk-button" onClick={() => app.setSettingsOpen(true)}>Open settings</button></div>;
+  return <>{children}</>;
 }
 
 function Assistant({ app, date, ready, openVoice, openScreen }: { app: CommandCenter; date: Date | null; ready: boolean; openVoice: () => void; openScreen: (screen: Screen) => void }) {
@@ -95,8 +113,8 @@ function Assistant({ app, date, ready, openVoice, openScreen }: { app: CommandCe
   return <section className="pocket-assistant" aria-label="Voice assistant">
     <div className="pocket-readiness" role="status"><span data-ready={ready} />{app.loading ? "Connecting to your assistant" : ready ? "Ready when you are" : "Waiting for connection"}</div>
     <div className="pocket-voice-space">
-      {/* Functional voice control, not a fabricated live audio meter. Art is user supplied. */}
-      <button className="pocket-speak" onClick={openVoice} aria-label="Start voice conversation"><span className="pocket-glass-ring" aria-hidden="true" /><span className="pocket-glass-core"><Mic size={43} strokeWidth={1.4} /></span></button>
+      {/* User-supplied artwork decorates the real, accessible microphone action. */}
+      <button className="pocket-speak pocket-speak-art" onClick={openVoice} aria-label="Start voice conversation"><Image className="pocket-loop-art" src="/mobile/sea-glass-loop.png" alt="" width={1254} height={1254} priority unoptimized draggable={false} /><span className="pocket-glass-core"><Mic size={32} strokeWidth={1.4} /></span></button>
       <h2>Tap. Talk. Done.</h2><p>Your voice is the shortcut.</p>
     </div>
     <div className="pocket-assistant-actions"><button className="pocket-type glass" onClick={() => openScreen("chat")}><Keyboard size={21} /><span>Type instead</span><ArrowUpRight size={18} /></button>
@@ -121,7 +139,7 @@ function Day({ app, date, openScreen }: { app: CommandCenter; date: Date | null;
   </div>;
 }
 
-function Library({ app, onOpen }: { app: CommandCenter; onOpen: (uid: string) => void }) {
+function Library({ app, onOpen, onReminders }: { app: CommandCenter; onOpen: (uid: string) => void; onReminders: () => void }) {
   const state = app.state!;
   const defaults: NotePage[] = [
     { uid: "notes-long-term", title: "Long-term memory", kind: "LONG_TERM", created_at: "", updated_at: "" },
@@ -135,7 +153,7 @@ function Library({ app, onOpen }: { app: CommandCenter; onOpen: (uid: string) =>
     const count = isMemory ? state.memories.filter(m => m.memory_status === "ACTIVE" && Boolean(m.expires_at) === (page.kind === "TEMPORARY")).length : state.ideas.filter(i => page.kind === "OTHER" ? !i.page_uid || i.page_uid === page.uid || !pages.has(i.page_uid) : i.page_uid === page.uid).length;
     const Icon = page.kind === "TEMPORARY" ? Clock3 : isMemory ? AudioLines : BookOpen;
     return <button className="pocket-book" key={page.uid} onClick={() => onOpen(page.uid)}><span className="pocket-book-cover glass" data-kind={page.kind}><Icon size={36} strokeWidth={1.2} /><span>{isMemory ? "Memory" : "Notebook"}</span><ArrowUpRight size={18} /></span><strong>{page.title}</strong><small>{count} {count === 1 ? "entry" : "entries"}</small></button>;
-  })}</div><button className="pocket-full-link" onClick={() => onOpen("notes-other")}>Manage notebooks<Plus size={19} /></button></div>;
+  })}<button className="pocket-book" onClick={onReminders}><span className="pocket-book-cover glass" data-kind="REMINDERS"><Bell size={36} strokeWidth={1.2} /><span>Alerts</span><ArrowUpRight size={18} /></span><strong>Reminders</strong><small>View and manage</small></button></div><button className="pocket-full-link" onClick={() => onOpen("notes-other")}>Manage notebooks<Plus size={19} /></button></div>;
 }
 
 function minutes(time: string) { const [hour, minute] = time.split(":").map(Number); return hour * 60 + minute; }

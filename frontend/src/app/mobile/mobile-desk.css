@@ -48,8 +48,15 @@
 .pocket-content { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; padding:12px 24px 20px; scrollbar-width:none; }
 .pocket-content::-webkit-scrollbar { display:none; }
 .pocket-screen { min-height:100%; }
-.pocket-content[data-screen="assistant"] { display:flex; flex-direction:column; }
-.pocket-content[data-screen="assistant"] > .pocket-screen { flex:1; display:flex; min-height:440px; }
+.pocket-content[data-pager="true"] { display:flex; flex-direction:column; padding:0; overflow:hidden; }
+.pocket-content[data-pager="true"] > .desk-error { margin:12px 24px; flex-shrink:0; }
+.pocket-pages-viewport { flex:1; min-height:0; overflow:hidden; }
+.pocket-pages-viewport[hidden] { display:none; }
+.pocket-pages-track { display:flex; width:100%; height:100%; transform:translateX(-100%); }
+.pocket-page { flex:0 0 100%; min-width:0; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:12px 24px 20px; scrollbar-width:none; }
+.pocket-page[data-space="assistant"] { display:flex; flex-direction:column; }
+.pocket-page .pocket-assistant { min-height:440px; }
+.pocket-page[aria-hidden="true"] *,.pocket-page[aria-hidden="true"] *::before { animation-play-state:paused!important; }
 .pocket-assistant { flex:1; display:flex; flex-direction:column; min-width:0; }
 .pocket-readiness { text-align:center; font-size:12px; color:var(--muted); padding:10px 0; display:flex; gap:8px; align-items:center; justify-content:center; }
 .pocket-readiness > span { height:6px; width:6px; border-radius:50%; background:var(--muted); }
@@ -65,6 +72,10 @@
 .pocket-glass-core::before { content:""; position:absolute; inset:-65%; pointer-events:none; background:linear-gradient(115deg,transparent 42%,var(--shine) 51%,transparent 59%); opacity:0; }
 .pocket-glass-core svg { position:relative; transform:rotate(-8deg); }
 .pocket-speak:active .pocket-glass-core { transform:rotate(3deg) scale(.98); }
+.pocket-speak-art { width:248px; height:228px; }
+.pocket-loop-art { position:absolute; width:100%; height:100%; object-fit:contain; pointer-events:none; user-select:none; }
+.pocket-speak-art .pocket-glass-core { width:66px; height:66px; border-radius:20px; transform:none; margin-top:27px; }
+.pocket-speak-art .pocket-glass-core svg { transform:none; }
 .pocket-voice-space h2 { margin:10px 0 5px; font-size:32px; letter-spacing:-1.4px; font-weight:650; line-height:1.2; }
 .pocket-voice-space p { font-size:13px; color:var(--muted); }
 .pocket-assistant-actions { display:grid; gap:12px; }
@@ -76,7 +87,7 @@
 .pocket-context strong { display:block; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pocket-context time { font-size:13px; font-variant-numeric:tabular-nums; }
 .pocket-dock { position:relative; z-index:2; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); flex-shrink:0; margin:2px 24px 0; padding:6px; border-radius:24px; }
-.pocket-dock-selection { position:absolute; top:6px; bottom:6px; left:6px; width:calc((100% - 12px) / 3); border-radius:18px; border:1px solid var(--shine); background:var(--signal-soft); box-shadow:inset 0 1px 0 var(--shine),0 3px 12px var(--shadow); transition:transform 580ms var(--ease-fluid); pointer-events:none; }
+.pocket-dock-selection { position:absolute; top:6px; bottom:6px; left:6px; width:calc((100% - 12px) / 3); border-radius:18px; border:1px solid var(--shine); background:var(--signal-soft); box-shadow:inset 0 1px 0 var(--shine),0 3px 12px var(--shadow); pointer-events:none; }
 .pocket-dock[data-space="assistant"] .pocket-dock-selection { transform:translateX(100%); }
 .pocket-dock[data-space="library"] .pocket-dock-selection { transform:translateX(200%); }
 .pocket-dock button { position:relative; display:flex; flex-direction:column; gap:4px; align-items:center; min-height:64px; padding:7px 2px; font-size:10px; font-weight:600; color:var(--muted); border-radius:17px; }
@@ -167,8 +178,61 @@
 .desk-fixture-label { flex-shrink:0; font-size:10px; color:var(--muted); text-align:center; }
 .pocket-theme { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 16px; border-radius:14px; }
 .pocket-theme select { background:var(--card); min-height:44px; padding:0 8px; border-radius:8px; }
+/* Settings is an app-sized navigation stack, not a long connections form. */
+.desk-shell .pocket-settings { padding:0; background:var(--paper); }
+.desk-shell .pocket-settings .settings-dialog { height:100dvh; max-height:100dvh; max-width:560px; margin:0; border:0; border-radius:0; background:var(--paper); padding-top:env(safe-area-inset-top); animation:none; }
+.desk-shell .pocket-settings .settings-dialog > header { padding:18px 24px 14px; border:0; background:none; }
+.desk-shell .pocket-settings .settings-dialog > header h2 { font-size:22px; letter-spacing:-.6px; outline:none; }
+.pocket-settings-close { visibility:hidden; pointer-events:none; }
+.pocket-settings-viewport { flex:1; min-height:0; overflow:hidden; }
+.desk-shell .pocket-settings .settings-dialog > .pocket-settings-viewport { padding:0; }
+.pocket-settings-track { display:flex; width:100%; height:100%; }
+.pocket-settings-page { flex:0 0 100%; min-width:0; height:100%; overflow:auto; overscroll-behavior:contain; padding:8px 24px max(28px,env(safe-area-inset-bottom)); scrollbar-width:none; }
+.pocket-settings-intro { font-size:28px; line-height:1.3; letter-spacing:-1px; color:var(--muted); margin:10px 0 30px; }
+.pocket-settings-intro strong { color:var(--text); font-weight:600; }
+.pocket-settings-home section + section { margin-top:24px; }
+.pocket-settings-home h3 { color:var(--muted); font-size:12px; font-weight:600; margin:0 2px 9px; }
+.pocket-settings-group { border-radius:20px; padding:0 16px; }
+.pocket-settings-group button { display:flex; gap:13px; align-items:center; text-align:left; width:100%; min-height:78px; padding:15px 0; }
+.pocket-settings-group button + button { border-top:1px solid var(--rule); }
+.pocket-settings-group button > span:nth-child(2) { flex:1; min-width:0; }
+.pocket-settings-group strong { display:block; font-size:15px; font-weight:600; }
+.pocket-settings-group small { display:block; font-size:12px; color:var(--muted); margin-top:4px; line-height:1.45; }
+.pocket-setting-icon { display:grid; place-items:center; width:38px; height:42px; color:var(--signal); }
+.pocket-settings-group button > svg { color:var(--muted); }
+.desk-shell .pocket-settings .pocket-setting-section { margin:0; border:0; padding:16px 0; background:none; }
+.desk-shell .pocket-settings [hidden] { display:none!important; }
+.pocket-settings-detail > .pocket-setting-section > label { font-size:15px; font-weight:650; }
+.pocket-settings-detail p,.pocket-setting-help { font-size:13px; line-height:1.65; color:var(--muted); }
+.pocket-settings-detail .pocket-setting-section > p { margin-block:8px 14px; }
+.pocket-settings-detail .pocket-setting-section > .relative + p { padding:8px 12px; background:var(--soft); border-radius:10px; }
+.pocket-settings-detail .pocket-setting-section > label:not(:first-child) { padding-top:28px; }
+.desk-shell .pocket-settings input:not([type="radio"]),.desk-shell .pocket-settings select { min-height:52px; border-radius:14px; background:var(--glass); border-color:var(--rule); font-size:16px; }
+.desk-shell .pocket-settings input:not([type="radio"]):focus-visible { outline:2px solid var(--signal); outline-offset:2px; }
+.pocket-settings-detail button { min-height:48px; border-radius:12px; }
+.pocket-settings-detail .relative > button { height:52px; }
+.pocket-settings-detail button:disabled { cursor:wait; }
+.pocket-settings .settings-dialog > footer { flex-shrink:0; padding:14px 24px max(16px,env(safe-area-inset-bottom)); background:var(--glass); border-color:var(--rule); }
+.pocket-settings .settings-dialog > footer button { min-height:50px; border-radius:14px; }
+.pocket-settings .settings-dialog > footer button:last-child { flex:1; justify-content:center; }
+.pocket-storage-warning { border-left:3px solid hsl(var(--critical)); padding:0 0 0 16px; margin:8px 0 28px; }
+.pocket-storage-warning h3 { font-size:20px; font-weight:600; margin-bottom:9px; }
+.pocket-appearance { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.pocket-appearance legend { font-size:18px; font-weight:600; margin-bottom:22px; }
+.pocket-appearance label { position:relative; display:grid; gap:12px; text-align:center; cursor:pointer; font-size:13px; padding:8px 5px 14px; border:2px solid transparent; border-radius:16px; }
+.pocket-appearance label:has(:checked) { border-color:var(--signal); background:var(--signal-soft); }
+.pocket-appearance input { position:absolute; opacity:0; width:100%; height:100%; inset:0; cursor:pointer; }
+.pocket-appearance label:has(:focus-visible) { outline:2px solid var(--signal); outline-offset:3px; }
+.pocket-theme-preview { display:flex; flex-direction:column; gap:6px; padding:14px 9px; height:110px; border:1px solid var(--rule); border-radius:11px; background:#e5eeeb; }
+.pocket-theme-preview i { height:7px; background:#7b9d8e; opacity:.6; border-radius:2px; }
+.pocket-theme-preview i:first-child { width:45%; height:12px; margin-bottom:9px; }
+[data-theme-choice="dark"] .pocket-theme-preview { background:#102b27; }
+[data-theme-choice="dark"] .pocket-theme-preview i { background:#afc8bb; }
+[data-theme-choice="system"] .pocket-theme-preview { background:linear-gradient(90deg,#e5eeeb 50%,#102b27 50%); }
+.pocket-setting-help { margin-top:20px; }
 /* Full-screen subviews keep established validation and mutation safeguards. */
 .desk-shell .ui-button { border-radius:12px; min-height:44px; font-size:12px; }
+.desk-shell .ui-button.bg-accent { background:var(--signal); color:hsl(var(--accent-ink)); border-color:transparent; }
 .desk-shell .ui-button::before,.desk-shell .ui-segmented button::before { content:none; }
 .desk-shell input,.desk-shell textarea,.desk-shell select { color-scheme:inherit; }
 .desk-shell .ui-segmented { display:flex; flex-wrap:wrap; gap:5px; padding:4px; border:1px solid var(--rule); border-radius:16px; background:var(--soft); }
@@ -211,6 +275,44 @@
 .desk-shell .chat-suggestions button { background:var(--glass); color:var(--text); border:1px solid var(--rule); border-radius:16px; min-height:50px; padding:12px 15px; font-size:13px; }
 .desk-shell .chat-page > footer { background:none; padding:12px 20px; border:0; }
 .desk-shell .chat-page > footer > div:last-child { background:var(--glass); border-color:var(--rule); border-radius:20px; }
+.desk-shell .pocket-chat > header { display:flex; height:44px; padding:0 24px; border:0; }
+.pocket-chat-status { font-size:12px; color:var(--muted); }
+.pocket-chat > header > span[aria-hidden] { display:none; }
+.desk-shell .pocket-chat > header .ui-button { color:var(--muted); padding:0 8px; }
+.pocket-chat .chat-scroll { padding:12px 24px 24px; overscroll-behavior:contain; }
+.pocket-chat-intro { min-height:100%; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:20px 0; }
+.pocket-chat-intro > img { width:94px; height:94px; margin:0 0 20px -10px; }
+.pocket-chat-intro h2 { font-size:29px; font-weight:600; letter-spacing:-1.1px; line-height:1.25; }
+.pocket-chat-intro p { margin-top:12px; color:var(--muted); font-size:14px; line-height:1.7; }
+.pocket-chat-prompts { display:grid; width:100%; gap:10px; margin-top:28px; }
+.pocket-chat-prompts button { display:flex; align-items:center; gap:12px; min-height:58px; padding:12px 16px; border-radius:16px; font-size:14px; text-align:left; }
+.pocket-chat-prompts button > span { flex:1; }
+.pocket-chat-prompts button > svg { color:var(--signal); }
+.pocket-chat .chat-messages { display:flex; flex-direction:column; gap:28px; }
+.pocket-chat .chat-messages > * { margin:0!important; }
+.pocket-chat .chat-message { max-width:100%; min-width:0; }
+.pocket-chat .chat-user { align-self:flex-end; width:auto; max-width:88%; }
+.pocket-chat .chat-user > div:first-child { justify-content:flex-end; margin-bottom:7px; gap:8px; }
+.pocket-chat .eyebrow { font-family:inherit; font-size:11px; letter-spacing:0; text-transform:none; font-weight:600; }
+.pocket-chat .chat-user .eyebrow { display:none; }
+.pocket-chat .chat-user > p { color:var(--text); background:var(--soft); border:1px solid var(--shine); border-radius:20px 20px 5px 20px; padding:13px 16px; font-size:15px; line-height:1.65; box-shadow:0 3px 12px var(--shadow); }
+.pocket-chat .chat-assistant { align-self:stretch; }
+.pocket-chat .chat-assistant > div:first-child { min-height:34px; margin-bottom:9px; }
+.pocket-chat .chat-assistant > div:last-child { border:0; padding:0; }
+.pocket-chat .chat-assistant .eyebrow { font-size:13px; }
+.desk-shell .pocket-chat .prose-jarvis { color:var(--text); font-size:16px; line-height:1.75; }
+.pocket-chat .prose-jarvis pre,.pocket-chat .prose-jarvis table { max-width:100%; overflow-x:auto; }
+.pocket-chat .prose-jarvis table { display:block; }
+.desk-shell .pocket-chat > footer { padding:10px 18px 8px; }
+.desk-shell .pocket-chat .chat-composer { padding:3px 4px 4px; border-radius:24px; background:var(--glass); box-shadow:inset 0 1px 0 var(--shine),0 7px 25px var(--shadow); backdrop-filter:blur(18px); }
+.desk-shell .pocket-chat .chat-composer textarea { min-height:52px; padding:13px 14px 8px; line-height:1.5; font-size:16px; }
+.pocket-chat .chat-composer-actions { min-height:46px; padding:0 7px 4px; }
+.pocket-composer-hint { font-size:11px; color:var(--muted); }
+.desk-shell .pocket-chat .pocket-send { width:44px; height:44px; padding:0; border-radius:14px; }
+.pocket-chat .chat-composer:focus-within { outline:1px solid var(--signal); }
+.pocket-chat-confirm { margin:8px 24px; padding:16px; border-radius:18px; font-size:13px; }
+.pocket-chat-confirm > div { display:flex; gap:16px; justify-content:flex-end; margin-top:12px; }
+.pocket-chat-loading { color:var(--muted); font-size:13px; padding:20px 0; }
 .desk-shell .prose-jarvis { font-size:15px; line-height:1.7; }
 .desk-shell .sync-notice { font-size:11px; background:var(--card); border-color:var(--rule); }
 .desk-shell .record-backdrop { align-items:flex-end; padding:0; }
@@ -225,10 +327,24 @@
 .pocket-live-preferences { display:flex; gap:12px; padding:18px 0; flex-shrink:0; }
 .pocket-live-preferences label { flex:1; display:grid; gap:6px; font-size:11px; color:var(--muted); }
 .pocket-live select { width:100%; min-height:44px; background:var(--card); color:var(--text); border:1px solid var(--rule); border-radius:12px; padding:0 12px; font-size:14px; }
-.pocket-live-body { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
+.pocket-live-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-width:none; }
 .pocket-live-state { display:flex; flex-direction:column; align-items:center; padding:22px 0; text-align:center; }
 .pocket-live-state h2 { font-size:30px; letter-spacing:-1px; font-weight:650; margin-top:20px; }
 .pocket-live-state p { font-size:13px; color:var(--muted); margin:8px 0; }
+.pocket-sculpture { position:relative; display:grid; place-items:center; width:min(78vw,310px); aspect-ratio:1; flex-shrink:0; isolation:isolate; }
+.pocket-sculpture-aura { position:absolute; inset:17%; border-radius:50%; background:radial-gradient(ellipse,var(--signal-soft),transparent 70%); opacity:.45; transition:opacity 700ms ease; }
+.pocket-sculpture-response { position:absolute; inset:0; transition:transform 160ms linear; }
+.pocket-sculpture-turn,.pocket-sculpture-turn img { width:100%; height:100%; object-fit:contain; user-select:none; pointer-events:none; }
+.pocket-sculpture-orbit { position:absolute; inset:6%; border:1px solid var(--rule); border-radius:45%; opacity:.22; transition:opacity 700ms ease; pointer-events:none; }
+.pocket-orbit-two { inset:10%; border-color:var(--shine); }
+.pocket-sculpture-center { display:grid; place-items:center; width:58px; height:58px; margin-top:28px; border-radius:19px; color:var(--signal); z-index:1; transition:opacity 500ms ease,transform 500ms var(--ease-fluid); }
+.pocket-sculpture-thinking { position:absolute; display:flex; gap:6px; bottom:12%; opacity:0; transition:opacity 500ms ease; }
+.pocket-sculpture-thinking i { width:5px; height:5px; border-radius:50%; background:var(--signal); }
+.pocket-sculpture[data-state="thinking"] .pocket-sculpture-thinking { opacity:1; }
+.pocket-sculpture[data-state="thinking"] .pocket-sculpture-center { opacity:.45; transform:scale(.92); }
+.pocket-sculpture[data-state="hearing"] .pocket-sculpture-orbit,.pocket-sculpture[data-state="speaking"] .pocket-sculpture-orbit { opacity:.6; }
+.pocket-sculpture[data-state="speaking"] .pocket-sculpture-aura { opacity:.9; }
+.pocket-sculpture[data-muted="true"] .pocket-sculpture-orbit { opacity:.12; }
 .pocket-level { height:30px; display:flex; align-items:center; gap:5px; margin-top:12px; }
 .pocket-level i { width:4px; height:24px; background:var(--signal); border-radius:2px; transition:transform 100ms; }
 .pocket-transcript { border-radius:22px; padding:20px; margin:0 auto 20px; max-width:560px; }
@@ -244,6 +360,7 @@
 @media(max-width:360px) {
   .pocket-header { padding-inline:16px; }
   .pocket-content { padding-inline:16px; }
+  .pocket-page { padding-inline:16px; }
   .pocket-dock { margin-inline:16px; }
   .pocket-books { gap:22px 14px; }
   .pocket-book-cover { min-height:153px; padding-left:18px; }
@@ -252,8 +369,9 @@
 }
 @media(max-height:680px) {
   .pocket-header { min-height:64px; padding-top:10px; }
-  .pocket-content[data-screen="assistant"] > .pocket-screen { min-height:360px; }
+  .pocket-page .pocket-assistant { min-height:360px; }
   .pocket-speak { width:170px; height:150px; }
+  .pocket-speak-art { width:190px; height:174px; }
   .pocket-glass-ring { width:140px; height:132px; }
   .pocket-glass-core { width:86px; height:86px; border-radius:25px; }
   .pocket-voice-space { padding-block:0 10px; }
@@ -266,10 +384,17 @@
   .pocket-book:hover .pocket-book-cover { transform:perspective(700px) rotateY(-14deg) translateY(-3px); }
 }
 @media(prefers-reduced-motion:no-preference) {
+  .pocket-sculpture-turn { animation:pocket-art-float 9s ease-in-out infinite; }
+  .pocket-orbit-one { animation:pocket-orbit 18s linear infinite; }
+  .pocket-orbit-two { animation:pocket-orbit 26s linear infinite reverse; }
+  .pocket-sculpture-aura { animation:pocket-aura 5s ease-in-out infinite; }
+  .pocket-sculpture-thinking i { animation:pocket-thought 1.5s ease-in-out infinite; }
+  .pocket-sculpture-thinking i:nth-child(2) { animation-delay:150ms; }
+  .pocket-sculpture-thinking i:nth-child(3) { animation-delay:300ms; }
   .pocket-screen { animation:pocket-enter 460ms var(--ease-fluid) backwards; }
   .pocket-assistant-actions > :first-child { animation:pocket-enter 560ms var(--ease-fluid) 70ms backwards; }
   .pocket-assistant-actions > :last-child { animation:pocket-enter 560ms var(--ease-fluid) 130ms backwards; }
-  .pocket-dock [aria-current="page"] > span { animation:pocket-select 480ms var(--ease-fluid); }
+  .pocket-loop-art { animation:pocket-art-float 10s ease-in-out infinite; }
   .pocket-glass-ring { animation:pocket-drift 12s ease-in-out infinite; }
   .pocket-glass-ring::before { animation:pocket-reflection 10s ease-in-out infinite; }
   .pocket-speak .pocket-glass-core { animation:pocket-float 6s ease-in-out infinite; }
@@ -282,11 +407,17 @@
   .desk-loading { animation:pocket-load 1.3s ease-in-out infinite alternate; }
 }
 .desk-shell[data-motion-paused="true"] *,.desk-shell[data-motion-paused="true"] *::before,.desk-shell[data-motion-paused="true"] *::after,
+.pocket-live[data-paused="true"] *,
 .desk-shell[data-voice-open="true"] .pocket-content *,.desk-shell[data-voice-open="true"] .pocket-content *::before { animation-play-state:paused!important; }
 @media(prefers-reduced-motion:reduce) { .desk-shell *,.desk-shell *::before,.desk-shell *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+@media(prefers-reduced-motion:reduce) { .pocket-sculpture-response { transform:none!important; } }
 @media(prefers-reduced-transparency:reduce) { .desk-shell .glass,.pocket-glass-core,.pocket-glass-ring { background:var(--card); backdrop-filter:none; -webkit-backdrop-filter:none; } .pocket-glass-ring::before,.pocket-glass-core::before { display:none; } }
 @supports not (backdrop-filter:blur(1px)) { .desk-shell .glass { background:var(--card); } }
 @keyframes pocket-enter { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:none; } }
+@keyframes pocket-art-float { 0%,100% { transform:translateY(0) rotate(-3deg); } 50% { transform:translateY(-5px) rotate(3deg); } }
+@keyframes pocket-orbit { from { transform:rotate(0); } to { transform:rotate(360deg); } }
+@keyframes pocket-aura { 0%,100% { transform:scale(.92); } 50% { transform:scale(1.1); } }
+@keyframes pocket-thought { 0%,100% { transform:translateY(0); opacity:.35; } 50% { transform:translateY(-4px); opacity:1; } }
 @keyframes pocket-select { 0% { transform:translateY(2px) scale(.94); } 100% { transform:translateY(-1px) scale(1); } }
 @keyframes pocket-drift { 0%,100% { transform:rotate(-26deg) translateY(0); } 50% { transform:rotate(-17deg) translateY(-4px); } }
 @keyframes pocket-float { 0%,100% { translate:0 0; } 50% { translate:0 -4px; } }
