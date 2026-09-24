@@ -26,6 +26,13 @@ export class SpeechQueue {
   private reveals = new Set<ReturnType<typeof setTimeout>>();
   /** Streams still open: woken by every piece, and released by `stop()`. */
   private streams = new Set<OpenStream>();
+  /**
+   * A passive tap on the speech output, for presentations that animate to
+   * JARVIS's voice. Sources fan out to it next to their existing connection
+   * to the destination, so what is heard is exactly what it was before.
+   */
+  private analyser: AnalyserNode | null = null;
+  private levelBuffer: Float32Array<ArrayBuffer> | null = null;
 
   constructor(
     private readonly onIdle: () => void,
@@ -53,6 +60,31 @@ export class SpeechQueue {
 
   begin(): void { this.stop(); this.complete = false; }
   finish(): void { this.complete = true; this.scheduleIdle(); }
+
+  /** Current speech output level, 0-1. Zero whenever nothing is playing. */
+  outputLevel(): number {
+    const analyser = this.analyser;
+    const buffer = this.levelBuffer;
+    if (!analyser || !buffer || this.active.size === 0) return 0;
+    analyser.getFloatTimeDomainData(buffer);
+    let sum = 0;
+    for (let i = 0; i < buffer.length; i += 1) sum += buffer[i] * buffer[i];
+    return Math.min(1, Math.sqrt(sum / buffer.length) * 4);
+  }
+
+  private meter(context: AudioContext): AnalyserNode | null {
+    if (this.analyser?.context === context) return this.analyser;
+    try {
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.5;
+      this.analyser = analyser;
+      this.levelBuffer = new Float32Array(analyser.fftSize);
+      return analyser;
+    } catch {
+      return null;
+    }
+  }
 
   private async audioContext(): Promise<AudioContext> {
     if (!this.context) this.context = new window.AudioContext();
@@ -86,6 +118,9 @@ export class SpeechQueue {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
+    // Fan-out only: the audible path above is unchanged.
+    const meter = this.meter(context);
+    if (meter) source.connect(meter);
     const startAt = Math.max(context.currentTime + 0.02, this.nextStart);
     this.nextStart = startAt + buffer.duration;
     this.active.add(source);
@@ -242,5 +277,7 @@ export class SpeechQueue {
     this.stop();
     void this.context?.close();
     this.context = null;
+    this.analyser = null;
+    this.levelBuffer = null;
   }
 }

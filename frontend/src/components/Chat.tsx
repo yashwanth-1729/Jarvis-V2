@@ -3,10 +3,6 @@
 import {
   CircleAlert,
   ArrowUpRight,
-  ArrowUp,
-  CalendarDays,
-  Lightbulb,
-  ListChecks,
   CornerDownLeft,
   Eraser,
   Loader2,
@@ -16,9 +12,8 @@ import {
   VolumeX,
 } from "lucide-react";
 import * as React from "react";
-import Image from "next/image";
 
-import { intentSurface, readSurface, type SurfaceDescriptor } from "@/lib/surfaces";
+import type { SurfaceDescriptor } from "@/lib/surfaces";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -27,27 +22,14 @@ import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { clearChatHistory, fetchChatHistory, streamChat } from "@/lib/api";
-import {
-  fetchVoiceConfig,
-  isRecordingSupported,
-  playAudio,
-  startRecording,
-  stopAudio,
-  synthesize,
-  transcribe,
-  type Recording,
-} from "@/lib/voice";
+import { useChatSession } from "@/lib/useChatSession";
+import { playAudio, stopAudio, synthesize } from "@/lib/voice";
 import { cn, formatTime } from "@/lib/utils";
-import type { ChatMessage, MicState, RefreshDomain, ToolCall } from "@/types";
+import type { ChatMessage, RefreshDomain } from "@/types";
 
 const SUGGESTIONS = ["What should I focus on today?", "What's on my schedule?", "Help me think through an idea"];
 
-let messageCounter = 0;
-const nextId = () => `m${Date.now()}-${messageCounter++}`;
-
 interface ChatProps {
-  presentation?: "console" | "pocket";
   onRefresh: (domains: RefreshDomain[]) => void;
   /**
    * A tool result that names an interface to open.
@@ -59,74 +41,37 @@ interface ChatProps {
   onSurface: (surface: SurfaceDescriptor) => void;
 }
 
-export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatProps) {
-  const pocket = presentation === "pocket";
-  const [confirmClear, setConfirmClear] = React.useState(false);
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
-  const [input, setInput] = React.useState("");
-  const [streaming, setStreaming] = React.useState(false);
-  const [historyLoaded, setHistoryLoaded] = React.useState(false);
-
-  const [voiceEnabled, setVoiceEnabled] = React.useState(false);
-  const [micState, setMicState] = React.useState<MicState>("idle");
-  const [voiceError, setVoiceError] = React.useState<string | null>(null);
-
-  const abortRef = React.useRef<AbortController | null>(null);
-  const recordingRef = React.useRef<Recording | null>(null);
+/**
+ * The desktop console. The conversation itself (history, streaming, dictation,
+ * clearing) lives in `useChatSession`, shared with the phone's chat screen.
+ */
+export function Chat({ onRefresh, onSurface }: ChatProps) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const composerRef = React.useRef<HTMLTextAreaElement>(null);
   const pinnedRef = React.useRef(true);
-  React.useLayoutEffect(() => {
-    if (!pocket || !composerRef.current) return;
-    const field = composerRef.current;
-    field.style.height = "auto";
-    field.style.height = `${Math.min(152, Math.max(52, field.scrollHeight))}px`;
-  }, [input, pocket]);
 
-  /* ---------------------------------------------------------------- history */
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetchChatHistory()
-      .then((rows) => {
-        if (cancelled) return;
-        setMessages(
-          rows.map((row) => ({
-            id: `h${row.id}`,
-            role: row.role,
-            text: row.text,
-            createdAt: row.created_at,
-          })),
-        );
-      })
-      .catch(() => {
-        /* An unreachable backend is surfaced by the dashboard pane already. */
-      })
-      .finally(() => {
-        if (!cancelled) setHistoryLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  /* ------------------------------------------------------------------ voice */
-
-  React.useEffect(() => {
-    let cancelled = false;
-    fetchVoiceConfig()
-      .then((config) => {
-        if (!cancelled) setVoiceEnabled(config.enabled && isRecordingSupported());
-      })
-      .catch(() => {
-        if (!cancelled) setVoiceEnabled(false);
-      });
-    return () => {
-      cancelled = true;
-      recordingRef.current?.cancel();
-      stopAudio();
-    };
-  }, []);
+  const {
+    messages,
+    input,
+    setInput,
+    streaming,
+    historyLoaded,
+    voiceEnabled,
+    micState,
+    voiceError,
+    send,
+    stop,
+    reset,
+    toggleMic,
+  } = useChatSession({
+    onRefresh,
+    onSurface,
+    onTurnStart: () => {
+      pinnedRef.current = true;
+    },
+    onTurnEnd: () => composerRef.current?.focus(),
+    onDictated: () => composerRef.current?.focus(),
+  });
 
   /* --------------------------------------------------------------- scrolling */
 
@@ -144,221 +89,6 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
     if (node) node.scrollTop = node.scrollHeight;
   });
 
-  /* ------------------------------------------------------------------ stream */
-
-  const patchAssistant = React.useCallback(
-    (id: string, update: (message: ChatMessage) => ChatMessage) => {
-      setMessages((current) =>
-        current.map((message) => (message.id === id ? update(message) : message)),
-      );
-    },
-    [],
-  );
-
-  const send = React.useCallback(
-    async (raw: string) => {
-      const text = raw.trim();
-      if (!text || streaming) return;
-
-      const assistantId = nextId();
-      setInput("");
-      setStreaming(true);
-      pinnedRef.current = true;
-
-      setMessages((current) => [
-        ...current,
-        { id: nextId(), role: "user", text, createdAt: new Date().toISOString() },
-        {
-          id: assistantId,
-          role: "assistant",
-          text: "",
-          thinking: "",
-          toolCalls: [],
-          streaming: true,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      try {
-        for await (const event of streamChat(text, controller.signal)) {
-          switch (event.type) {
-            case "text":
-              patchAssistant(assistantId, (m) => ({ ...m, text: m.text + event.data.text }));
-              break;
-
-            case "thinking":
-              patchAssistant(assistantId, (m) => ({
-                ...m,
-                thinking: (m.thinking ?? "") + event.data.text,
-              }));
-              break;
-
-            // Server heartbeat: receiving it keeps the stream alive while the
-            // existing three-dot indicator continues to represent work.
-            case "progress":
-              break;
-
-            case "tool_use":
-              patchAssistant(assistantId, (m) => ({
-                ...m,
-                toolCalls: [
-                  ...(m.toolCalls ?? []),
-                  { id: event.data.id, name: event.data.name, state: "running" } as ToolCall,
-                ],
-              }));
-              break;
-
-            case "tool_result": {
-              const surface = readSurface(event.data.name, event.data.display);
-              if (surface) onSurface(surface);
-              patchAssistant(assistantId, (m) => ({
-                ...m,
-                toolCalls: (m.toolCalls ?? []).map((call) =>
-                  call.id === event.data.id
-                    ? {
-                        ...call,
-                        state: event.data.ok ? "ok" : "error",
-                        summary: event.data.summary,
-                        display: event.data.display,
-                      }
-                    : call,
-                ),
-              }));
-              break;
-            }
-
-            case "surface": {
-              const intent = intentSurface(
-                String(event.data.kind ?? ""),
-                event.data as unknown as Record<string, unknown>,
-              );
-              if (intent) onSurface(intent);
-              break;
-            }
-
-            case "refresh":
-              onRefresh(event.data.domains);
-              break;
-
-            case "error":
-              patchAssistant(assistantId, (m) => ({ ...m, error: event.data.message }));
-              break;
-
-            case "done":
-              if (event.data.refresh.length) onRefresh(event.data.refresh);
-              break;
-
-            default:
-              break;
-          }
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          const message =
-            error instanceof Error ? error.message : "The chat stream failed unexpectedly.";
-          patchAssistant(assistantId, (m) => ({ ...m, error: message }));
-        }
-      } finally {
-        abortRef.current = null;
-        setStreaming(false);
-        patchAssistant(assistantId, (m) => ({ ...m, streaming: false }));
-        composerRef.current?.focus();
-      }
-    },
-    [onRefresh, onSurface, patchAssistant, streaming],
-  );
-
-  /**
-   * A panel asking a follow-up question on the user's behalf.
-   *
-   * "Read it for me" on a search result has to start a real turn, not fake one
-   * — that is what makes the panels instruments rather than displays. Routed as
-   * a window event because the panel is mounted beside this component rather
-   * than inside it, and threading a send function up through the page and back
-   * down would couple three components to a one-line interaction.
-   */
-  React.useEffect(() => {
-    const onAsk = (event: Event) => {
-      const message = (event as CustomEvent<string>).detail;
-      if (typeof message === "string" && message.trim()) void send(message);
-    };
-    window.addEventListener("jarvis:ask", onAsk);
-    return () => window.removeEventListener("jarvis:ask", onAsk);
-  }, [send]);
-
-  /* -------------------------------------------------------------------- mic */
-
-  const toggleMic = React.useCallback(async () => {
-    setVoiceError(null);
-
-    if (micState === "recording") {
-      const recording = recordingRef.current;
-      recordingRef.current = null;
-      if (!recording) {
-        setMicState("idle");
-        return;
-      }
-      setMicState("transcribing");
-      try {
-        const clip = await recording.stop();
-        const result = await transcribe(clip);
-        const spoken = result.text.trim();
-        if (!spoken) {
-          setVoiceError("Nothing was heard in that clip.");
-        } else {
-          // Append rather than replace, so dictation can extend a typed draft.
-          setInput((current) => (current ? `${current.trimEnd()} ${spoken}` : spoken));
-          composerRef.current?.focus();
-        }
-      } catch (error) {
-        setVoiceError(
-          error instanceof Error ? error.message : "Could not transcribe that clip.",
-        );
-      } finally {
-        setMicState("idle");
-      }
-      return;
-    }
-
-    if (micState !== "idle") return;
-
-    try {
-      stopAudio();
-      recordingRef.current = await startRecording();
-      setMicState("recording");
-    } catch (error) {
-      const denied =
-        error instanceof DOMException &&
-        (error.name === "NotAllowedError" || error.name === "SecurityError");
-      setVoiceError(
-        denied
-          ? "Microphone permission denied. Enable it in your browser's site settings."
-          : error instanceof Error
-            ? error.message
-            : "Could not access the microphone.",
-      );
-      setMicState("idle");
-    }
-  }, [micState]);
-
-  /* ------------------------------------------------------------------ misc */
-
-  function stop() {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setStreaming(false);
-  }
-
-  async function reset() {
-    if (streaming) stop();
-    stopAudio();
-    await clearChatHistory().catch(() => undefined);
-    setMessages([]);
-  }
-
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
@@ -374,10 +104,10 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
   return (
     <section
       aria-label="JARVIS console"
-      className={cn("mobile-ui chat-page relative flex h-full min-h-0 flex-col border-r border-line bg-surface-1/70", pocket && "pocket-chat")}
+      className="mobile-ui chat-page relative flex h-full min-h-0 flex-col border-r border-line bg-surface-1/70"
     >
       <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-4">
-        {pocket ? <span className="pocket-chat-status">{streaming ? "JARVIS is working" : "Your conversation"}</span> : <div className="chat-heading"><BrandMark /><div><strong>JARVIS</strong><small>{streaming ? "Working on it…" : "A little clarity, whenever you need it."}</small></div></div>}
+        <div className="chat-heading"><BrandMark /><div><strong>JARVIS</strong><small>{streaming ? "Working on it…" : "A little clarity, whenever you need it."}</small></div></div>
         <span
           aria-hidden
           className={cn(
@@ -388,7 +118,7 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
         <Button
           variant="ghost"
           size="xs"
-          onClick={() => pocket ? setConfirmClear(true) : void reset()}
+          onClick={() => void reset()}
           disabled={!messages.length}
           className="ml-auto"
           title="Clear conversation"
@@ -397,7 +127,6 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
           Clear
         </Button>
       </header>
-      {pocket && confirmClear && <div className="pocket-chat-confirm glass" role="alert"><p>Clear this conversation? This removes the saved chat history.</p><div><button className="desk-text-button" onClick={() => setConfirmClear(false)}>Keep it</button><button className="desk-button" onClick={() => { setConfirmClear(false); void reset(); }}>Clear chat</button></div></div>}
 
       <ScrollArea
         ref={scrollRef}
@@ -405,10 +134,9 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
         className="chat-scroll min-h-0 flex-1 px-4 py-4"
       >
         {showIntro ? (
-          pocket ? <PocketChatIntro onPick={(value) => void send(value)} /> : <Intro onPick={(value) => void send(value)} />
+          <Intro onPick={(value) => void send(value)} />
         ) : (
           <div className="chat-messages space-y-6">
-            {pocket && !historyLoaded && <div className="pocket-chat-loading" role="status">Opening conversation…</div>}
             {messages.map((message) => (
               <MessageBlock
                 key={message.id}
@@ -448,7 +176,7 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={onKeyDown}
-            rows={pocket ? 1 : 2}
+            rows={2}
             maxLength={20000}
             placeholder={
               micState === "recording"
@@ -489,9 +217,8 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
                 )}
               </Button>
             )}
-            {pocket && <span className="pocket-composer-hint">{micState === "recording" ? "Listening to your message" : micState === "transcribing" ? "Turning speech into text" : "Ask, plan or remember"}</span>}
 
-            <span className={cn("hidden font-mono text-2xs text-ink-faint", !pocket && "lg:inline")}>
+            <span className="hidden font-mono text-2xs text-ink-faint lg:inline">
               {micState === "recording" ? (
                 <span className="text-critical">recording…</span>
               ) : micState === "transcribing" ? (
@@ -507,9 +234,9 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
 
             <div className="ml-auto">
               {streaming ? (
-                <Button size="xs" variant="secondary" onClick={stop} title="Stop generating" aria-label="Stop generating" className={pocket ? "pocket-send" : undefined}>
+                <Button size="xs" variant="secondary" onClick={stop} title="Stop generating" aria-label="Stop generating">
                   <Square className="h-2.5 w-2.5 fill-current" />
-                  {!pocket && "Stop"}
+                  Stop
                 </Button>
               ) : (
                 <Button
@@ -519,9 +246,8 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
                   disabled={!input.trim() || busyMic}
                   title="Send (Enter)"
                   aria-label="Send message"
-                  className={pocket ? "pocket-send" : undefined}
                 >
-                  {pocket ? <ArrowUp size={21} /> : <>Send<CornerDownLeft className="h-3 w-3" /></>}
+                  Send<CornerDownLeft className="h-3 w-3" />
                 </Button>
               )}
             </div>
@@ -530,15 +256,6 @@ export function Chat({ onRefresh, onSurface, presentation = "console" }: ChatPro
       </footer>
     </section>
   );
-}
-
-function PocketChatIntro({ onPick }: { onPick: (value: string) => void }) {
-  const prompts = [
-    { title: "Plan my day", text: SUGGESTIONS[0], icon: ListChecks },
-    { title: "Check my schedule", text: SUGGESTIONS[1], icon: CalendarDays },
-    { title: "Explore an idea", text: SUGGESTIONS[2], icon: Lightbulb },
-  ];
-  return <div className="pocket-chat-intro"><Image src="/mobile/sea-glass-loop.png" width={96} height={96} unoptimized alt="" /><h2>Start a conversation</h2><p>Something to plan, a thought to untangle<br />or a detail to remember.</p><div className="pocket-chat-prompts">{prompts.map(({ title, text, icon: Icon }) => <button key={title} className="glass" onClick={() => onPick(text)}><Icon size={20} strokeWidth={1.6} /><span>{title}</span><ArrowUpRight size={17} /></button>)}</div></div>;
 }
 
 /* -------------------------------------------------------------------------- */

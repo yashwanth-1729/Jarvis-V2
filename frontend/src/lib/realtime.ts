@@ -849,6 +849,11 @@ export class VoiceSession {
     }
   }
 
+  /** JARVIS's own speech level, 0-1, read from a passive tap on playback. */
+  outputLevel(): number {
+    return this.queue.outputLevel();
+  }
+
   /**
    * User microphone control. Muting during speech commits exactly what has
    * already been captured as a complete turn; muting after a completed segment

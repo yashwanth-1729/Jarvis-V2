@@ -4,14 +4,25 @@
     {
       "name": "jarvis-frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "frontend",
       "port": 3000
     },
     {
       "name": "jarvis-backend-isolated",
       "runtimeExecutable": "D:/Jarvis-2.0/backend/.venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
       "cwd": "backend",
       "port": 8000,
       "env": {
@@ -20,6 +31,31 @@
         "JARVIS_SCHEDULER_ENABLED": "false",
         "SUPABASE_URL": "",
         "SUPABASE_SERVICE_KEY": ""
+      }
+    },
+    {
+      "name": "phone-fixture",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tests/phone-fixture.mjs"
+      ],
+      "cwd": "frontend",
+      "port": 8101
+    },
+    {
+      "name": "phone-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3100"
+      ],
+      "cwd": "frontend",
+      "port": 3100,
+      "env": {
+        "NEXT_PUBLIC_API_BASE": "http://127.0.0.1:8101"
       }
     }
   ]

@@ -71,41 +71,43 @@ announcements and native Sentinel are separate paths.
 
 ## Responsive page layout
 
-The independent `/mobile/` experience uses `components/mobile-desk` and a
-route-scoped stylesheet; it does not replace `/` during design comparison.
-It now has Assistant, My day and Library as retained full-height spaces. A small
-Web Animations controller moves the horizontal track and dock from their current
-position at a shared linear rate. Each page owns vertical scrolling; inactive
-pages are inert and hidden from accessibility navigation. Chat, tasks,
-schedule/reminders and notebook contents open as focused subviews with a back
-button. ScheduleBoard/NotesWorkspace accept optional initial selections; their
-default desktop behavior is unchanged. SettingsPanel accepts optional appearance
-content and `presentation="pocket"` for grouped full-screen settings navigation;
-its existing form state, save/reload, location and connector handlers stay shared.
-Chat's optional pocket presentation similarly keeps its streaming/audio/history
-controller. The desktop installed-path AgentRunStatus widget is not rendered in
-the mobile route. RecordEditor is presented as
-a bottom sheet by scoped CSS, retaining validation/deletion confirmation.
-VoiceMode's opt-in `presentation="pocket"` renders PocketVoice instead of the HUD,
-but both use the same VoiceSession and callbacks. The pocket presentation avoids
-loading the WebGL core, uses real session levels, and preserves language, voice,
-mute/send, interrupt and half-duplex controls. VoiceSculpture uses the supplied
-image with compositor motion; session state controls accents and measured level
-controls scale. It never generates audio or synthetic level values. No transport
-or provider changes.
-`useCommandCenter` contains the existing shared page controller: store ownership,
-startup retries, provider-key handoff, agent seeding/draining, notification refresh
-and mutations remain the same. Each mounted route owns one controller and one
-SyncBanner. New task presentation uses the existing `records` and RecordEditor
-contracts. Schedule, Notes, Chat, Settings and Voice reuse the established
-components. Chat remains mounted while hidden after its first visit. The
-existing temporary voice-surface suppression remains in effect.
+The `/mobile/` route is the phone app and the Android launch route. It lives in
+`components/phone/` with a route-scoped stylesheet (`app/mobile/phone.css`, all
+rules under `.ph`) and is a separate presentation, not a restyle of the desktop
+components. Details, design and verification: `docs/mobile-app.md`.
 
-The new route scopes color and typography tokens below `.desk-shell`, supports
-light/dark/system preferences and reduced motion, and lazy-loads Settings/Voice.
-`tests/mobile-desk-fixture.mjs` is a loopback-only, volatile API fixture for UI
-checks, never a production data store. The new route and its self-hosted Manrope
-font are included by the existing native static-export workflow.
+- Data and lifecycle stay in `useCommandCenter`, shared with `/`: store
+  ownership, startup retries, key handoff, agent seeding/draining, notification
+  plans and mutations. The phone app mounts one controller and runs the one
+  client sync engine (`useAutoSync`).
+- Conversation, voice and settings logic are hooks shared by the desktop
+  components and the phone screens: `useChatSession` (history, streaming,
+  dictation, clear), `useVoiceSession` (the VoiceSession state machine, surface
+  release timing, language/voice following; `reactiveLevel: false` exposes the
+  microphone level through `levelRef` without a re-render per audio frame) and
+  `useSettingsModel` (drafts, dirty tracking, Save & restart, SLDT pairing,
+  location, erase). `Chat`, `VoiceMode` and `SettingsPanel` keep their desktop
+  rendering and no longer carry a mobile presentation branch.
+- Phone record sheets build drafts through `lib/recordDrafts.ts`, pure functions
+  with the desktop editors' validation, then call the unchanged `records` API.
+- Every phone layer (pushed screens, sheets, chat, voice) owns one same-URL
+  history entry via `components/phone/lib/backStack.ts`, so Android's back button
+  (Tauri's default `WebView.goBack()`) closes the top layer. UI closes rewind the
+  entry; registration follows framer's `useIsPresent`.
+- Finishing a task waits 4.2 s behind an Undo toast before calling
+  `handleToggleTask(id, "COMPLETED")`; hiding the page commits it immediately.
+- `SpeechQueue.outputLevel()` reads a passive `AnalyserNode` that each playback
+  source feeds in addition to its unchanged destination connection;
+  `VoiceSession.outputLevel()` exposes it for the phone's WebGL orb.
+- Android `MainActivity` attaches `JarvisHapticsBridge` (`window.JarvisHaptics`),
+  which maps UI feedback kinds to `performHapticFeedback`.
+- New frontend dependencies, phone route only: framer-motion, vaul, sonner,
+  @number-flow/react, @phosphor-icons/react, canvas-confetti.
+- Tool surfaces remain disabled in voice mode here, as on the desktop route.
+
+`tests/phone-fixture.mjs` is a loopback-only, in-memory API fixture for UI
+checks, never a production data store. The route's self-hosted fonts (Unbounded,
+Onest, Silkscreen) are included by the existing native static-export workflow.
 
 Below 1,024 CSS pixels the shared UI uses the mobile bottom navigation and card
 layout. `Dashboard` owns one vertical scroll container; its header and brief do

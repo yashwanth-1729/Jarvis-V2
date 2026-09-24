@@ -76,35 +76,43 @@ release does not update its bundled frontend; a new Windows release was not buil
 
 ## Mobile interface
 
-An independent mobile redesign is available at **`/mobile/`** for comparison
-with the existing `/` interface. It is now a voice-first pocket application:
-Assistant, My day and Library are three full-height spaces, not a five-tab
-dashboard. Sage/sea-glass surfaces support light and deep-green dark themes.
-The assistant has a large voice control, a typing entry point and one upcoming
-event. My day is a timeline with task/reminder shortcuts; Library uses notebook
-covers and has a Reminders tile. Detail screens have back navigation; record editors are bottom sheets.
-Task editing, reminders, notes, connections and voice use the existing services;
-no sample records are inserted into the app. Light/dark/system appearance is a
-local preference. Both routes share `useCommandCenter` for data ownership,
-startup, refresh, native notifications and agent handoff. The default native
-launch route is not changed by this redesign. `PocketVoice` is a new presentation
-of the existing voice session, with readable captions, language/voice choices,
-mute/send, stop reply and the existing half-duplex default. Main spaces slide
-together with their dock selection at a constant rate (320ms per adjacent space).
-Interrupted transitions resume from the visible position, and each space keeps
-its scroll position. The user-supplied glass loop decorates the home, chat and
-voice screens. Voice motion follows listening/thinking/speaking state and real
-audio level; background loops pause when hidden. Reduced-motion/transparency
-fallbacks remain. Settings has grouped destinations, separate detail pages and
-appearance previews, using the existing settings handlers. Chat has a glass
-composer, distinct user messages, readable replies and confirmation before clearing.
-See `docs/mobile-pocket.md` for motion, artwork and verification details.
+**`/mobile/`** is the phone app and the route the Android build opens. It was
+rebuilt from scratch on 2026-09-25 ("Neon Candy"): a black canvas (or paper in
+light mode) with candy-coloured tiles, wide display type, pixel-font tags and one
+iridescent JARVIS orb in the dock. Four tabs sit around the orb:
 
-For an isolated design preview, run `node tests/mobile-desk-fixture.mjs` from
+- **Today**: greeting, Ask bar (chat) and mic (voice), now/next block with live
+  progress, task and reminder tiles, the JARVIS brief with a scrolling ticker,
+  up-next tasks and today's timeline.
+- **Tasks**: All/Doing/Late filters, Due/Priority/New sort, search, buckets from
+  Overdue to Whenever. Tap the circle or swipe right to finish (confetti, 4.2 s
+  Undo); swipe left to start or pause.
+- **Plan**: My routine, College and Blocks (the three schedule sections) plus
+  Reminders, with a swipeable weekday strip and clash markers.
+- **Memory**: notebook cards, a review callout for candidate memories, and
+  notebook pages with role filters, search and add/rename/delete.
+
+Chat is a full-screen sheet with streaming replies, dictation, read-aloud, copy
+and clear-with-confirmation; drafts survive closing it. Voice blooms out of the
+dock orb into a WebGL orb that follows the real microphone and playback levels,
+with language/voice pickers, Mute & send, Stop reply, Type instead and the
+voice-interruption switch (half-duplex stays the default). Settings covers theme
+(saved under the same key as before), keys, connected apps, sync, location,
+runtime address and local erase. Every editor is a drag-to-dismiss sheet and
+every delete still asks first. Android's back button closes the top sheet or
+screen instead of leaving the app, and the Android build now plays system
+haptics through `window.JarvisHaptics`. Data ownership, sync, notifications,
+voice transport and providers are unchanged (`useCommandCenter` plus the new
+shared `useChatSession`, `useVoiceSession` and `useSettingsModel` hooks).
+See `docs/mobile-app.md` for design, motion, bridges and verification.
+
+For an isolated design preview, run `node tests/phone-fixture.mjs` from
 `frontend/`, then run the dev server with
-`NEXT_PUBLIC_API_BASE=http://127.0.0.1:8101`. Its development-only banner labels
-sample records. The fixture uses memory only and makes no provider or cloud
-requests. Do not use that API override for a production/native build.
+`NEXT_PUBLIC_API_BASE=http://127.0.0.1:8101` and open `/mobile/`. Its
+development-only tag labels sample records. The fixture uses memory only and
+makes no provider or cloud requests; add `?voice-demo` to drive the voice screen
+with a scripted session. Do not use that API override for a production/native
+build.
 
 Phones and tablets below 1,024 px use a dedicated navigation bar: Tasks, Schedule,
 Voice, Notes, and Chat. The workspace uses a shared JARVIS mark, midnight surfaces,
@@ -431,6 +439,7 @@ cd backend
 cd frontend
 npx tsx tests/speechQueue.test.ts
 npx tsx --tsconfig tsconfig.json tests/endpointing.test.ts
+npx tsx tests/phone-logic.test.ts
 npx tsc --noEmit --incremental false
 npm run build:native
 ```
@@ -480,6 +489,39 @@ not a percentile benchmark, a comparison against the old implementation, or a
 microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
+
+### 2026-09-25: Phone app rebuilt from scratch ("Neon Candy")
+
+- `/mobile/` (the Android launch route) is a new app in
+  `frontend/src/components/phone/` with `app/mobile/phone.css`; the previous
+  pocket design (`components/mobile-desk/`, `mobile-desk.css`) is removed at the
+  user's request. Features kept: tasks (filters, sort, search, start/finish,
+  edit/delete with confirmation), routine/college/blocks/reminders, memory pages
+  with review, chat (streaming, dictation, read-aloud, clear), voice (language,
+  voice, mute & send, stop reply, voice interruption, half-duplex default),
+  settings (theme under the same storage key, keys, connectors, sync, location,
+  runtime, erase), sync status and offline state. See `docs/mobile-app.md`.
+- New: finish-with-Undo (4.2 s, committed if the app is hidden), swipe gestures on
+  tasks and weekdays, drag-to-dismiss sheets, Android back closes the top layer,
+  system haptics through a new `JarvisHaptics` bridge in `MainActivity`, a WebGL
+  voice orb driven by real microphone and playback levels, keyboard inset for
+  the chat composer.
+- Shared logic moved into `useChatSession`, `useVoiceSession` and
+  `useSettingsModel`; `Chat`, `VoiceMode` and `SettingsPanel` keep their desktop
+  rendering. `SpeechQueue` gained a passive output meter (audible path
+  unchanged). New frontend dependencies: framer-motion, vaul, sonner,
+  @number-flow/react, @phosphor-icons/react, canvas-confetti.
+- Validation: TypeScript and focused lint clean; the 7 existing frontend suites
+  pass; new `tests/phone-logic.test.ts` 8/8; `build:native` exported `/` and
+  `/mobile`. Browser checks at 375x812 against `tests/phone-fixture.mjs` (sample
+  data only) covered every screen in both themes, finish/undo, add/edit/approve
+  flows, reminders, chat streaming, draft and clear, a scripted voice session,
+  settings navigation and the back-button stack; the desktop console chat,
+  settings dialog and voice HUD were re-checked on `/`. The arm64 debug APK
+  (44.1 MB) was built and installed on the connected phone with `adb install
+  -r` and launched once; the phone then dropped off ADB, so no device logs or
+  on-device behaviour (haptics, keyboard, WebGL performance, touch feel, a real
+  voice conversation) were verified.
 
 ### 2026-09-21: Continuous mobile navigation, Settings, Chat and voice artwork
 

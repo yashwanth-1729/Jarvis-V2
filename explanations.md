@@ -128,6 +128,40 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-25 · Claude Code · Phone app rebuilt from scratch ("Neon Candy")
+
+- User asked for a complete mobile redesign (bold, youthful, smooth micro-
+  animations; no inspiration from the old layout). `components/mobile-desk/`
+  and `app/mobile/mobile-desk.css` are replaced by `components/phone/` and
+  `app/mobile/phone.css`; `/mobile/` (the Android launch route) renders
+  `PhoneApp`. Codex: the pocket design is gone at the user's request.
+- Logic moved, not rewritten: `useChatSession`, `useVoiceSession`,
+  `useSettingsModel` (new, in `lib/`) hold what Chat, VoiceMode and
+  SettingsPanel did; those three keep their desktop rendering and lost only the
+  `presentation="pocket"` branches. `lib/recordDrafts.ts` mirrors the desktop
+  editors' validation for the phone sheets (the desktop editors still carry
+  their own copies; keep both in step if a rule changes).
+- `speechQueue.ts`: each source also feeds a passive AnalyserNode;
+  `outputLevel()` reads it. `VoiceSession.outputLevel()` exposes it. The audible
+  path (source -> destination) is unchanged.
+- Android: new `JarvisHaptics.kt`, attached in `MainActivity` next to the
+  notification bridge as `window.JarvisHaptics`.
+- Back button: every phone overlay takes one history entry via
+  `components/phone/lib/backStack.ts`. New overlays should use
+  `useBackLayer(open, close)`; AnimatePresence children pass `useIsPresent()`.
+- New deps (phone route only): framer-motion, vaul, sonner,
+  @number-flow/react, @phosphor-icons/react, canvas-confetti.
+- Removed tests for deleted code (`pocket-voice*.tsx`, `linear-slide.test.ts`,
+  `mobile-desk-fixture.mjs`); added `tests/phone-logic.test.ts` (8/8) and
+  `tests/phone-fixture.mjs`. Existing 7 frontend suites pass, tsc and lint are
+  clean, `build:native` passes. arm64 debug APK built, installed with
+  `adb install -r` and launched once; the phone then dropped off ADB.
+- Not verified on the phone: haptics, keyboard insets, WebGL orb performance,
+  touch feel, a real voice session. Tool surfaces stay disabled.
+- Left alone: the uncommitted backend changes already in the tree
+  (`tools.py`, `tools_os_control.py`, `main.py`, `smoke_test.py`,
+  `install_app_test.py`) are not mine and were not committed.
+
 ### 2026-09-21 · Claude Code · Pocket record sheet + schedule board restyle
 
 - All of it is CSS in `mobile-desk.css` under `.desk-shell`; no shared

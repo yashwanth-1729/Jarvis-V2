@@ -17,19 +17,26 @@
     "android:run": "node scripts/build-android.mjs --run"
   },
   "dependencies": {
+    "@number-flow/react": "^0.6.2",
+    "@phosphor-icons/react": "^2.1.10",
     "@types/three": "^0.185.4",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.43.0",
     "lucide-react": "^0.454.0",
     "next": "14.2.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^2.5.4",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",

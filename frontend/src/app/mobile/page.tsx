@@ -1,5 +1,5 @@
-import { MobileDesk } from "@/components/mobile-desk/MobileDesk";
+import { PhoneApp } from "@/components/phone/PhoneApp";
 
 export default function MobilePage() {
-  return <MobileDesk />;
+  return <PhoneApp />;
 }
