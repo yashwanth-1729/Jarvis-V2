@@ -268,16 +268,21 @@ context until approved.
 tokens, tags, fuzzy concept similarity, role, confidence, importance, recency and
 pinning. A maximal-marginal-relevance pass reduces duplicate results. The agent
 passes the current user request into this retrieval step and injects at most
-eight results, replacing the previous forty-row last-write ordering. Exact
-record search remains available for tasks and ideas, and action-oriented queries
+eight results, replacing the previous forty-row last-write ordering. Record
+search for tasks and ideas is word-based: a row matches on the whole phrase or on
+at least half of the query's subject words. Tokens keep Indic vowel signs and
+viramas, so Telugu and Hindi words stay whole. Action-oriented queries
 can retrieve named tool outcomes. Memory access frequency is kept in a local
 side table so reading a memory does not dirty its synced row.
 
 Hybrid learning is conservative. Explicit save requests write ACTIVE records.
 High-signal unrequested self-statements become 30-day CANDIDATE records for the
-Notes review view. Repetition raises evidence/confidence in place. Same-concept
-corrections retain up to eight prior bodies inside the record rather than leaving
-contradictory active rows. The Android IndexedDB v4 upgrade writes the same
+Notes review view; questions and throwaway lines are never captured. Repetition
+raises evidence/confidence in place. Same-concept corrections retain up to eight
+prior bodies inside the record rather than leaving contradictory active rows. A
+re-save changes only the fields it supplies, so pin, tags, weights, type and
+expiry carry over, and a CANDIDATE save never demotes an ACTIVE memory.
+Contradictions saved under different titles are not yet detected. The Android IndexedDB v4 upgrade writes the same
 Markdown envelope and marks migrated rows pending; the embedded SQLite copy
 continues to seed and drain the unchanged sync columns. Desktop generates a
 gitignored Markdown vault beside the database as a readable projection.

@@ -271,8 +271,13 @@ and can also retrieve recent named actions.
 
 Explicit “remember this” requests become active immediately. High-signal facts,
 preferences, goals and standing rules stated without a save request enter a
-30-day review state and do not affect answers until approved. Repeated evidence
-raises candidate confidence without creating duplicates. Working memories get
+30-day review state and do not affect answers until approved. Questions and
+throwaway lines ("never mind") are never captured, and this automatic capture
+understands English statements only; Telugu and Hindi ones need the model to
+save them. Repeated evidence raises candidate confidence without creating
+duplicates. Re-saving a memory under the same title changes only what that save
+specifies: its pin, tags, weights, type and expiry carry over, and a review-state
+save never demotes a memory the user already confirmed. Working memories get
 an eight-hour default expiry. Meaningful tool calls enter a local named action
 ledger for 90 days, providing episodic recall without putting every click or
 animation into long-term memory. Prospective commitments with concrete dates
@@ -509,6 +514,33 @@ not a percentile benchmark, a comparison against the old implementation, or a
 microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
+
+### 2026-09-26: Memory fixes
+
+A probe on an isolated database found four faults, all fixed in `backend/app`:
+- **Re-saving a memory wiped fields.** Saving by title reset what the model did
+  not repeat: the pin came off, tags and importance were wiped, the type was
+  re-guessed, and a temporary rule became permanent. The save tool now passes
+  only the fields the model sent, and `upsert_memory` keeps everything else.
+- **Automatic capture saved junk.** It turned "never mind" and "I always forget
+  my keys" into standing rules. It now ignores questions and throwaway lines. It
+  now also captures English self-statements such as where the user lives or
+  works, their diet, their name, and someone's birthday. On the probe it caught
+  6 of 8 facts (was 1) and 0 of 4 junk lines (was 4). Telugu and Hindi
+  statements still need the model.
+- **Search for ideas and tasks needed the exact phrase.** `search_memory`
+  matched the whole query as one substring, so "investor slides" missed an idea
+  described as "Slides for the investor meeting". It now matches words.
+- **Telugu and Hindi words were split apart.** Their vowel signs broke every
+  word into fragments. They now stay whole, so a Telugu question finds a Telugu
+  memory.
+- **Still open:** recall of paraphrases ("where do I stay" vs "I live in"),
+  contradictions saved under different titles, and conversation older than the
+  last six messages.
+- **Validation:** isolated fixtures only, and it covers the backend source only.
+  No APK was built; the phone picks this up on its next build. Suites passed:
+  memory system 35 checks, lifecycle 9, delete 16, records 46, context budget 7,
+  and the full smoke test.
 
 ### 2026-09-25 (third round): Fling fix, 3D icon set, HOLO polish
 

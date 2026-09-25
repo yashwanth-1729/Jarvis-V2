@@ -110,10 +110,54 @@ async def main() -> None:
         assert "RELEVANT MEMORY" in snapshot and "Tirupati" in snapshot
         assert "concise status updates" not in snapshot
 
+        # Re-saving by title keeps whatever the caller did not repeat.
+        await crud.upsert_memory(
+            "Morning rule", "No calls before 9am.", "PREFERENCE",
+            memory_type="PROCEDURAL", pinned=True, importance=0.95, tags=["calls"],
+        )
+        await execute_tool("save_idea_or_note", {
+            "title": "Morning rule", "content": "No calls before 10am.",
+            "category": "PREFERENCE", "pinned": False, "tags": [],
+        })
+        kept = next(item for item in await crud.list_memories() if item["key_concept"] == "Morning rule")
+        assert kept["pinned"] and kept["importance"] == 0.95 and kept["tags"] == ["calls"]
+        assert kept["memory_type"] == "PROCEDURAL" and "10am" in kept["content"]
+        await execute_tool("save_idea_or_note", {
+            "title": "Exam week", "content": "Short replies.",
+            "category": "PREFERENCE", "expires_at": "2099-01-01T00:00:00",
+        })
+        await execute_tool("save_idea_or_note", {
+            "title": "Exam week", "content": "Short replies, no jokes.", "category": "PREFERENCE",
+        })
+        temporary = next(item for item in await crud.list_memories() if item["key_concept"] == "Exam week")
+        assert temporary["expires_at"] == "2099-01-01T00:00:00"
+        kept = await crud.upsert_memory("Morning rule", "No calls before 10am.", memory_status="CANDIDATE")
+        assert kept["memory_status"] == "ACTIVE"
+        kept = await crud.upsert_memory("Morning rule", "")
+        assert "10am" in kept["content"] and kept["category"] == "PREFERENCE"
+
+        # Automatic capture: statements about the user, not throwaways.
+        for noise in ("never mind", "I always forget my keys lol", "ugh my wifi is so slow today", "is my alarm set?"):
+            assert await memory.capture_inferred_candidate(noise) is None, noise
+        for fact in ("I live in Hyderabad now", "I'm vegetarian", "always reply in Telugu", "amma's birthday is on the 14th"):
+            assert await memory.capture_inferred_candidate(fact), fact
+
+        # Telugu words tokenize whole, so a Telugu question finds a Telugu memory.
+        await crud.upsert_memory("\u0c05\u0c2e\u0c4d\u0c2e \u0c2a\u0c41\u0c1f\u0c4d\u0c1f\u0c3f\u0c28\u0c30\u0c4b\u0c1c\u0c41", "14 October", "LONG_TERM")
+        telugu = await memory.retrieve("\u0c2e\u0c3e \u0c05\u0c2e\u0c4d\u0c2e \u0c2a\u0c41\u0c1f\u0c4d\u0c1f\u0c3f\u0c28\u0c30\u0c4b\u0c1c\u0c41 \u0c0e\u0c2a\u0c4d\u0c2a\u0c41\u0c21\u0c41", limit=3)
+        assert any(item["content"] == "14 October" for item in telugu)
+
+        # Record search matches words, not the whole query as one substring.
+        await crud.create_idea(title="Startup pitch deck", description="Slides for the investor meeting", tags="", status="ACTIVE")
+        for query in ("pitch deck ideas", "investor slides"):
+            found = await crud.search_memories_and_ideas(query)
+            assert any(idea["title"] == "Startup pitch deck" for idea in found["ideas"]), query
+        assert not (await crud.search_memories_and_ideas("quantum banana"))["ideas"]
+
         vault = get_settings().db_file.parent / "memory-vault"
         assert (vault / "README.md").exists()
         assert (vault / f"{first['uid']}.md").exists()
-        print("memory system: 15 checks passed")
+        print("memory system: 35 checks passed")
     finally:
         await dbmod.db.disconnect()
 

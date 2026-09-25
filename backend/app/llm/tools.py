@@ -1149,6 +1149,12 @@ async def _handle_save_idea_or_note(payload: SaveIdeaOrNoteInput) -> ToolOutcome
 
     # A deadline makes a rule temporary, regardless of the chosen category.
     if category in crud.MEMORY_CATEGORIES or payload.expires_at:
+        # Only what the model actually said. Re-saving a title to correct it
+        # used to unpin it, wipe its tags and reset its weights, because the
+        # input defaults (pinned=False, tags=[], importance=0.65) were passed
+        # through as if the model had asked for them. Pinning is sticky here:
+        # unpinning is an edit on the memory itself.
+        given = payload.model_fields_set
         memory = await crud.upsert_memory(
             key_concept=payload.title,
             content=payload.content,
@@ -1156,11 +1162,11 @@ async def _handle_save_idea_or_note(payload: SaveIdeaOrNoteInput) -> ToolOutcome
             expires_at=payload.expires_at,
             memory_type=payload.memory_type,
             memory_status=payload.memory_status,
-            importance=payload.importance,
-            confidence=payload.confidence,
+            importance=payload.importance if "importance" in given else None,
+            confidence=payload.confidence if "confidence" in given else None,
             source_kind="inferred_model" if payload.memory_status.upper() == "CANDIDATE" else "explicit_user",
-            pinned=payload.pinned,
-            tags=payload.tags,
+            pinned=True if payload.pinned else None,
+            tags=payload.tags or None,
         )
         return ToolOutcome(
             content=(

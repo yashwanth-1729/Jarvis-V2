@@ -54,7 +54,10 @@ _META_ORDER = (
     "tags",
     "history",
 )
-_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
+# Indic vowel signs and viramas are not "word" characters to Python's \w,
+# so a plain \w+ split every Telugu or Hindi word into fragments. The
+# U+0900-U+0DFF range (Devanagari to Sinhala) keeps them whole.
+_TOKEN = re.compile(r"(?:[^\W_]|[\u0900-\u0DFF])+")
 _STOP = {
     "a", "an", "and", "are", "as", "at", "be", "do", "for", "from",
     "have", "i", "in", "is", "it", "me", "my", "of", "on", "or", "that",
@@ -73,6 +76,55 @@ _ACTION_WORDS = {
     "added", "changed", "created", "deleted", "did", "done", "edited",
     "removed", "saved", "updated", "what", "when",
 }
+#: Words that carry no subject in a record search ("what did I note about the
+#: project" is about "note" and "project"). Separate from _STOP, which also
+#: feeds memory ranking and its type hints.
+_QUERY_FILLER = {
+    "about", "all", "any", "anything", "can", "could", "did", "does", "find",
+    "get", "give", "got", "had", "has", "how", "list", "look", "much", "show",
+    "some", "tell", "there", "which", "why", "will", "would",
+}
+
+# Automatic capture. Measured 2026-09-26 on an isolated database, the old
+# patterns turned "never mind" and "I always forget my keys lol" into standing
+# rules and "ugh my wifi is so slow today" into a personal fact, while "I live
+# in Hyderabad now", "I'm vegetarian", "I work at Infosys" and "amma's
+# birthday is on the 14th" were ignored. Still English-only: Telugu and Hindi
+# statements need the model to capture them.
+_QUESTION_START = re.compile(
+    r"^(?:what|when|where|who|whom|whose|which|why|how|is|are|am|was|were|do|does|did|"
+    r"can|could|will|would|should|shall|may|have|has)\b"
+)
+_THROWAWAY = re.compile(r"\b(?:never ?mind|nvm|whatever|just kidding|jk)\b")
+_TRANSIENT = (
+    r"(?:so|too|very|really|kinda|kind of|super|being|getting|not|dead|down|broken|"
+    r"slow|off|low|full|empty|late|busy|stuck|acting|missing|lost)"
+)
+_CAPTURE_PATTERNS = (
+    ("SEMANTIC", "PREFERENCE", re.compile(
+        r"\b(?:i prefer|i like|i love|i dislike|i hate|i can't stand|my favou?rite)\b"
+        r"(?! (?:it|that|this|them|those|these|you|your)\b)"
+    ), "Inferred preference"),
+    ("SEMANTIC", "LONG_TERM", re.compile(
+        r"\b(?:i live in|i'm from|i am from|i moved to|i work (?:at|for|as)|i study (?:at|in)|"
+        r"i'm studying|i'm allergic|i am allergic|i'm (?:a )?(?:vegetarian|vegan)|"
+        r"i am (?:a )?(?:vegetarian|vegan)|i don't eat|i do not eat|my name is|"
+        r"call me (?!later\b|back\b|at\b|tomorrow\b|tonight\b|when\b|in\b|after\b|before\b|"
+        r"on\b|once\b|now\b|asap\b)[a-z]+|[a-z]+'s birthday is)\b"
+    ), "Inferred personal fact"),
+    ("SEMANTIC", "LONG_TERM", re.compile(
+        rf"\bmy [a-z][a-z ]{{1,40}} is\b(?! {_TRANSIENT}\b)"
+    ), "Inferred personal fact"),
+    ("PROCEDURAL", "PREFERENCE", re.compile(
+        r"\b(?:from now on|going forward|don't ever|do not ever|whenever i (?:say|ask|type))\b|"
+        r"\b(?:always|never)\b.*\b(?:you|remind|call|tell|reply|answer|speak|talk|say|ask|"
+        r"message|notify|wake|send|give|use)\b"
+    ), "Inferred standing rule"),
+    ("PROSPECTIVE", "GOAL", re.compile(
+        r"\b(?:my goal is|i plan to|i intend to|i'm planning to|"
+        r"i want to (?:learn|become|get better at|start))\b"
+    ), "Inferred goal"),
+)
 _vault_fingerprint: tuple[tuple[str, str, str], ...] | None = None
 
 
@@ -243,6 +295,12 @@ def _tokens(text: str) -> set[str]:
     return {token.casefold() for token in _TOKEN.findall(text) if len(token) > 1 and token.casefold() not in _STOP}
 
 
+def search_terms(text: str, limit: int = 8) -> list[str]:
+    """Distinct subject words of a search query, longest first."""
+    terms = [token for token in _tokens(text) if token not in _QUERY_FILLER]
+    return sorted(terms, key=lambda token: (-len(token), token))[:limit]
+
+
 def _age_score(value: str | None, current: datetime) -> float:
     parsed = parse_datetime(value)
     if parsed is None:
@@ -287,9 +345,10 @@ def _score(row: dict[str, Any], query: str, query_tokens: set[str], current: dat
 
     # Character-level fuzz is a tiebreak, not evidence on its own. It applies
     # only once a real word is already shared, or the phrase is a substring, or
-    # the query produced no usable tokens at all -- the last case is how
-    # non-Latin scripts (Telugu) match, since the tokenizer drops their short
-    # clusters. Without this gate the fuzz alone let unrelated rows score
+    # the query produced no usable tokens at all (only stopwords or single
+    # letters). Telugu and Hindi words tokenize whole since 2026-09-26; before
+    # that their vowel signs split every word. Without this gate the fuzz alone
+    # let unrelated rows score
     # ("nothing" shares letters with "meeting"), which is the bug being fixed:
     # search_memory returned matches for gibberish and the state block filled
     # with irrelevant memories every turn.
@@ -459,19 +518,16 @@ async def capture_inferred_candidate(user_text: str, source_ref: str | None = No
     requests are handled by the agent tool and become active immediately.
     """
     text = " ".join((user_text or "").split())
-    folded = text.casefold()
+    folded = text.casefold().replace("\u2019", "'")
     if not text or len(text) > 600:
         return None
     if any(phrase in folded for phrase in ("remember this", "remember that", "save this", "store this", "i want you to")):
         return None
+    # A question or a throwaway line is not a statement about the user.
+    if folded.endswith("?") or _QUESTION_START.match(folded) or _THROWAWAY.search(folded):
+        return None
 
-    patterns = (
-        ("SEMANTIC", "PREFERENCE", r"\b(?:i prefer|i like|i dislike|i hate|my favou?rite)\b", "Inferred preference"),
-        ("SEMANTIC", "LONG_TERM", r"\bmy [a-z][a-z ]{1,40} is\b", "Inferred personal fact"),
-        ("PROCEDURAL", "PREFERENCE", r"\b(?:from now on|always|whenever|never)\b", "Inferred standing rule"),
-        ("PROSPECTIVE", "GOAL", r"\b(?:my goal is|i plan to|i intend to)\b", "Inferred goal"),
-    )
-    selected = next((item for item in patterns if re.search(item[2], folded)), None)
+    selected = next((item for item in _CAPTURE_PATTERNS if item[2].search(folded)), None)
     if selected is None:
         return None
     memory_type, category, _, label = selected

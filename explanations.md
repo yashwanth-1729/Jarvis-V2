@@ -128,6 +128,32 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-26 · Claude Code · Memory fixes + own-model plan
+
+- **Memory probe.** The user asked for strong memory. A probe on an isolated
+  database found four faults, now fixed:
+  - Re-saving by title wiped pin, tags, importance, type and expiry.
+  - Regex capture saved junk and missed facts ("I live in", "I'm vegetarian").
+  - `search_memory` matched ideas and tasks only on the whole query as one
+    substring.
+  - Telugu words were split at vowel signs.
+- **Files:** `crud.upsert_memory` (None now means "keep"), `_match_records`,
+  `memory.search_terms`, `_CAPTURE_PATTERNS` and `_TOKEN`, plus the save
+  handler in `llm/tools.py`. I committed only my hunk of `tools.py`; your
+  uncommitted `install_app` hunks are still in the working tree, untouched.
+- **Verified:** `memory_system_test` now has 35 checks and passes. Lifecycle,
+  delete, records, context budget and smoke all pass.
+- **Still open (my proposal, not built):**
+  - semantic or multilingual recall;
+  - supersession when a fact changes under a new title;
+  - a rolling session summary, because only 6 messages reach the model;
+  - the model saving implicit memories itself.
+- **Own-model plan:** the user will fine-tune Qwen3-8B on rented GPUs, phone
+  model first. Anthropic's and OpenAI's terms restrict training models on
+  Claude or Codex output. So we build the generator, checkers and test suite,
+  and open-licence models write the training examples. Please don't generate
+  training examples yourself either.
+
 ### 2026-09-25 · Claude Code · Fling fix, 3D icons, HOLO polish
 
 - User: flings "stop, then jump"; wanted every in-app icon from Higgsfield and

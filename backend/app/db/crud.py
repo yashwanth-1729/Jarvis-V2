@@ -1059,17 +1059,23 @@ async def upsert_memory(
     expires_at: str | None = None,
     *,
     memory_type: str | None = None,
-    memory_status: str = "ACTIVE",
-    confidence: float = 1.0,
-    importance: float = 0.65,
+    memory_status: str | None = None,
+    confidence: float | None = None,
+    importance: float | None = None,
     source_kind: str = "explicit",
     source_ref: str | None = None,
-    pinned: bool = False,
+    pinned: bool | None = None,
     tags: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """One row per ``key_concept`` — re-saving the same concept updates it in
-    place so long-term memory does not accumulate near-duplicates."""
-    normalized_category = coerce_choice(category, MEMORY_CATEGORIES, "LONG_TERM")
+    place so long-term memory does not accumulate near-duplicates.
+
+    Anything left as ``None`` (or an empty ``content``) keeps the existing
+    row's value, or the default for a new row. Measured 2026-09-26 on an
+    isolated database: correcting a fact by its title reset everything the
+    caller did not repeat -- the pin came off, tags and importance were wiped,
+    the type was re-guessed and a temporary rule lost its expiry.
+    """
     deadline = normalize_datetime(expires_at)
     if expires_at and (not deadline or deadline <= now_iso()):
         raise ValueError("Temporary memory needs a future expiry date and time.")
@@ -1080,16 +1086,26 @@ async def upsert_memory(
     existing = await db.fetch_one(
         "SELECT * FROM memories WHERE lower(key_concept) = lower(?) LIMIT 1", (key,)
     )
+    current = memory_service.decorate_row(existing) if existing else None
+    normalized_category = coerce_choice(
+        category, MEMORY_CATEGORIES, (current or {}).get("category") or "LONG_TERM"
+    )
+    if current and not expires_at and current.get("expires_at"):
+        deadline = current["expires_at"]  # an edit keeps a temporary rule temporary
     chosen_type = coerce_choice(
         memory_type,
         MEMORY_TYPES,
-        memory_service.infer_type(normalized_category, deadline),
+        current["memory_type"] if current else memory_service.infer_type(normalized_category, deadline),
     )
-    chosen_status = coerce_choice(memory_status, MEMORY_STATUSES, "ACTIVE")
+    chosen_status = coerce_choice(
+        memory_status, MEMORY_STATUSES, current["memory_status"] if current else "ACTIVE"
+    )
+    if current and current["memory_status"] == "ACTIVE" and chosen_status == "CANDIDATE":
+        chosen_status = "ACTIVE"  # a guess never hides something the user confirmed
     if chosen_type == "WORKING" and not deadline:
         deadline = (now() + timedelta(hours=8)).isoformat(timespec="seconds")
     stored = memory_service.storage_value(
-        content.strip(),
+        content.strip() or (current["content"] if current else ""),
         existing=existing,
         memory_type=chosen_type,
         memory_status=chosen_status,
@@ -1130,29 +1146,48 @@ async def list_memories(limit: int = 100) -> list[dict[str, Any]]:
     return [memory_service.decorate_row(row) for row in rows]
 
 
+async def _match_records(
+    table: str, columns: Sequence[str], query: str, limit: int
+) -> list[dict[str, Any]]:
+    """Rows sharing the query's subject words, best match first.
+
+    This used to be one ``LIKE '%<whole query>%'``: "pitch deck ideas" and
+    "investor slides" found nothing for an idea titled "Startup pitch deck"
+    described as "Slides for the investor meeting". A row now needs the whole
+    phrase or at least half of the query's subject words.
+    """
+    phrase = query.strip().lower()
+    terms = memory_service.search_terms(query)
+    needles = [phrase, *(term for term in terms if term != phrase)] if phrase else terms
+    if not needles:
+        return []
+    fields = [f"lower(coalesce({column}, ''))" for column in columns]
+    where = " OR ".join(f"{field} LIKE ?" for _ in needles for field in fields)
+    params = [f"%{needle}%" for needle in needles for _ in fields]
+    rows = await db.fetch_all(
+        f"SELECT * FROM {table} WHERE {where} ORDER BY updated_at DESC LIMIT 200", params
+    )
+    needed = max(1, -(-len(terms) // 2))
+    ranked: list[tuple[int, dict[str, Any]]] = []
+    for row in rows:
+        text = " ".join(str(row.get(column) or "") for column in columns).lower()
+        hits = sum(1 for term in terms if term in text)
+        if phrase and phrase in text:
+            ranked.append((len(terms) + 2, row))
+        elif hits >= needed:
+            ranked.append((hits, row))
+    ranked.sort(key=lambda item: (item[0], item[1].get("updated_at") or ""), reverse=True)
+    return [row for _, row in ranked[:limit]]
+
+
 async def search_memories_and_ideas(query: str, limit: int = 20) -> dict[str, list[dict[str, Any]]]:
-    """Rank memory intelligently; retain exact local search for records."""
-    pattern = f"%{query.strip().lower()}%"
+    """Rank memory intelligently; word-based local search for records."""
     await expire_memories()
 
     include_candidates = any(word in query.casefold() for word in ("candidate", "review", "inferred"))
     memories = await memory_service.retrieve(query, limit=limit, include_candidates=include_candidates)
-    ideas = await db.fetch_all(
-        """
-        SELECT * FROM ideas
-        WHERE lower(title) LIKE ? OR lower(description) LIKE ? OR lower(tags) LIKE ?
-        ORDER BY updated_at DESC LIMIT ?
-        """,
-        (pattern, pattern, pattern, limit),
-    )
-    tasks = await db.fetch_all(
-        """
-        SELECT * FROM tasks
-        WHERE lower(title) LIKE ? OR lower(category) LIKE ?
-        ORDER BY updated_at DESC LIMIT ?
-        """,
-        (pattern, pattern, limit),
-    )
+    ideas = await _match_records("ideas", ("title", "description", "tags"), query, limit)
+    tasks = await _match_records("tasks", ("title", "category"), query, limit)
     actions = await memory_service.retrieve_actions(query, limit=min(limit, 5))
     return {"memories": memories, "ideas": ideas, "tasks": tasks, "actions": actions}
 
