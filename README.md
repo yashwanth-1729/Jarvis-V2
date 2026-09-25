@@ -529,8 +529,10 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
   state from the static export's Design lab in headless Chrome (no console
   errors); the fling fault reproduced and the fix confirmed on the CPH2767 by
   disabling the scroll-driven CSS in place. The arm64 debug APK with these
-  changes was built (46.2 MB) but not installed yet: the phone was
-  disconnected from ADB when the build finished.
+  changes (46.2 MB) was installed on the CPH2767 and the same DevTools touch
+  fling on Today scrolled every frame from 0 to 1475 px with a smooth
+  deceleration: no stalls, jumps, frame gaps over 30 ms or long animation
+  frames (the phone was running at 60 Hz for that test).
 
 ### 2026-09-25: Smoother phone motion, a live background, HOLO, voice fixes
 

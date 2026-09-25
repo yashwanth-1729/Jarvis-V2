@@ -142,6 +142,9 @@ Medium, worth doing:
   send, FAB) use `var(--fg)` instead.
 - `voice/HoloMascot.tsx`: stable body colours (BODY) + per-state ACCENT; face
   shader gained brows/blush/sleepy/grin/talk/hmm; belt ring removed.
+- Verified: tsc + eslint clean; APK (46.2 MB) installed on the CPH2767; the
+  DevTools touch-fling probe (`fling.mjs` in the session scratchpad) now shows
+  scrollTop advancing every frame 0 -> 1475 with no stalls or jumps.
 
 ### 2026-09-25 · Claude Code · Design lab + switchable launcher icon
 
