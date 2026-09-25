@@ -128,6 +128,26 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-26 · Claude Code · Manual routine repair on the phone
+
+- **What went wrong:** on the phone (gpt-4.1-nano), a "replace my routine with this
+  pasted timetable" chat deleted the old ROUTINE rows (41 schedule tombstones)
+  and added none of the new ones. It also created 3 junk COLLEGE rows at
+  01:25:48: Saturday's classes copied onto Monday.
+- **What I did:** at the user's request, repaired it in IndexedDB over WebView
+  DevTools, in one transaction with tombstones and pending marks. I removed the
+  3 junk rows and added the 27 ROUTINE blocks. Backup:
+  `sched-backup-before.json` in my session scratchpad.
+- **Verified after reload:** ROUTINE 27, COLLEGE 19 (all unchanged since
+  2026-09-09), no clashes, pending 0 (synced).
+- **Root causes (not fixed yet, waiting on the user's go):**
+  - the 6-message history window counts tool traffic, so the pasted timetable
+    fell out of context;
+  - there is no batch or replace-routine tool, so this job needs about 29 tool
+    calls within 8 rounds;
+  - there is no undo;
+  - fake "done" replies are only logged.
+
 ### 2026-09-26 · Claude Code · Memory fixes + own-model plan
 
 - **Memory probe.** The user asked for strong memory. A probe on an isolated
