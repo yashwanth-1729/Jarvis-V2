@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CaretLeft, Clock, MagnifyingGlass, PencilSimple, PushPin, X } from "@phosphor-icons/react";
+import { CaretLeft, Clock, MagnifyingGlass, PencilSimple, Plus, PushPin, X } from "@phosphor-icons/react";
 
 import type { Idea, Memory, NotePage } from "@/types";
 import { allPages, isMemoryPage, MEMORY_LABEL, MEMORY_TONE, pageIdeas, pageTone } from "../lib/derive";
@@ -87,7 +87,7 @@ export function NotebookScreen({ uid, initialView = "ALL", fallback }: { uid: st
             <PencilSimple size={20} weight="bold" />
           </Tap>
         }
-        eyebrow={<span className="ph-notebook-eyebrow" data-tone={pageTone(page)}>{pageIcon(page, 22)} {memoryPage ? "Memory" : "Notebook"}</span>}
+        eyebrow={<span className="ph-notebook-eyebrow" data-tone={pageTone(page)}>{pageIcon(page, 20)} {memoryPage ? "Memory" : "Notebook"}</span>}
         hero={<p className="ph-hero-hint">{hint}</p>}
       >
         <div className="ph-stack">
@@ -135,7 +135,7 @@ export function NotebookScreen({ uid, initialView = "ALL", fallback }: { uid: st
             ) : (
               <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
                 <Empty
-                  icon={<Icon3D name="notebook" size={58} />}
+                  icon={<Icon3D name="notebook" size={52} />}
                   title={needle ? "Nothing matches" : view === "REVIEW" ? "Nothing to review" : "A little room for your next thought"}
                   hint={needle ? "Try another word." : temporary ? "Add a rule and choose when JARVIS should forget it." : "Tap + or ask JARVIS to save something here."}
                 />
@@ -152,7 +152,7 @@ export function NotebookScreen({ uid, initialView = "ALL", fallback }: { uid: st
         squish={0.88}
         onClick={() => (memoryPage ? setEditingMemory({ new: true, temporary, view }) : setEditingNote({ new: true, page: page.uid }))}
       >
-        <Icon3D name="add" size={36} />
+        <Plus size={26} weight="bold" />
       </Tap>
 
       <MemorySheet target={editingMemory} onClose={() => setEditingMemory(null)} />

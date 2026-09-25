@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { MagnifyingGlass, X } from "@phosphor-icons/react";
+import { MagnifyingGlass, Plus, X } from "@phosphor-icons/react";
 
 import type { Task } from "@/types";
 import { groupTasks, isOverdueTask, type TaskSort } from "../lib/derive";
@@ -53,10 +53,10 @@ export function TasksScreen() {
             if (searching) setQuery("");
             setSearching((value) => !value);
           }}>
-            {searching ? <X size={20} weight="bold" /> : <Icon3D name="search" size={28} />}
+            {searching ? <X size={20} weight="bold" /> : <MagnifyingGlass size={21} weight="bold" />}
           </Tap>
           <Tap className="ph-icon-btn ph-icon-btn-accent" aria-label="Add a task" onClick={() => setEditing("new")} feel="heavy">
-            <Icon3D name="add" size={28} />
+            <Plus size={22} weight="bold" />
           </Tap>
         </>
       }
@@ -120,7 +120,7 @@ export function TasksScreen() {
           ))
         ) : (
           <Empty
-            icon={<Icon3D name="party" size={60} />}
+            icon={<Icon3D name="party" size={52} />}
             title={needle ? "Nothing matches" : filter === "late" ? "Nothing late. Clean." : filter === "doing" ? "Nothing in motion" : "All clear. Go touch grass."}
             hint={needle ? "Try another word or filter." : "Add a task, or tell JARVIS what's on your mind."}
             action={!needle && <Tap className="ph-btn ph-btn-primary" onClick={() => setEditing("new")}>Add a task</Tap>}

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { GraduationCap, Hourglass, Repeat } from "@phosphor-icons/react";
 
 import { createEvent, createReminder, deleteEvent, deleteReminder, updateEvent, updateReminder } from "@/lib/records";
 import { eventDraft, reminderDraft } from "@/lib/recordDrafts";
@@ -11,7 +12,6 @@ import { useAppData } from "../PhoneContext";
 import { BigInput, Choices, DayPicker, Field, FormError, SheetActions, TextArea, TextInput, TimeInput, useRetained, useSheetForm, WhenPicker } from "../ui/Form";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
-import { Icon3D } from "../ui/Icon3D";
 
 export type EventTarget = ScheduleEvent | { kind: ScheduleEvent["kind"]; day?: number } | null;
 
@@ -99,9 +99,9 @@ export function EventSheet({ target, onClose }: { target: EventTarget; onClose: 
           value={kind}
           onChange={(value) => set("kind", value)}
           options={[
-            { value: "COLLEGE", label: "Class", tone: "sky", icon: <Icon3D name="cap" size={22} /> },
-            { value: "ROUTINE", label: "Routine", tone: "lilac", icon: <Icon3D name="repeat" size={22} /> },
-            { value: "SESSION", label: "Block", tone: "orange", icon: <Icon3D name="hourglass" size={22} /> },
+            { value: "COLLEGE", label: "Class", tone: "sky", icon: <GraduationCap size={17} weight="fill" /> },
+            { value: "ROUTINE", label: "Routine", tone: "lilac", icon: <Repeat size={17} weight="bold" /> },
+            { value: "SESSION", label: "Block", tone: "orange", icon: <Hourglass size={17} weight="fill" /> },
           ]}
         />
       </Field>

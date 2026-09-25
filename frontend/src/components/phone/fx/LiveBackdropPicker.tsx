@@ -1,18 +1,18 @@
 "use client";
 
 import * as React from "react";
+import { Lightning, Prohibit, Sparkle, Waves } from "@phosphor-icons/react";
 
 import { haptic } from "../lib/haptics";
-import { Icon3D, type Icon3DName } from "../ui/Icon3D";
 import { useLook } from "../PhoneContext";
 import { emitFx } from "./fxBus";
 import type { FxMode } from "./LiveBackground";
 
-const BACKDROPS: Array<{ value: FxMode; label: string; hint: string; icon: Icon3DName }> = [
-  { value: "vivid", label: "Vivid", hint: "Colour that flows and answers every tap", icon: "sparkle" },
-  { value: "wild", label: "Wild", hint: "Louder flow, bigger shockwaves, sparks", icon: "bolt" },
-  { value: "calm", label: "Calm", hint: "A slow, quiet glow", icon: "leaf" },
-  { value: "off", label: "Off", hint: "Plain background, nothing moving", icon: "stop" },
+const BACKDROPS: Array<{ value: FxMode; label: string; hint: string; icon: React.ElementType }> = [
+  { value: "vivid", label: "Vivid", hint: "Colour that flows and answers every tap", icon: Sparkle },
+  { value: "wild", label: "Wild", hint: "Louder flow, bigger shockwaves, sparks", icon: Lightning },
+  { value: "calm", label: "Calm", hint: "A slow, quiet glow", icon: Waves },
+  { value: "off", label: "Off", hint: "Plain background, nothing moving", icon: Prohibit },
 ];
 
 /** The live background's modes as swatch cards; each previews its own motion. */
@@ -20,7 +20,7 @@ export function LiveBackdropPicker() {
   const { fx, setFx } = useLook();
   return (
     <div className="ph-backdrops" role="radiogroup" aria-label="Live background">
-      {BACKDROPS.map(({ value, label, hint, icon }) => (
+      {BACKDROPS.map(({ value, label, hint, icon: Icon }) => (
         <button
           key={value}
           type="button"
@@ -40,7 +40,7 @@ export function LiveBackdropPicker() {
         >
           <span className="ph-backdrop-swatch" aria-hidden="true"><i /><i /><i /></span>
           <span className="ph-backdrop-copy">
-            <strong><Icon3D name={icon} size={20} /> {label}</strong>
+            <strong><Icon size={15} weight="fill" /> {label}</strong>
             <small>{hint}</small>
           </span>
         </button>

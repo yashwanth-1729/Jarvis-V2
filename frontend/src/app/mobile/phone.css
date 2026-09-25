@@ -307,10 +307,12 @@
 }
 
 /* ------------------------------------------------------------- 3D icons */
-/* Higgsfield-made candy icons (ui/Icon3D.tsx). A soft shadow lifts them off
-   same-coloured surfaces. */
-.ph-i3d { display: block; flex: none; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.22)); -webkit-user-drag: none; user-select: none; }
-.ph[data-theme="light"] .ph-i3d { filter: drop-shadow(0 2px 3px rgba(11, 11, 14, 0.18)); }
+/* Higgsfield-made candy icons (ui/Icon3D.tsx), used only where an icon is
+   decoration: empty states, Settings rows, chat prompt cards, notebook
+   covers. Everything else keeps line icons. Slightly muted so they sit in
+   the page rather than shout. */
+.ph-i3d { display: block; flex: none; object-fit: contain; filter: saturate(0.86) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2)); -webkit-user-drag: none; user-select: none; }
+.ph[data-theme="light"] .ph-i3d { filter: saturate(0.86) drop-shadow(0 2px 3px rgba(11, 11, 14, 0.16)); }
 
 /* --------------------------------------------------------------- buttons */
 
@@ -328,7 +330,7 @@
 }
 .ph-icon-btn:disabled { opacity: 0.4; }
 .ph-icon-btn[data-on="true"] { background: var(--fg); color: var(--bg); }
-.ph-icon-btn-accent { background: var(--fg); color: var(--bg); border-color: transparent; box-shadow: 0 8px 22px -10px rgba(212, 255, 58, 0.8); }
+.ph-icon-btn-accent { background: var(--lime); color: var(--ink-on-candy); border-color: transparent; box-shadow: 0 8px 22px -10px rgba(212, 255, 58, 0.8); }
 .ph-icon-btn-glass { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.14); color: #fff; }
 
 .ph-btn {
@@ -522,7 +524,6 @@
 .ph-dock-item[data-active="true"] { color: var(--ink-on-candy); transition: color 0.15s ease 0.1s; }
 .ph-dock-pill { position: absolute; top: 0; left: 0; opacity: 0; border-radius: 20px; background: var(--lime); box-shadow: 0 8px 20px -10px rgba(212, 255, 58, 0.85); pointer-events: none; }
 .ph-dock-icon { position: relative; display: grid; place-items: center; }
-.ph-dock-item:not([data-active="true"]) .ph-i3d { filter: saturate(0.45) brightness(0.92); opacity: 0.82; }
 /* The icon of the tab you just picked hops. */
 .ph-dock-icon[data-bounce="true"] { animation: ph-hop var(--spring-pop-ms) var(--spring-pop); }
 @keyframes ph-hop { from { transform: translateY(5px) scale(0.7); } }
@@ -706,7 +707,7 @@
   border: 1px solid rgba(255, 197, 61, 0.35);
   color: var(--fg);
 }
-.ph-offline > .ph-i3d { align-self: center; }
+.ph-offline > svg { color: var(--amber); }
 .ph-offline strong { display: block; font-size: 15px; }
 .ph-offline p { color: var(--fg-2); font-size: 13px; }
 
@@ -727,8 +728,12 @@
   width: 40px;
   height: 40px;
   flex: none;
-  animation: ph-float 3.6s ease-in-out infinite;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--lime), var(--sky), var(--pink), var(--lime));
+  color: var(--ink-on-candy);
+  animation: ph-spin-kf 9s linear infinite;
 }
+.ph-ask-spark svg { animation: ph-spin-kf 9s linear infinite reverse; }
 .ph-ask-text { overflow: hidden; color: var(--fg-2); font-size: 16px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
 .ph-ask-mic {
   display: grid;
@@ -764,7 +769,7 @@
 .ph-tile-foot { font-size: 13.5px; font-weight: 600; opacity: 0.78; }
 .ph-ellipsis { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ph-tile-sticker { position: absolute; top: 14px; right: 12px; }
-.ph-tile-icon { position: absolute; top: 10px; right: 10px; }
+.ph-tile-icon { position: absolute; top: 14px; right: 14px; opacity: 0.85; }
 
 .ph-tile-now { min-height: 170px; }
 .ph-now-top { display: flex; align-items: center; gap: 10px; }
@@ -1011,8 +1016,8 @@
   border: 1px solid var(--line);
   text-align: left;
 }
-.ph-ping-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 15px; background: var(--tone-soft, rgba(255, 122, 198, 0.15)); }
-.ph-ping[data-late="true"] .ph-ping-icon { background: rgba(255, 77, 94, 0.18); }
+.ph-ping-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 15px; background: var(--pink); color: var(--ink-on-candy); }
+.ph-ping[data-late="true"] .ph-ping-icon { background: var(--red); color: #fff; }
 .ph-ping-body { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; }
 .ph-ping-body strong { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
 .ph-ping-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--fg-2); font-size: 13px; }
@@ -1053,7 +1058,7 @@
   text-align: left;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06), 0 16px 30px -22px rgba(0, 0, 0, 0.9);
 }
-.ph-book-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: rgba(255, 255, 255, 0.42); }
+.ph-book-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 17px; background: rgba(255, 255, 255, 0.42); }
 .ph-book-count { position: absolute; top: 12px; right: 14px; font: 800 30px/1 var(--font-head); letter-spacing: -0.05em; }
 .ph-book-title { margin-top: auto; font: 700 16.5px/1.15 var(--font-head); letter-spacing: -0.03em; overflow-wrap: anywhere; }
 .ph-book-kind { margin-top: 5px; font: 400 10px/1 var(--font-tag); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
@@ -1141,8 +1146,8 @@
   width: 64px;
   height: 64px;
   border-radius: 22px;
-  background: var(--fg);
-  color: var(--bg);
+  background: var(--lime);
+  color: var(--ink-on-candy);
   box-shadow: 0 16px 34px -12px rgba(212, 255, 58, 0.75), 0 4px 0 rgba(0, 0, 0, 0.25);
 }
 
@@ -1296,10 +1301,9 @@
   border: 2px solid var(--red);
   animation: ph-ring 1.2s ease-out infinite;
 }
-.ph-send { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--fg); color: var(--bg); }
+.ph-send { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--lime); color: var(--ink-on-candy); }
 .ph-send:disabled { background: var(--card-2); color: var(--fg-3); }
-.ph-send:disabled .ph-i3d { filter: grayscale(1); opacity: 0.45; }
-.ph-send-stop { background: var(--card-2); }
+.ph-send-stop { background: var(--fg); color: var(--bg); }
 
 /* ----------------------------------------------------------------- voice */
 
@@ -1723,7 +1727,7 @@
 .ph-rows { display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
 .ph-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; text-align: left; }
 .ph-row + .ph-row { border-top: 1px solid var(--line); }
-.ph-row-icon { display: grid; place-items: center; width: 46px; height: 46px; flex: none; border-radius: 15px; background: var(--tone-soft); }
+.ph-row-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 14px; background: var(--tone-soft); }
 .ph-row-copy { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .ph-row-copy strong { font-size: 16px; font-weight: 700; }
 .ph-row-copy small { overflow: hidden; color: var(--fg-3); font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }

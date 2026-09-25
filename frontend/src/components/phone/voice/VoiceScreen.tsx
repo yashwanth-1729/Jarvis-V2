@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion, useIsPresent } from "framer-motion";
-import { CaretDown, Check, WarningCircle, X } from "@phosphor-icons/react";
+import { CaretDown, Check, HandPalm, Keyboard, Microphone, MicrophoneSlash, Stop, Translate, Waveform, WarningCircle, X } from "@phosphor-icons/react";
 
 import { CLOUD_ENGINE_LANGUAGES, ENGINE_BY_LANGUAGE, useVoiceSession } from "@/lib/useVoiceSession";
 import type { RefreshDomain, VoiceSessionState } from "@/types";
@@ -12,7 +12,6 @@ import { useAppData, useNav } from "../PhoneContext";
 import { Scramble } from "../ui/Scramble";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
-import { Icon3D } from "../ui/Icon3D";
 import { isVoiceDemo, useDemoVoice } from "./demoVoice";
 import { HoloMascot } from "./HoloMascot";
 import { HoloFace } from "./HoloFace";
@@ -143,12 +142,12 @@ export function VoiceScreen() {
           <div className="ph-voice-prefs">
             {voice.languages.length > 0 && (
               <Tap className="ph-pref" onClick={() => setPicker("language")} aria-label={`Reply language: ${languageLabel}`}>
-                <Icon3D name="translate" size={22} /> {languageLabel} <CaretDown size={12} weight="bold" />
+                <Translate size={16} weight="bold" /> {languageLabel} <CaretDown size={12} weight="bold" />
               </Tap>
             )}
             {showVoicePicker && (
               <Tap className="ph-pref" onClick={() => setPicker("voice")} aria-label={`Speaking voice: ${voiceLabel}`}>
-                <Icon3D name="waveform" size={22} /> {voiceLabel} <CaretDown size={12} weight="bold" />
+                <Waveform size={16} weight="bold" /> {voiceLabel} <CaretDown size={12} weight="bold" />
               </Tap>
             )}
           </div>
@@ -233,7 +232,7 @@ export function VoiceScreen() {
       >
         <div className="ph-voice-buttons">
           <Tap className="ph-voice-side" onClick={voice.interrupt} disabled={!speaking && state !== "thinking"} aria-label="Stop reply" feel="heavy">
-            <Icon3D name="stop" size={32} />
+            <Stop size={24} weight="fill" />
             <span>Stop</span>
           </Tap>
           <Tap
@@ -247,12 +246,12 @@ export function VoiceScreen() {
           >
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span key={muted ? "off" : "on"} initial={{ scale: 0.4, rotate: -40, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} exit={{ scale: 0.4, rotate: 40, opacity: 0 }} transition={{ type: "spring", stiffness: 500, damping: 26 }}>
-                {muted ? <Icon3D name="mic-off" size={46} /> : <Icon3D name="mic" size={46} />}
+                {muted ? <MicrophoneSlash size={30} weight="fill" /> : <Microphone size={30} weight="fill" />}
               </motion.span>
             </AnimatePresence>
           </Tap>
           <Tap className="ph-voice-side" onClick={typeInstead} aria-label="Type instead">
-            <Icon3D name="keyboard" size={32} />
+            <Keyboard size={24} weight="fill" />
             <span>Type</span>
           </Tap>
         </div>
@@ -268,7 +267,7 @@ export function VoiceScreen() {
             voice.setBargeIn(!bargeIn);
           }}
         >
-          <Icon3D name="hand" size={22} />
+          <HandPalm size={16} weight="fill" />
           Voice interruption
           <span className="ph-barge-state">{bargeIn ? "ON" : "OFF"}</span>
         </button>

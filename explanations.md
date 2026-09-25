@@ -138,13 +138,20 @@ Medium, worth doing:
   now uses an IntersectionObserver marker + `data-scrolled`. Don't bring
   scroll-driven animations back to the phone route.
 - `ui/Icon3D.tsx` + `public/icons3d/` (48 Higgsfield icons, three sheets,
-  8.25 credits). Buttons that had lime backgrounds under now-lime icons (+,
-  send, FAB) use `var(--fg)` instead.
+  8.25 credits). User then said icons everywhere were "too loud": 3D icons now
+  only in empty states, Settings rows, chat prompt cards, notebook covers
+  (muted `saturate(0.86)`); everything interactive is back to line icons and
+  the lime buttons are restored. Keep it that way unless the user asks.
 - `voice/HoloMascot.tsx`: stable body colours (BODY) + per-state ACCENT; face
   shader gained brows/blush/sleepy/grin/talk/hmm; belt ring removed.
 - Verified: tsc + eslint clean; APK (46.2 MB) installed on the CPH2767; the
   DevTools touch-fling probe (`fling.mjs` in the session scratchpad) now shows
   scrollTop advancing every frame 0 -> 1475 with no stalls or jumps.
+  Icon tone-down: tsc + eslint clean, rebuilt APK installed (exit 0), not yet
+  eyeballed on the device.
+- Uncommitted backend work in the tree (`llm/tools.py`, `tools_os_control.py`,
+  `main.py`, `smoke_test.py`, `install_app_test.py`) is not mine; I left it
+  unstaged.
 
 ### 2026-09-25 · Claude Code · Design lab + switchable launcher icon
 

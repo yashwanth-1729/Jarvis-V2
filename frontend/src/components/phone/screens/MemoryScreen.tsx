@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, PushPin } from "@phosphor-icons/react";
+import { ArrowRight, Plus, PushPin, Sparkle } from "@phosphor-icons/react";
 
 import type { NotePage } from "@/types";
 import { allPages, MEMORY_LABEL, MEMORY_TONE, pageCount, pageTone } from "../lib/derive";
@@ -13,7 +13,7 @@ import { Tap } from "../ui/Tap";
 import { Icon3D } from "../ui/Icon3D";
 import { Num } from "../ui/Num";
 
-export function pageIcon(page: NotePage, size = 40) {
+export function pageIcon(page: NotePage, size = 36) {
   if (page.kind === "LONG_TERM") return <Icon3D name="memory" size={size} />;
   if (page.kind === "TEMPORARY") return <Icon3D name="hourglass" size={size} />;
   if (page.kind === "OTHER") return <Icon3D name="bulb" size={size} />;
@@ -47,7 +47,7 @@ export function MemoryScreen() {
       eyebrow={<><Num value={active.length} /> things JARVIS knows · <Num value={ideas.length} /> notes</>}
       actions={
         <Tap className="ph-icon-btn ph-icon-btn-accent" aria-label="New page" onClick={() => setEditingPage("new")} feel="heavy">
-          <Icon3D name="add" size={28} />
+          <Plus size={22} weight="bold" />
         </Tap>
       }
     >
@@ -58,7 +58,7 @@ export function MemoryScreen() {
           <>
             {review.length > 0 && (
               <Tap className="ph-review" onClick={() => push({ kind: "notebook", uid: "notes-long-term", view: "REVIEW" })} squish={0.97}>
-                <Icon3D name="sparkle" size={34} />
+                <Sparkle size={24} weight="fill" />
                 <span>
                   <strong><Num value={review.length} /> {review.length === 1 ? "memory needs" : "memories need"} your call</strong>
                   <small>JARVIS picked these up. Keep or bin them.</small>
@@ -80,7 +80,7 @@ export function MemoryScreen() {
               ))}
               <div className="ph-drop-in" style={stagger(pages.length)}>
                 <Tap className="ph-book ph-book-new" onClick={() => setEditingPage("new")} squish={0.94}>
-                  <Icon3D name="add" size={44} />
+                  <Plus size={30} weight="bold" />
                   <strong className="ph-book-title">New page</strong>
                 </Tap>
               </div>

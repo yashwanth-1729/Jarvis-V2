@@ -6,9 +6,9 @@ import * as React from "react";
  * The phone's 3D icon set: glossy candy-toy objects generated with Higgsfield
  * (three 4x4 sheets, sliced into `public/icons3d/*.webp`, 192 px each).
  *
- * Used wherever an icon is shown at 16 px or more. Tiny glyphs inside text
- * chips and pure controls (close, back, carets, arrows) stay as line icons,
- * which stay sharp at that size.
+ * Used only where an icon is decoration: empty states, Settings rows, chat
+ * prompt cards and notebook covers. Buttons, the dock, voice controls, forms
+ * and inline glyphs keep line icons; the full 3D set everywhere was too loud.
  */
 export type Icon3DName =
   | "add" | "bell" | "bolt" | "broom" | "bulb" | "cap" | "chat" | "clock" | "compass" | "copy"

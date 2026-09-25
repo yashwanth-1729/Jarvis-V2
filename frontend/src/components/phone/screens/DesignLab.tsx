@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Camera, ChatCircle, MusicNotes } from "@phosphor-icons/react";
+import { Camera, ChatCircle, Copy, Eye, MusicNotes } from "@phosphor-icons/react";
 
 import type { VoiceSessionState } from "@/types";
 import { emitFx, setFxActivity, setFxScene, type FxScene } from "../fx/fxBus";
@@ -12,7 +12,6 @@ import { haptic } from "../lib/haptics";
 import { useLook, useNavState } from "../PhoneContext";
 import { Choices } from "../ui/Form";
 import { Tap } from "../ui/Tap";
-import { Icon3D } from "../ui/Icon3D";
 import { HoloFace } from "../voice/HoloFace";
 import { HoloMascot } from "../voice/HoloMascot";
 
@@ -299,7 +298,7 @@ function BackgroundSection({ onPeek }: { onPeek: (peek: boolean) => void }) {
         onPointerLeave={() => onPeek(false)}
         onContextMenu={(event) => event.preventDefault()}
       >
-        <Icon3D name="eye" size={22} /> Hold to see the background alone
+        <Eye size={18} weight="bold" /> Hold to see the background alone
       </button>
     </section>
   );
@@ -410,7 +409,7 @@ function Summary({ icon, name, background }: { icon: string; name: string; backg
           );
         }}
       >
-        <Icon3D name="copy" size={22} /> Copy my picks
+        <Copy size={18} weight="bold" /> Copy my picks
       </Tap>
     </section>
   );

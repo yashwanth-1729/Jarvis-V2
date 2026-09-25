@@ -518,9 +518,10 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
   1505 px in one frame; with it disabled the same fling decelerated smoothly
   frame by frame). The title hand-over now uses an IntersectionObserver and
   CSS transitions; scrolling is fully native.
-- Every icon from 16 px up is now a Higgsfield-generated 3D icon (48, one
-  consistent candy-toy set, `ui/Icon3D.tsx`); tiny inline glyphs stay line
-  icons.
+- A Higgsfield-generated 3D icon set (48, one candy-toy style,
+  `ui/Icon3D.tsx`) decorates empty states, Settings rows, chat prompt cards and
+  notebook covers. It first replaced every icon; the user found that too loud,
+  so buttons, the dock, voice controls and forms went back to line icons.
 - HOLO polished, same design: one identity colour, eyebrows, blush, sleepy and
   happy eyes, a talking mouth driven by JARVIS's voice, a hop into new states,
   nods, double blinks; the collar ring removed, the halo shows only while
@@ -532,7 +533,9 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
   changes (46.2 MB) was installed on the CPH2767 and the same DevTools touch
   fling on Today scrolled every frame from 0 to 1475 px with a smooth
   deceleration: no stalls, jumps, frame gaps over 30 ms or long animation
-  frames (the phone was running at 60 Hz for that test).
+  frames (the phone was running at 60 Hz for that test). The later icon
+  tone-down passed TypeScript and ESLint, and its rebuilt APK installed on the
+  CPH2767 without errors; nobody has looked at it on the device yet.
 
 ### 2026-09-25: Smoother phone motion, a live background, HOLO, voice fixes
 

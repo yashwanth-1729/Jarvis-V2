@@ -144,15 +144,14 @@ adaptive-icon XMLs in `mipmap-anydpi-v26/`, generated from the 1024 px concepts
 
 ## 3D icons
 
-Every icon shown at 16 px or more is a glossy 3D "candy toy" object from one
-Higgsfield set (`ui/Icon3D.tsx`, 48 icons in `public/icons3d/*.webp`, 192 px,
-about 512 KB in total): the dock tabs, top-bar buttons, tiles, empty states,
-Settings rows, theme and background choices, chat prompts and actions, voice
-controls and sheet choices. They were generated as three 4x4 sheets on a
-transparent background (GPT Image 2.5 through Higgsfield) and sliced, with
-the generator's haze trimmed off. Tiny glyphs inside text chips (12 to 14 px)
-and pure controls (close, back, carets, arrows) stay as Phosphor line icons,
-which stay sharp at that size. Inactive dock icons are softly desaturated.
+Decorative spots use glossy 3D "candy toy" icons from one Higgsfield set
+(`ui/Icon3D.tsx`, 48 icons in `public/icons3d/*.webp`, 192 px): empty states,
+Settings rows, the chat prompt cards and the notebook covers, slightly muted
+(`saturate(0.86)`). Everything interactive (dock, top-bar buttons, ask bar,
+tiles, voice controls, composer, sheets, forms) keeps Phosphor line icons: the
+user found 3D icons everywhere too loud. The set was generated as three 4x4
+sheets on a transparent background (GPT Image 2.5 through Higgsfield) and
+sliced; the unused icons stay in `public/icons3d/` for later.
 
 ## Live background
 

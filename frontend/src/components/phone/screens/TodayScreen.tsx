@@ -2,7 +2,19 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, ArrowsClockwise, CaretDown, MapPin } from "@phosphor-icons/react";
+import {
+  ArrowRight,
+  ArrowsClockwise,
+  BellRinging,
+  CaretDown,
+  GearSix,
+  Lightning,
+  MapPin,
+  Microphone,
+  Sparkle,
+  WarningCircle,
+  WifiSlash,
+} from "@phosphor-icons/react";
 
 import type { Task } from "@/types";
 import { focusTasks, isOverdueTask, KIND_LABEL, KIND_TONE, nowAndNext, upcomingReminders, type Occurrence } from "../lib/derive";
@@ -47,7 +59,7 @@ export function TodayScreen() {
         <>
           <SyncBadge phase={sync.phase} message={sync.message} />
           <Tap className="ph-icon-btn" aria-label="Settings" onClick={() => push({ kind: "settings" })}>
-            <Icon3D name="settings" size={28} />
+            <GearSix size={22} weight="bold" />
           </Tap>
         </>
       }
@@ -71,11 +83,11 @@ export function TodayScreen() {
 
         <div className="ph-ask">
           <Tap className="ph-ask-main" onClick={openChat} squish={0.97}>
-            <span className="ph-ask-spark" aria-hidden="true"><Icon3D name="sparkle" size={34} /></span>
+            <span className="ph-ask-spark" aria-hidden="true"><Sparkle size={20} weight="fill" /></span>
             <span className="ph-ask-text">Ask JARVIS anything…</span>
           </Tap>
           <Tap className="ph-ask-mic" aria-label="Talk to JARVIS" onClick={openVoice} squish={0.88} feel="heavy">
-            <Icon3D name="mic" size={32} />
+            <Microphone size={20} weight="fill" />
           </Tap>
         </div>
 
@@ -97,7 +109,7 @@ export function TodayScreen() {
                 <span className="ph-tile-foot ph-ellipsis">
                   {nextReminders[0] ? `${relative(nextReminders[0].due_at, now.getTime())} · ${nextReminders[0].text}` : "no reminders queued"}
                 </span>
-                <Icon3D name="bell" size={46} className="ph-tile-icon" />
+                <BellRinging className="ph-tile-icon" size={26} weight="fill" aria-hidden="true" />
               </Tap>
               <BriefTile />
             </div>
@@ -122,7 +134,7 @@ export function TodayScreen() {
                 </ul>
               ) : (
                 <Empty
-                  icon={<Icon3D name="party" size={58} />}
+                  icon={<Icon3D name="party" size={52} />}
                   title="Inbox zero. Legend."
                   hint="Nothing open. Add something, or just ask JARVIS to."
                   action={<Tap className="ph-btn ph-btn-primary" onClick={() => setEditing("new")}>Add a task</Tap>}
@@ -144,7 +156,7 @@ export function TodayScreen() {
                 <Timeline items={agenda.all} now={now.getTime()} onOpen={(kind) => openPlan(SECTION_FOR[kind])} />
               ) : (
                 <Empty
-                  icon={<Icon3D name="plan" size={58} />}
+                  icon={<Icon3D name="plan" size={52} />}
                   title="Wide open day"
                   hint="Nothing scheduled. Protect the free time, or plan something."
                   action={<Tap className="ph-btn" onClick={() => go("plan")}>Plan something</Tap>}
@@ -205,7 +217,7 @@ function BriefTile() {
   return (
     <div className="ph-tile ph-tile-wide ph-tile-brief" data-open={open}>
       <button type="button" className="ph-brief-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        <span className="ph-brief-label"><Icon3D name="bolt" size={20} /> JARVIS brief</span>
+        <span className="ph-brief-label"><Lightning size={16} weight="fill" /> JARVIS brief</span>
         {brief.urgent_count > 0 && <Sticker tone="red" tilt={3}>{brief.urgent_count} URGENT</Sticker>}
         <span className="ph-brief-caret"><CaretDown size={16} weight="bold" /></span>
       </button>
@@ -265,14 +277,14 @@ function SyncBadge({ phase, message }: { phase: string; message: string | null }
   if (phase === "syncing") {
     return (
       <span className="ph-sync" data-phase="syncing" role="status" aria-label="Syncing">
-        <Icon3D name="refresh" size={26} className="ph-spin" />
+        <ArrowsClockwise size={18} weight="bold" className="ph-spin" />
       </span>
     );
   }
   if (phase === "error") {
     return (
       <span className="ph-sync" data-phase="error" role="status" aria-label={message ?? "Sync failed, will retry"} title={message ?? undefined}>
-        <Icon3D name="warning" size={26} />
+        <WarningCircle size={20} weight="fill" />
       </span>
     );
   }
@@ -294,7 +306,7 @@ function ConnectionCard() {
           exit={{ opacity: 0, height: 0 }}
           transition={{ duration: 0.26, ease: [0.2, 0, 0, 1] }}
         >
-          <Icon3D name="offline" size={36} />
+          <WifiSlash size={22} weight="bold" />
           <div>
             <strong>{app.localOnly ? "Running on saved data" : "JARVIS is offline"}</strong>
             <p>Your stuff is safe. Voice and chat come back when the connection does.</p>

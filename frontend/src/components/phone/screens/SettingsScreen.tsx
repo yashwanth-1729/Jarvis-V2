@@ -3,11 +3,17 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  ArrowsClockwise,
   CaretLeft,
   CaretRight,
   CheckCircle,
   CircleNotch,
+  Crosshair,
+  DeviceMobile,
+  Eye,
   EyeSlash,
+  Moon,
+  Sun,
   WarningCircle,
   XCircle,
 } from "@phosphor-icons/react";
@@ -123,7 +129,7 @@ export function SettingsScreen() {
                           }}
                           squish={0.98}
                         >
-                          <span className="ph-row-icon" data-tone={tone}><Icon3D name={icon} size={34} /></span>
+                          <span className="ph-row-icon" data-tone={tone}><Icon3D name={icon} size={30} /></span>
                           <span className="ph-row-copy">
                             <strong>{title}</strong>
                             <small>{hint}</small>
@@ -189,23 +195,23 @@ function StatusStrip() {
 
 function Appearance() {
   const theme = useLook();
-  const options: Array<{ value: ThemeChoice; label: string; icon: Icon3DName }> = [
-    { value: "system", label: "System", icon: "phone" },
-    { value: "light", label: "Light", icon: "sun" },
-    { value: "dark", label: "Dark", icon: "moon" },
+  const options: Array<{ value: ThemeChoice; label: string; icon: React.ElementType }> = [
+    { value: "system", label: "System", icon: DeviceMobile },
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
   ];
   return (
     <section className="ph-section">
       <span className="ph-eyebrow">Look</span>
       <div className="ph-themes" role="radiogroup" aria-label="Appearance">
-        {options.map(({ value, label, icon }) => (
+        {options.map(({ value, label, icon: Icon }) => (
           <Tap key={value} role="radio" aria-checked={theme.choice === value} className="ph-theme" data-choice={value} data-on={theme.choice === value} feel="select" onClick={() => theme.choose(value)}>
             <span className="ph-theme-preview" aria-hidden="true">
               <i />
               <i />
               <i />
             </span>
-            <span className="ph-theme-label"><Icon3D name={icon} size={20} /> {label}</span>
+            <span className="ph-theme-label"><Icon size={15} weight="fill" /> {label}</span>
           </Tap>
         ))}
       </div>
@@ -241,7 +247,7 @@ function Secret({ label, value, onChange, placeholder, status }: { label: string
           onChange={(event) => onChange(event.target.value)}
         />
         <button type="button" className="ph-secret-eye" aria-label={visible ? `Hide ${label}` : `Show ${label}`} onClick={() => setVisible((current) => !current)}>
-          {visible ? <EyeSlash size={18} weight="bold" /> : <Icon3D name="eye" size={24} />}
+          {visible ? <EyeSlash size={18} weight="bold" /> : <Eye size={18} weight="bold" />}
         </button>
       </div>
       {status !== null && (
@@ -385,7 +391,7 @@ function LocationPage({ model }: { model: SettingsModel }) {
             }}
           />
           <Tap className="ph-btn" disabled={model.locating} onClick={() => void (model.placeName.trim() ? model.nameIt() : model.locate())}>
-            {model.locating ? <CircleNotch size={18} className="ph-spin" /> : model.placeName.trim() ? "Set" : <><Icon3D name="compass" size={22} /> GPS</>}
+            {model.locating ? <CircleNotch size={18} className="ph-spin" /> : model.placeName.trim() ? "Set" : <><Crosshair size={18} weight="bold" /> GPS</>}
           </Tap>
         </div>
       </Field>
@@ -400,7 +406,7 @@ function RuntimePage({ model }: { model: SettingsModel }) {
         <div className="ph-inline">
           <TextInput label="Runtime address" type="url" mono placeholder={API_BASE} value={model.backend} onChange={model.setBackend} />
           <Tap className="ph-btn" onClick={() => void model.probeBackend()}>
-            {model.backendProbe === "checking" ? <CircleNotch size={18} className="ph-spin" /> : <><Icon3D name="refresh" size={20} /> Test</>}
+            {model.backendProbe === "checking" ? <CircleNotch size={18} className="ph-spin" /> : <><ArrowsClockwise size={16} weight="bold" /> Test</>}
           </Tap>
         </div>
       </Field>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion, type PanInfo } from "framer-motion";
-import { MapPin, NotePencil } from "@phosphor-icons/react";
+import { BellRinging, MapPin, NotePencil, Plus, Warning } from "@phosphor-icons/react";
 
 import { parseLocal } from "@/lib/utils";
 import type { Reminder, ScheduleEvent } from "@/types";
@@ -46,7 +46,7 @@ export function PlanScreen() {
       eyebrow={now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
       actions={
         <Tap className="ph-icon-btn ph-icon-btn-accent" aria-label={planSection === "reminders" ? "Add a reminder" : "Add a plan"} onClick={add} feel="heavy">
-          <Icon3D name="add" size={28} />
+          <Plus size={22} weight="bold" />
         </Tap>
       }
       hero={
@@ -85,7 +85,7 @@ export function PlanScreen() {
                   conflicts={schedule.conflicts.length}
                   onEdit={setEditing}
                   onAdd={() => setEditing({ kind: "ROUTINE", day })}
-                  icon={<Icon3D name="repeat" size={58} />}
+                  icon={<Icon3D name="repeat" size={52} />}
                   emptyTitle="No routine yet"
                   emptyHint={'Try saying: "Every Monday 6 to 7:45pm is my Django project"'}
                 />
@@ -99,7 +99,7 @@ export function PlanScreen() {
                   conflicts={0}
                   onEdit={setEditing}
                   onAdd={() => setEditing({ kind: "COLLEGE", day })}
-                  icon={<Icon3D name="cap" size={58} />}
+                  icon={<Icon3D name="cap" size={52} />}
                   emptyTitle="No classes saved"
                   emptyHint={'Try saying: "My Monday DSA lecture is at 9am in C410"'}
                 />
@@ -192,7 +192,7 @@ function WeekView({ entries, day, setDay, clashes, conflicts, onEdit, onAdd, ico
       </div>
       {conflicts > 0 && (
         <div className="ph-clash-banner">
-          <Icon3D name="warning" size={22} /> {conflicts} {conflicts === 1 ? "overlap" : "overlaps"} in your routine
+          <Warning size={18} weight="fill" /> {conflicts} {conflicts === 1 ? "overlap" : "overlaps"} in your routine
         </div>
       )}
       <motion.div className="ph-swipe-area" drag="x" dragDirectionLock dragConstraints={{ left: 0, right: 0 }} dragElastic={0.18} onDragEnd={onDragEnd} style={{ touchAction: "pan-y" }}>
@@ -218,7 +218,7 @@ function WeekView({ entries, day, setDay, clashes, conflicts, onEdit, onAdd, ico
                 ))}
               </ol>
             ) : entries.length ? (
-              <Empty icon={<Icon3D name="plan" size={58} />} title={`Nothing on ${WEEKDAYS[day]}`} hint="Swipe for another day, or add something." action={<Tap className="ph-btn" onClick={onAdd}>Add here</Tap>} />
+              <Empty icon={<Icon3D name="plan" size={52} />} title={`Nothing on ${WEEKDAYS[day]}`} hint="Swipe for another day, or add something." action={<Tap className="ph-btn" onClick={onAdd}>Add here</Tap>} />
             ) : (
               <Empty icon={icon} title={emptyTitle} hint={emptyHint} action={<Tap className="ph-btn ph-btn-primary" onClick={onAdd}>Add one</Tap>} />
             )}
@@ -271,7 +271,7 @@ function Blocks({ blocks, now, onEdit, onAdd }: { blocks: ScheduleEvent[]; now: 
     groups.set(key, [...(groups.get(key) ?? []), block]);
   }
   if (!blocks.length) {
-    return <Empty icon={<Icon3D name="hourglass" size={58} />} title="No blocks booked" hint="Blocks are one-off focus sessions. They clear themselves when they end." action={<Tap className="ph-btn ph-btn-primary" onClick={onAdd}>Book a block</Tap>} />;
+    return <Empty icon={<Icon3D name="hourglass" size={52} />} title="No blocks booked" hint="Blocks are one-off focus sessions. They clear themselves when they end." action={<Tap className="ph-btn ph-btn-primary" onClick={onAdd}>Book a block</Tap>} />;
   }
   let index = 0;
   return (
@@ -319,7 +319,7 @@ function Blocks({ blocks, now, onEdit, onAdd }: { blocks: ScheduleEvent[]; now: 
 function Reminders({ reminders, now, onEdit, onAdd }: { reminders: Reminder[]; now: Date; onEdit: (reminder: Reminder) => void; onAdd: () => void }) {
   const sorted = [...reminders].sort((a, b) => (parseLocal(a.due_at)?.getTime() ?? 0) - (parseLocal(b.due_at)?.getTime() ?? 0));
   if (!sorted.length) {
-    return <Empty icon={<Icon3D name="bell" size={58} />} title="No pings queued" hint={'Try saying: "Remind me to call the bank at 5pm"'} action={<Tap className="ph-btn ph-btn-primary" onClick={onAdd}>New reminder</Tap>} />;
+    return <Empty icon={<Icon3D name="bell" size={52} />} title="No pings queued" hint={'Try saying: "Remind me to call the bank at 5pm"'} action={<Tap className="ph-btn ph-btn-primary" onClick={onAdd}>New reminder</Tap>} />;
   }
   return (
     <ol className="ph-pings">
@@ -329,7 +329,7 @@ function Reminders({ reminders, now, onEdit, onAdd }: { reminders: Reminder[]; n
         return (
           <li key={reminder.id} className="ph-slide-in" style={stagger(index)}>
             <Tap className="ph-ping" data-late={late} onClick={() => onEdit(reminder)} squish={0.97}>
-              <span className="ph-ping-icon"><Icon3D name="bell" size={34} /></span>
+              <span className="ph-ping-icon"><BellRinging size={20} weight="fill" /></span>
               <span className="ph-ping-body">
                 <strong>{reminder.text}</strong>
                 <span className="ph-ping-meta">
