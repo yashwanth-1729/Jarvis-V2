@@ -510,6 +510,28 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-09-25 (third round): Fling fix, 3D icon set, HOLO polish
+
+- Fixed flings on the phone freezing and then jumping: the CSS scroll-driven
+  title animation held the WebView's scroll updates back until the gesture
+  ended (measured over DevTools on the CPH2767: scrollTop stayed 0, then jumped
+  1505 px in one frame; with it disabled the same fling decelerated smoothly
+  frame by frame). The title hand-over now uses an IntersectionObserver and
+  CSS transitions; scrolling is fully native.
+- Every icon from 16 px up is now a Higgsfield-generated 3D icon (48, one
+  consistent candy-toy set, `ui/Icon3D.tsx`); tiny inline glyphs stay line
+  icons.
+- HOLO polished, same design: one identity colour, eyebrows, blush, sleepy and
+  happy eyes, a talking mouth driven by JARVIS's voice, a hop into new states,
+  nods, double blinks; the collar ring removed, the halo shows only while
+  thinking.
+- Validation: TypeScript and focused ESLint clean; HOLO captured in every
+  state from the static export's Design lab in headless Chrome (no console
+  errors); the fling fault reproduced and the fix confirmed on the CPH2767 by
+  disabling the scroll-driven CSS in place. The arm64 debug APK with these
+  changes was built (46.2 MB) but not installed yet: the phone was
+  disconnected from ADB when the build finished.
+
 ### 2026-09-25: Smoother phone motion, a live background, HOLO, voice fixes
 
 - Motion rebuilt to run on the compositor (the user reported stutter on a

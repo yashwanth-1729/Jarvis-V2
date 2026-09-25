@@ -128,6 +128,21 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-25 · Claude Code · Fling fix, 3D icons, HOLO polish
+
+- User: flings "stop, then jump"; wanted every in-app icon from Higgsfield and
+  a more expressive HOLO. Root cause of the fling (measured over WebView
+  DevTools with `Input.synthesizeScrollGesture`, touch, fling allowed): CSS
+  scroll-driven animations (`animation-timeline` on `.ph-screen`) blocked the
+  page's scroll updates for the whole gesture + fling. Removed; `ui/Screen.tsx`
+  now uses an IntersectionObserver marker + `data-scrolled`. Don't bring
+  scroll-driven animations back to the phone route.
+- `ui/Icon3D.tsx` + `public/icons3d/` (48 Higgsfield icons, three sheets,
+  8.25 credits). Buttons that had lime backgrounds under now-lime icons (+,
+  send, FAB) use `var(--fg)` instead.
+- `voice/HoloMascot.tsx`: stable body colours (BODY) + per-state ACCENT; face
+  shader gained brows/blush/sleepy/grin/talk/hmm; belt ring removed.
+
 ### 2026-09-25 · Claude Code · Design lab + switchable launcher icon
 
 - User asked to "check each thing directly from app" before finalizing.

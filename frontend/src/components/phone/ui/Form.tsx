@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarBlank, CircleNotch, Clock, Trash, Warning, X } from "@phosphor-icons/react";
+import { CircleNotch, X } from "@phosphor-icons/react";
 
 import type { FormValues } from "@/lib/recordDrafts";
 import type { Tone } from "../lib/derive";
 import { haptic } from "../lib/haptics";
 import { quickTimes, WEEKDAYS, when } from "../lib/time";
 import { Tap } from "./Tap";
+import { Icon3D } from "./Icon3D";
 
 /** Keep showing the last record while a sheet animates closed. */
 export function useRetained<T>(value: T | null): T | null {
@@ -215,7 +216,7 @@ export function DayPicker({ value, onChange }: { value: string; onChange: (value
 export function TimeInput({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
   return (
     <label className="ph-time">
-      <Clock size={18} weight="bold" />
+      <Icon3D name="clock" size={22} />
       <input type="time" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
@@ -251,7 +252,7 @@ export function WhenPicker({ value, onChange, allowClear = false, label, quick =
           </Tap>
         ))}
         <span className="ph-pick ph-pick-custom" data-on={Boolean(value) && !picks.some((pick) => pick.value === value)}>
-          <CalendarBlank size={16} weight="bold" />
+          <Icon3D name="plan" size={20} />
           {quick ? "Pick" : value ? "Change" : "Choose"}
           <input
             ref={input}
@@ -271,7 +272,7 @@ export function WhenPicker({ value, onChange, allowClear = false, label, quick =
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
           >
-            <Clock size={16} weight="fill" />
+            <Icon3D name="clock" size={20} />
             <span>{when(value)}</span>
             {allowClear && (
               <button type="button" aria-label="Clear the date" onClick={() => onChange("")}>
@@ -320,7 +321,7 @@ export function FormError({ message }: { message: string | null }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <Warning size={18} weight="fill" />
+          <Icon3D name="warning" size={22} />
           {message}
         </motion.p>
       )}
@@ -365,7 +366,7 @@ export function SheetActions({ onSave, onDelete, busy, saveLabel = "Save", extra
         >
           {onDelete && (
             <Tap className="ph-btn ph-btn-quiet-danger" aria-label="Delete" onClick={() => setConfirming(true)} disabled={busy}>
-              <Trash size={20} weight="bold" />
+              <Icon3D name="trash" size={26} />
             </Tap>
           )}
           {extra}

@@ -26,6 +26,11 @@ import type { VoiceSessionState } from "@/types";
 type Mood = {
   open: number;
   happy: number;
+  sleepy: number;
+  brow: number;
+  browTilt: number;
+  browAsym: number;
+  blush: number;
   ring: number;
   spin: number;
   lookX: number;
@@ -36,31 +41,40 @@ type Mood = {
   glitch: number;
 };
 
+/*
+ * Expression per state. HOLO's body keeps one identity colour; the state
+ * shows in its face (eyes, brows, blush, mouth), its eye colour and its body
+ * language. `brow` raises both brows, `browTilt` lifts their inner ends
+ * (friendly, a little pleading), `browAsym` raises one and drops the other.
+ */
 const MOODS: Record<string, Mood> = {
-  idle: { open: 0.85, happy: 0, ring: 0.08, spin: 0.3, lookX: 0, lookY: -0.15, tilt: 0, droop: 0.06, glow: 0.5, glitch: 0.08 },
-  connecting: { open: 0.7, happy: 0, ring: 0.6, spin: 1.8, lookX: 0, lookY: 0, tilt: 0, droop: 0, glow: 0.8, glitch: 0.3 },
-  listening: { open: 1, happy: 0.12, ring: 0.14, spin: 0.4, lookX: 0, lookY: 0, tilt: 0.07, droop: 0, glow: 0.9, glitch: 0.02 },
-  hearing: { open: 1.12, happy: 0, ring: 0.22, spin: 0.6, lookX: 0, lookY: 0.05, tilt: 0.1, droop: -0.03, glow: 1, glitch: 0.03 },
-  thinking: { open: 0.8, happy: 0, ring: 0.95, spin: 2.6, lookX: 0.55, lookY: 0.6, tilt: -0.1, droop: -0.04, glow: 0.95, glitch: 0.08 },
-  speaking: { open: 0.92, happy: 0.42, ring: 0.3, spin: 0.9, lookX: 0, lookY: 0, tilt: 0, droop: 0, glow: 1, glitch: 0.04 },
-  muted: { open: 0.05, happy: 0, ring: 0.04, spin: 0.2, lookX: 0, lookY: -0.3, tilt: -0.05, droop: 0.14, glow: 0.42, glitch: 0.02 },
+  idle: { open: 0.55, happy: 0, sleepy: 0.25, brow: -0.35, browTilt: 0, browAsym: 0, blush: 0, ring: 0, spin: 0.3, lookX: 0, lookY: -0.25, tilt: 0, droop: 0.08, glow: 0.5, glitch: 0.08 },
+  connecting: { open: 0.85, happy: 0, sleepy: 0, brow: 0.1, browTilt: 0, browAsym: 0, blush: 0, ring: 0.6, spin: 1.8, lookX: 0, lookY: 0.1, tilt: 0, droop: 0, glow: 0.8, glitch: 0.3 },
+  listening: { open: 1, happy: 0, sleepy: 0, brow: 0.3, browTilt: 0.35, browAsym: 0, blush: 0.2, ring: 0, spin: 0.4, lookX: 0, lookY: 0, tilt: 0.06, droop: 0, glow: 0.9, glitch: 0.02 },
+  hearing: { open: 1.12, happy: 0, sleepy: 0, brow: 0.7, browTilt: 0.2, browAsym: 0, blush: 0.1, ring: 0, spin: 0.6, lookX: 0, lookY: 0.05, tilt: 0.1, droop: -0.03, glow: 1, glitch: 0.03 },
+  thinking: { open: 0.85, happy: 0, sleepy: 0, brow: 0.25, browTilt: 0, browAsym: 0.45, blush: 0, ring: 0.95, spin: 2.6, lookX: 0.55, lookY: 0.6, tilt: -0.08, droop: -0.04, glow: 0.95, glitch: 0.06 },
+  speaking: { open: 0.95, happy: 0.3, sleepy: 0, brow: 0.35, browTilt: 0.25, browAsym: 0, blush: 0.45, ring: 0, spin: 0.9, lookX: 0, lookY: 0, tilt: 0, droop: 0, glow: 1, glitch: 0.03 },
+  muted: { open: 0.2, happy: 0, sleepy: 1, brow: -0.45, browTilt: -0.1, browAsym: 0, blush: 0, ring: 0, spin: 0.2, lookX: 0, lookY: -0.3, tilt: -0.05, droop: 0.14, glow: 0.42, glitch: 0.02 },
 };
 
-/** [shell, secondary, face/accent] per state. */
-const PALETTES: Record<string, [string, string, string]> = {
-  idle: ["#5B8CFF", "#9A7CFF", "#9FD8FF"],
-  connecting: ["#22E3FF", "#6E8BFF", "#B69CFF"],
-  listening: ["#22E3FF", "#5CF2B5", "#D4FF3A"],
-  hearing: ["#D4FF3A", "#22E3FF", "#F4FFD6"],
-  thinking: ["#B69CFF", "#FF7AC6", "#7CC7FF"],
-  speaking: ["#FF7AC6", "#FFB23D", "#9FF2FF"],
-  muted: ["#8A8F98", "#B4B9C2", "#C9CDD4"],
+/** HOLO's own colours (its "skin"), the same in every state. */
+const BODY: [string, string] = ["#38E1FF", "#8F7CFF"];
+
+/** Eye and accent colour per state. */
+const ACCENT: Record<string, string> = {
+  idle: "#8FA8C8",
+  connecting: "#9FF2FF",
+  listening: "#9FF2FF",
+  hearing: "#D4FF3A",
+  thinking: "#D9C9FF",
+  speaking: "#FFC2EA",
+  muted: "#C9CDD4",
 };
 
-/** Which mouth each state wears: smile, "o", waveform, thinking dots, flat. */
+/** Which mouth each state wears: smile, "o", talking, "hmm", flat. */
 const MOUTHS: Record<string, [number, number, number, number, number]> = {
-  idle: [1, 0, 0, 0, 0],
-  connecting: [0, 0, 0, 1, 0],
+  idle: [0.35, 0, 0, 0, 0.65],
+  connecting: [0, 1, 0, 0, 0],
   listening: [1, 0, 0, 0, 0],
   hearing: [0, 1, 0, 0, 0],
   thinking: [0, 0, 0, 1, 0],
@@ -126,8 +140,11 @@ void main() {
   float hue = clamp(vLocal.y / uHeight + 0.5 + 0.18 * sin(uTime * 0.6 + vLocal.x * 2.2), 0.0, 1.0);
   vec3 col = mix(uA, uB, hue);
   col = mix(col, uC, fres * 0.55);
-  float alpha = (0.07 + 0.9 * fres) * (0.72 + 0.28 * smoothstep(0.3, 0.7, scan)) + sweep * 0.22;
-  alpha *= 0.55 + 0.45 * uGlow + 0.25 * uLevel;
+  // A lit, candy-glass body: brighter on top, a solid fill and a crisp rim,
+  // with only a whisper of scanlines.
+  col *= 0.72 + 0.4 * clamp(vLocal.y / uHeight + 0.5, 0.0, 1.0);
+  float alpha = (0.22 + 0.78 * fres) * (0.9 + 0.1 * smoothstep(0.3, 0.7, scan)) + sweep * 0.1;
+  alpha *= 0.6 + 0.4 * uGlow + 0.2 * uLevel;
   // Materialise from the bottom up, with a bright scan edge.
   float h = vLocal.y / uHeight + 0.5;
   float edge = uReveal * 1.25 - 0.12;
@@ -157,12 +174,18 @@ uniform vec2 uSize;
 uniform float uTime;
 uniform float uOpen;
 uniform float uHappy;
+uniform float uSleepy;
+uniform float uGrin;
 uniform vec2 uLook;
 uniform float uLevel;
+uniform float uBrow;
+uniform float uBrowTilt;
+uniform float uBrowAsym;
+uniform float uBlush;
 uniform float uSmile;
 uniform float uOh;
-uniform float uWave;
-uniform float uDots;
+uniform float uTalk;
+uniform float uHmm;
 uniform float uFlat;
 uniform vec3 uEye;
 uniform vec3 uRim;
@@ -179,18 +202,36 @@ float sdArcTop(vec2 p, float r, float th) {
   if (p.y > 0.0) return abs(length(p) - r) - th;
   return length(vec2(abs(p.x) - r, p.y)) - th;
 }
-// Bottom half of a ring: a smile.
+// Bottom half of a ring: a smile, or a closed, sleepy eye.
 float sdArcBottom(vec2 p, float r, float th) {
   if (p.y < 0.0) return abs(length(p) - r) - th;
   return length(vec2(abs(p.x) - r, p.y)) - th;
 }
+vec2 rotate(vec2 p, float a) {
+  float c = cos(a);
+  float s = sin(a);
+  return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+}
 
 float eye(vec2 p, vec2 c) {
   vec2 q = p - c;
-  float halfHeight = max(0.012, 0.13 * uOpen);
-  float open = sdRoundBox(q, vec2(0.064, halfHeight), min(0.064, halfHeight));
-  float happy = sdArcTop(q + vec2(0.0, 0.045), 0.078, 0.024);
-  return mix(open, happy, uHappy);
+  float halfHeight = max(0.014, 0.15 * uOpen);
+  float open = sdRoundBox(q, vec2(0.078, halfHeight), min(0.078, halfHeight));
+  float happy = sdArcTop(q + vec2(0.0, 0.05), 0.088, 0.026);
+  float sleepy = sdArcBottom(q - vec2(0.0, 0.035), 0.08, 0.022);
+  return mix(mix(open, happy, uHappy), sleepy, uSleepy);
+}
+
+float brow(vec2 p, vec2 c, float side) {
+  // side: -1 left, 1 right. Tilt lifts the inner end; asym raises the left one.
+  float raise = uBrow * 0.045 + uBrowAsym * side * -0.035;
+  // Rotating the coordinates turns the shape the other way: a positive tilt
+  // lifts the inner ends (friendly), never the angry V.
+  float angle = side * (uBrowTilt * 0.35 - uBrowAsym * 0.25);
+  vec2 q = rotate(p - (c + vec2(0.0, 0.215 + raise)), angle);
+  // A gentle arch: the ends dip, the middle rises.
+  q.y += 1.1 * q.x * q.x;
+  return sdRoundBox(q, vec2(0.068, 0.014), 0.014);
 }
 
 void main() {
@@ -199,46 +240,54 @@ void main() {
   float inside = smoothstep(0.004, -0.004, visor);
   float rim = exp(-abs(visor) * 80.0);
 
-  vec2 look = uLook * vec2(0.075, 0.055);
-  vec2 left = vec2(-0.27, 0.075) + look;
-  vec2 right = vec2(0.27, 0.075) + look;
+  vec2 look = uLook * vec2(0.07, 0.05);
+  vec2 left = vec2(-0.25, 0.06) + look;
+  vec2 right = vec2(0.25, 0.06) + look;
   float eyes = min(eye(p, left), eye(p, right));
+  float brows = min(brow(p, left, -1.0), brow(p, right, 1.0));
 
-  vec2 m = vec2(0.0, -0.2) + look * 0.45;
+  vec2 m = vec2(0.0, -0.22) + look * 0.4;
   vec2 q = p - m;
-  float smile = sdArcBottom(q - vec2(0.0, 0.07), 0.085, 0.019);
-  float oh = abs(length(q) - (0.03 + 0.045 * uLevel)) - 0.017;
-  float span = 0.16;
-  float x = clamp(q.x / span, -1.0, 1.0);
-  float amp = 0.01 + 0.075 * uLevel;
-  float wave = abs(q.y - amp * sin(q.x * 40.0 + uTime * 15.0) * (1.0 - x * x)) - 0.014;
-  wave = max(wave, abs(q.x) - span);
-  float d0 = length(q - vec2(-0.075, 0.0)) - 0.022 * (0.55 + 0.45 * max(0.0, sin(uTime * 6.0)));
-  float d1 = length(q) - 0.022 * (0.55 + 0.45 * max(0.0, sin(uTime * 6.0 - 1.0)));
-  float d2 = length(q - vec2(0.075, 0.0)) - 0.022 * (0.55 + 0.45 * max(0.0, sin(uTime * 6.0 - 2.0)));
-  float dots = min(d0, min(d1, d2));
-  float line = sdRoundBox(q, vec2(0.075, 0.011), 0.011);
-  float total = max(0.001, uSmile + uOh + uWave + uDots + uFlat);
-  float mouth = (smile * uSmile + oh * uOh + wave * uWave + dots * uDots + line * uFlat) / total;
+  float smile = sdArcBottom(q - vec2(0.0, 0.075), 0.095, 0.021);
+  // Booped: a wide, open grin.
+  float grin = max(length(q * vec2(1.0, 1.45) - vec2(0.0, 0.02)) - 0.1, q.y - 0.03);
+  smile = mix(smile, grin, uGrin);
+  float oh = abs(length(q * vec2(1.0, 0.9)) - (0.032 + 0.05 * uLevel)) - 0.019;
+  // Talking: a mouth that opens and closes with JARVIS's voice.
+  float talk = sdRoundBox(q, vec2(0.058 + 0.018 * uLevel, 0.012 + 0.062 * uLevel), 0.02 + 0.03 * uLevel);
+  float hmm = sdRoundBox(rotate(q - vec2(0.035, 0.005), 0.22), vec2(0.055, 0.011), 0.011);
+  float line = sdRoundBox(q, vec2(0.06, 0.01), 0.01);
+  float total = max(0.001, uSmile + uOh + uTalk + uHmm + uFlat);
+  float mouth = (smile * uSmile + oh * uOh + talk * uTalk + hmm * uHmm + line * uFlat) / total;
 
-  float features = min(eyes, mouth);
+  float features = min(min(eyes, mouth), brows);
   float core = smoothstep(0.005, -0.002, features);
   float halo = exp(-max(features, 0.0) * 34.0) * 0.5;
-  // A glint in each eye.
-  float glint = smoothstep(0.018, 0.0, min(length(p - left - vec2(-0.022, 0.055 * uOpen)), length(p - right - vec2(-0.022, 0.055 * uOpen))));
-  glint *= (1.0 - uHappy) * step(0.3, uOpen);
+  // Two glints in each open eye.
+  vec2 g1 = vec2(-0.026, 0.06 * uOpen);
+  vec2 g2 = vec2(0.024, -0.035 * uOpen);
+  float glint = smoothstep(0.02, 0.0, min(length(p - left - g1), length(p - right - g1)));
+  glint += 0.6 * smoothstep(0.011, 0.0, min(length(p - left - g2), length(p - right - g2)));
+  glint *= (1.0 - uHappy) * (1.0 - uSleepy) * step(0.35, uOpen);
+  // Cheeks.
+  vec2 cheek = vec2(0.36, -0.1);
+  float blush = exp(-dot((p - vec2(-cheek.x, cheek.y)) * vec2(1.0, 1.6), (p - vec2(-cheek.x, cheek.y)) * vec2(1.0, 1.6)) * 60.0);
+  blush += exp(-dot((p - cheek) * vec2(1.0, 1.6), (p - cheek) * vec2(1.0, 1.6)) * 60.0);
+  blush *= uBlush;
 
-  float scan = 0.82 + 0.18 * sin(vUv.y * 190.0 - uTime * 9.0);
+  float scan = 0.9 + 0.1 * sin(vUv.y * 190.0 - uTime * 9.0);
   vec3 eyeCol = mix(uEye, vec3(0.8), uMuted * 0.6);
-  vec3 glow = eyeCol * (core * 1.35 + halo) * scan + vec3(glint) * 0.9;
+  vec3 glow = eyeCol * (core * 1.35 + halo) * scan + vec3(glint) * 0.95 + vec3(1.0, 0.42, 0.72) * blush * 0.55;
   vec3 tint = vec3(0.01, 0.018, 0.045);
-  float tintA = inside * 0.8;
+  float tintA = inside * 0.84;
+  // A soft reflection across the glass.
+  float sheen = smoothstep(0.02, 0.0, abs(p.y - p.x * 0.35 - 0.3)) * 0.05 * smoothstep(0.3, -0.2, p.x);
 
   float h = vUv.y;
   float edge = uReveal * 1.25 - 0.2;
   float shown = step(h, edge);
 
-  vec3 col = (tint * tintA + glow * inside + uRim * rim * 0.85) * shown * uFlicker;
+  vec3 col = (tint * tintA + (glow + vec3(sheen)) * inside + uRim * rim * 0.85) * shown * uFlicker;
   float a = (tintA + rim * 0.45) * shown;
   gl_FragColor = vec4(col, a);
 }
@@ -429,9 +478,9 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       return item;
     };
 
-    const palettes = Object.fromEntries(Object.entries(PALETTES).map(([name, hexes]) => [name, hexes.map(color)])) as Record<string, THREE.Vector3[]>;
+    const accents = Object.fromEntries(Object.entries(ACCENT).map(([name, hex]) => [name, color(hex)])) as Record<string, THREE.Vector3>;
     const white = new THREE.Vector3(1, 1, 1);
-    const palette = PALETTES.idle.map(color);
+    const palette = [color(BODY[0]), color(BODY[1]), color(ACCENT.idle)];
     const time = { value: Math.random() * 20 };
     const reveal = { value: reduced ? 1 : 0 };
     const flicker = { value: 1 };
@@ -478,8 +527,9 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
         fragmentShader: FACE_FRAGMENT,
         uniforms: {
           uSize: { value: faceSize }, uTime: time, uReveal: reveal, uMuted: muteness, uFlicker: flicker, uLevel: level,
-          uOpen: { value: 1 }, uHappy: { value: 0 }, uLook: { value: new THREE.Vector2() },
-          uSmile: { value: 1 }, uOh: { value: 0 }, uWave: { value: 0 }, uDots: { value: 0 }, uFlat: { value: 0 },
+          uOpen: { value: 1 }, uHappy: { value: 0 }, uSleepy: { value: 0 }, uGrin: { value: 0 }, uLook: { value: new THREE.Vector2() },
+          uBrow: { value: 0 }, uBrowTilt: { value: 0 }, uBrowAsym: { value: 0 }, uBlush: { value: 0 },
+          uSmile: { value: 1 }, uOh: { value: 0 }, uTalk: { value: 0 }, uHmm: { value: 0 }, uFlat: { value: 0 },
           uEye: { value: new THREE.Vector3(0.8, 1, 1) }, uRim: { value: palette[0] },
         },
         transparent: true,
@@ -519,7 +569,7 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       );
 
     // Ear pods: they pulse while you talk.
-    const earMaterial = glow(0.6, palette[1]);
+    const earMaterial = glow(0.6, palette[2]);
     const earGeometry = keep(new THREE.CylinderGeometry(0.17, 0.17, 0.09, 32));
     for (const side of [-1, 1]) {
       const ear = new THREE.Mesh(earGeometry, earMaterial);
@@ -552,7 +602,7 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
     // Orbiting rings: a loading ring when it thinks.
     const ringMaterials: THREE.ShaderMaterial[] = [];
     const rings: THREE.Mesh[] = [];
-    for (const [radius, centerY, tiltX, tiltZ, direction] of [[1.45, -0.62, Math.PI / 2 + 0.16, 0.1, 1], [0.6, 1.0, Math.PI / 2 - 0.22, -0.12, -1]] as const) {
+    for (const [radius, centerY, tiltX, tiltZ, direction] of [[0.62, 1.0, Math.PI / 2 - 0.22, -0.12, -1]] as const) {
       const material = keep(
         new THREE.ShaderMaterial({
           vertexShader: RING_VERTEX,
@@ -652,6 +702,9 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
     let flickerHold = 0;
     let revealStarted = -1;
     let slowFrames = 0;
+    let lastKey = "idle";
+    let hopAge = 9;
+    let nod = 0;
 
     const approach = (current: number, target: number, rate: number, dt: number) => current + (target - current) * (1 - Math.exp(-dt * rate));
 
@@ -662,9 +715,14 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       time.value = (time.value + dt) % 1000;
       const t = time.value;
 
-      // Colours and mood ease towards the state.
-      const targetPalette = palettes[key] ?? palettes.idle;
-      palette.forEach((swatch, index) => swatch.lerp(targetPalette[index], 1 - Math.exp(-dt * 4)));
+      // The accent eases towards the state; the body keeps its own colours.
+      palette[2].lerp(accents[key] ?? accents.idle, 1 - Math.exp(-dt * 4));
+      // A little hop whenever it perks up into a new state.
+      if (key !== lastKey) {
+        if (key === "listening" || key === "hearing" || key === "speaking") hopAge = 0;
+        lastKey = key;
+      }
+      hopAge += dt;
       for (const name of Object.keys(mood) as Array<keyof Mood>) mood[name] = approach(mood[name], target[name], 5, dt);
       const mouthTarget = MOUTHS[key] ?? MOUTHS.idle;
       for (let i = 0; i < mouth.length; i += 1) mouth[i] = approach(mouth[i], mouthTarget[i], 9, dt);
@@ -681,7 +739,8 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       nextBlink -= dt;
       if (nextBlink <= 0 && key !== "muted") {
         blink = 1;
-        nextBlink = 2.2 + Math.random() * 3.2;
+        // Now and then a quick double blink.
+        nextBlink = Math.random() < 0.25 ? 0.28 : 2.2 + Math.random() * 3.2;
       }
       blink = Math.max(0, blink - dt * 7);
       nextSaccade -= dt;
@@ -719,16 +778,19 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       const speaking = key === "speaking" ? level.value : 0;
       const hearing = key === "hearing" ? level.value : 0;
 
-      // Body language.
-      bot.position.y = 0.3 + Math.sin(t * 1.3) * 0.06 - mood.droop * 0.4;
-      const yaw = Math.sin(t * 0.5) * 0.14 + look.x * 0.32;
+      // Body language: a calm float, a hop into a new state, a nod on each
+      // loud syllable, and the look direction leading the head.
+      const hop = hopAge < 0.42 ? Math.sin((hopAge / 0.42) * Math.PI) : 0;
+      nod = approach(nod, speaking * 0.12 + hearing * 0.05, 18, dt);
+      bot.position.y = 0.3 + Math.sin(t * 1.3) * 0.045 - mood.droop * 0.4 + hop * 0.12;
+      const yaw = Math.sin(t * 0.5) * 0.05 + look.x * 0.26;
       head.rotation.set(
-        -look.y * 0.14 + mood.droop + speaking * 0.1 * Math.sin(t * 9),
+        -look.y * 0.12 + mood.droop + nod,
         yaw,
-        mood.tilt + Math.sin(t * 0.7) * 0.03,
+        mood.tilt + Math.sin(t * 0.7) * 0.02,
       );
-      const pulse = 1 + hearing * 0.05 + speaking * 0.03;
-      head.scale.set(pulse * (1 + squash * 0.12), pulse * (1 - squash * 0.14), pulse);
+      const stretch = hop * 0.06 + speaking * 0.03;
+      head.scale.set(1 + squash * 0.12 - stretch * 0.5, 1 - squash * 0.14 + stretch, 1);
 
       // Antenna: a damped spring kicked by how fast the head turns.
       const yawSpeed = (yaw - lastYaw) / Math.max(dt, 1e-3);
@@ -742,8 +804,8 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       earMaterial.uniforms.uIntensity.value = 0.35 + hearing * 1.3 + speaking * 0.6 + 0.08 * Math.sin(t * 2.4);
 
       rings.forEach((ring, index) => {
-        ring.rotation.z += dt * mood.spin * (index ? -0.9 : 0.35);
-        ringMaterials[index].uniforms.uAmount.value = mood.ring * (index ? 0.7 : 1) * reveal.value;
+        ring.rotation.z -= dt * mood.spin * 0.9;
+        ringMaterials[index].uniforms.uAmount.value = mood.ring * 0.8 * reveal.value;
       });
       dustMaterial.uniforms.uSpeed.value = 0.1 + mood.spin * 0.05 + level.value * 0.1;
 
@@ -752,13 +814,20 @@ export function HoloMascot({ state, muted, levelRef, outputLevel, size, boop = 0
       shellMaterial.uniforms.uGlitch.value = Math.max(mood.glitch * 0.35, glitchBurst > 0 ? 1 : 0, reveal.value < 1 ? 0.6 : 0);
       const faceUniforms = faceMaterial.uniforms;
       faceUniforms.uOpen.value = mood.open * (1 - blink * 0.95) * (1 + hearing * 0.12);
-      faceUniforms.uHappy.value = Math.min(1, mood.happy * (session === "speaking" ? 0.6 + 0.4 * Math.sin(t * 0.8) : 1) + grin);
+      // Speaking: happy eyes come and go with the phrasing, not constantly.
+      faceUniforms.uHappy.value = Math.min(1, mood.happy * (session === "speaking" ? Math.max(0, Math.sin(t * 0.9)) : 1) + grin);
+      faceUniforms.uSleepy.value = mood.sleepy;
+      faceUniforms.uGrin.value = grin;
+      faceUniforms.uBrow.value = mood.brow + grin * 0.6 + hop * 0.3;
+      faceUniforms.uBrowTilt.value = mood.browTilt;
+      faceUniforms.uBrowAsym.value = mood.browAsym;
+      faceUniforms.uBlush.value = Math.min(1, mood.blush + grin);
       (faceUniforms.uLook.value as THREE.Vector2).copy(look);
-      faceUniforms.uSmile.value = mouth[0] + grin * 0.8;
-      faceUniforms.uOh.value = mouth[1];
-      faceUniforms.uWave.value = mouth[2];
-      faceUniforms.uDots.value = mouth[3];
-      faceUniforms.uFlat.value = mouth[4];
+      faceUniforms.uSmile.value = mouth[0] + grin;
+      faceUniforms.uOh.value = mouth[1] * (1 - grin);
+      faceUniforms.uTalk.value = mouth[2] * (1 - grin);
+      faceUniforms.uHmm.value = mouth[3] * (1 - grin);
+      faceUniforms.uFlat.value = mouth[4] * (1 - grin);
       (faceUniforms.uEye.value as THREE.Vector3).copy(palette[2]).lerp(white, 0.35);
     };
 

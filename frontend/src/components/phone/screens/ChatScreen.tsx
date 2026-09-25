@@ -5,23 +5,7 @@ import { AnimatePresence, motion, useDragControls, useIsPresent, type PanInfo } 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import {
-  ArrowDown,
-  ArrowUp,
-  Brain,
-  CalendarDots,
-  CaretDown,
-  CircleNotch,
-  Copy,
-  Lightbulb,
-  Microphone,
-  SpeakerHigh,
-  SpeakerSlash,
-  Stop,
-  Target,
-  Trash,
-  WarningCircle,
-} from "@phosphor-icons/react";
+import { ArrowDown, CaretDown, CircleNotch, SpeakerSlash, WarningCircle } from "@phosphor-icons/react";
 
 import { StreamedProse } from "@/components/StreamedProse";
 import { playAudio, stopAudio, synthesize } from "@/lib/voice";
@@ -31,13 +15,14 @@ import { haptic } from "../lib/haptics";
 import { useChat, useNav } from "../PhoneContext";
 import { KineticText, stagger } from "../ui/Bits";
 import { Tap } from "../ui/Tap";
+import { Icon3D, type Icon3DName } from "../ui/Icon3D";
 import { HoloFace } from "../voice/HoloFace";
 
-const PROMPTS = [
-  { title: "Plan my day", text: "What should I focus on today?", tone: "lime", icon: Target },
-  { title: "What's on?", text: "What's on my schedule?", tone: "sky", icon: CalendarDots },
-  { title: "Think it through", text: "Help me think through an idea", tone: "pink", icon: Lightbulb },
-  { title: "What you know", text: "What do you remember about me?", tone: "lilac", icon: Brain },
+const PROMPTS: Array<{ title: string; text: string; tone: string; icon: Icon3DName }> = [
+  { title: "Plan my day", text: "What should I focus on today?", tone: "lime", icon: "target" },
+  { title: "What's on?", text: "What's on my schedule?", tone: "sky", icon: "plan" },
+  { title: "Think it through", text: "Help me think through an idea", tone: "pink", icon: "bulb" },
+  { title: "What you know", text: "What do you remember about me?", tone: "lilac", icon: "memory" },
 ];
 
 const coarse = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -138,7 +123,7 @@ export function ChatScreen() {
             </span>
           </div>
           <Tap className="ph-icon-btn" aria-label="Clear conversation" onClick={() => setConfirmClear(true)} disabled={!messages.length}>
-            <Trash size={20} weight="bold" />
+            <Icon3D name="trash" size={26} />
           </Tap>
         </header>
 
@@ -174,10 +159,10 @@ export function ChatScreen() {
                 Plan the day, untangle a thought, or stash something for later.
               </p>
               <div className="ph-prompts">
-                {PROMPTS.map(({ title, text, tone, icon: Icon }, index) => (
+                {PROMPTS.map(({ title, text, tone, icon }, index) => (
                   <div key={title} className="ph-drop-in" style={{ ...stagger(index + 5), "--tilt": index % 2 ? "3deg" : "-3deg" } as React.CSSProperties}>
                     <Tap className="ph-prompt" data-tone={tone} onClick={() => send(text)} squish={0.94}>
-                      <Icon size={22} weight="fill" />
+                      <Icon3D name={icon} size={40} />
                       <strong>{title}</strong>
                       <small>{text}</small>
                     </Tap>
@@ -238,7 +223,7 @@ export function ChatScreen() {
                 feel={micState === "recording" ? "toggle-off" : "toggle-on"}
                 onClick={() => void chat.toggleMic()}
               >
-                {micState === "transcribing" ? <CircleNotch size={20} className="ph-spin" /> : <Microphone size={20} weight="fill" />}
+                {micState === "transcribing" ? <CircleNotch size={20} className="ph-spin" /> : <Icon3D name="mic" size={28} />}
               </Tap>
             )}
             <textarea
@@ -261,13 +246,13 @@ export function ChatScreen() {
               {streaming ? (
                 <motion.span key="stop" initial={{ opacity: 0, transform: "rotate(-90deg) scale(0.5)" }} animate={{ opacity: 1, transform: "rotate(0deg) scale(1)" }} exit={{ opacity: 0, transform: "rotate(90deg) scale(0.5)" }} transition={{ type: "spring", stiffness: 520, damping: 28 }}>
                   <Tap className="ph-send ph-send-stop" aria-label="Stop generating" onClick={chat.stop} feel="heavy">
-                    <Stop size={18} weight="fill" />
+                    <Icon3D name="stop" size={26} />
                   </Tap>
                 </motion.span>
               ) : (
                 <motion.span key="send" initial={{ opacity: 0, transform: "rotate(90deg) scale(0.5)" }} animate={{ opacity: 1, transform: "rotate(0deg) scale(1)" }} exit={{ opacity: 0, transform: "rotate(-90deg) scale(0.5)" }} transition={{ type: "spring", stiffness: 520, damping: 28 }}>
                   <Tap className="ph-send" aria-label="Send message" onClick={() => send(input)} disabled={!input.trim() || micState !== "idle"} feel={false} squish={0.85}>
-                    <ArrowUp size={20} weight="bold" />
+                    <Icon3D name="send" size={28} />
                   </Tap>
                 </motion.span>
               )}
@@ -332,7 +317,7 @@ function Message({ message, canSpeak }: { message: ChatMessage; canSpeak: boolea
               );
             }}
           >
-            <Copy size={16} weight="bold" />
+            <Icon3D name="copy" size={20} />
           </Tap>
         </div>
       )}
@@ -378,7 +363,7 @@ function SpeakButton({ text }: { text: string }) {
   };
   return (
     <Tap className="ph-msg-action" data-on={state !== "idle"} aria-label={state === "playing" ? "Stop reading" : "Read this aloud"} feel="select" onClick={() => void toggle()}>
-      {state === "loading" ? <CircleNotch size={16} className="ph-spin" /> : state === "playing" ? <SpeakerSlash size={16} weight="bold" /> : <SpeakerHigh size={16} weight="bold" />}
+      {state === "loading" ? <CircleNotch size={16} className="ph-spin" /> : state === "playing" ? <SpeakerSlash size={16} weight="bold" /> : <Icon3D name="speaker" size={20} />}
     </Tap>
   );
 }

@@ -61,9 +61,14 @@ runs on the browser's compositor thread wherever possible.
 - Pills (dock, segmented controls, the Plan weekday strip) are one element that
   glides on the compositor, stretching on the way and squashing as it lands
   (`useSlidingPill`/`glide` in `lib/motion.ts`). The tapped dock icon hops.
-- Scroll: the big title, the top bar's background and its mini title follow a
-  CSS scroll-driven animation (`scroll-timeline: --ph-scroll` on `.ph-screen`),
-  so they track the finger exactly and scrolling never touches JavaScript.
+- Scroll stays fully native: nothing listens to scroll events or is tied to
+  the scroll position. The big title scrolls with the page; an
+  IntersectionObserver on a marker under it sets `data-scrolled` on the page,
+  and CSS fades in the top bar's background and mini title. Do not use CSS
+  scroll-driven animations (`animation-timeline: scroll()`) here: in the
+  Android WebView they held the page's scroll updates back until a fling
+  ended, so a fling froze and then jumped to where it stopped (measured on the
+  phone: scrollTop 0 for the whole gesture, then +1505 px in one frame).
 - Entrances are CSS keyframes (`ph-rise`, `ph-slide-in`, `ph-drop-in`,
   `ph-pop-in`, `ph-bubble-in`, the word-by-word `KineticText`) staggered with
   `--i`. List rows still leave through AnimatePresence (height collapse).
@@ -137,6 +142,18 @@ adaptive-icon XMLs in `mipmap-anydpi-v26/`, generated from the 1024 px concepts
   publishes the difference as `--kb` and the chat composer lifts by it. If the
   WebView itself resizes, the inset stays 0.
 
+## 3D icons
+
+Every icon shown at 16 px or more is a glossy 3D "candy toy" object from one
+Higgsfield set (`ui/Icon3D.tsx`, 48 icons in `public/icons3d/*.webp`, 192 px,
+about 512 KB in total): the dock tabs, top-bar buttons, tiles, empty states,
+Settings rows, theme and background choices, chat prompts and actions, voice
+controls and sheet choices. They were generated as three 4x4 sheets on a
+transparent background (GPT Image 2.5 through Higgsfield) and sliced, with
+the generator's haze trimmed off. Tiny glyphs inside text chips (12 to 14 px)
+and pure controls (close, back, carets, arrows) stay as Phosphor line icons,
+which stay sharp at that size. Inactive dock icons are softly desaturated.
+
 ## Live background
 
 `fx/LiveBackground.tsx` is one WebGL canvas behind every screen: a slow,
@@ -170,17 +187,24 @@ a halo ring, standing on a projector pad with a light beam and rising dust. It
 is drawn with hologram shaders (fresnel rim, moving scanlines, glitch slices)
 and materialises from the bottom up when voice mode opens.
 
+HOLO keeps one identity colour (a cyan-to-lilac hologram) in every state;
+the state shows in its face and body language instead: eyes (open, wide,
+happy "^ ^", sleepy "︶ ︶"), eyebrows that rise, tilt and go lopsided,
+blush, and a mouth that smiles, says "o", opens and closes with JARVIS's
+voice or goes "hmm". It hops when it perks up into a new state, nods on loud
+syllables, glances around and sometimes double-blinks.
+
 Everything it does follows the real session:
 
 | State | HOLO |
 | --- | --- |
-| Connecting | glitchy, "…" mouth, rings spinning |
-| Listening | eyes open, small smile, curious head tilt, glances around |
-| Hearing you | eyes widen and ears pulse with your microphone level, "o" mouth |
-| Thinking | eyes drift up and aside, "…" mouth, loading rings spin fast |
-| Speaking | waveform mouth driven by JARVIS's playback level, nods along, happy eyes |
-| Muted | eyes shut, colour drains, head droops |
-| Idle/offline | dim, slow |
+| Connecting | booting: glitchy, "o" mouth, the halo ring spins |
+| Listening | eyes open, friendly raised brows, small smile, blush, curious tilt |
+| Hearing you | eyes widen, brows up, ears pulse with your microphone level, "o" mouth |
+| Thinking | eyes up and aside, one brow raised, "hmm" mouth, halo ring spins |
+| Speaking | mouth opens and closes with JARVIS's playback level, nods, blush, happy eyes now and then |
+| Muted | sleepy closed eyes, low brows, flat mouth, colour drains, head droops |
+| Idle/offline | half-closed eyes, low brows, dim |
 
 Tapping it squashes and stretches it, makes it grin and glitch (and still
 interrupts a reply). Levels come from `levelRef` (microphone, updated outside

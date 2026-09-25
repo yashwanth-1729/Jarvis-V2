@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Fire, Leaf, Lightning, Play } from "@phosphor-icons/react";
+import { Play } from "@phosphor-icons/react";
 
 import { createTask, deleteTask, updateTask } from "@/lib/records";
 import { taskDraft } from "@/lib/recordDrafts";
@@ -10,6 +10,7 @@ import { useAppData, useFinishAction } from "../PhoneContext";
 import { BigInput, Choices, Field, FormError, SheetActions, Switch, TextInput, useRetained, useSheetForm, WhenPicker } from "../ui/Form";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
+import { Icon3D } from "../ui/Icon3D";
 
 export type TaskTarget = Task | "new" | null;
 
@@ -81,7 +82,7 @@ export function TaskSheet({ target, onClose }: { target: TaskTarget; onClose: ()
                 onClose();
               }}
             >
-              <Check size={18} weight="bold" /> Finish
+              <Icon3D name="tasks" size={22} /> Finish
             </Tap>
           )}
         />
@@ -94,9 +95,9 @@ export function TaskSheet({ target, onClose }: { target: TaskTarget; onClose: ()
           value={String(values.priority) as Task["priority"]}
           onChange={(value) => set("priority", value)}
           options={[
-            { value: "HIGH", label: "High", tone: "pink", icon: <Fire size={16} weight="fill" /> },
-            { value: "MEDIUM", label: "Medium", tone: "amber", icon: <Lightning size={16} weight="fill" /> },
-            { value: "LOW", label: "Low", tone: "mint", icon: <Leaf size={16} weight="fill" /> },
+            { value: "HIGH", label: "High", tone: "pink", icon: <Icon3D name="fire" size={22} /> },
+            { value: "MEDIUM", label: "Medium", tone: "amber", icon: <Icon3D name="bolt" size={22} /> },
+            { value: "LOW", label: "Low", tone: "mint", icon: <Icon3D name="leaf" size={22} /> },
           ]}
         />
       </Field>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Confetti, MagnifyingGlass, Plus, X } from "@phosphor-icons/react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 
 import type { Task } from "@/types";
 import { groupTasks, isOverdueTask, type TaskSort } from "../lib/derive";
@@ -12,6 +12,7 @@ import { Empty, SectionHead, Skeleton } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
 import { Segmented } from "../ui/Segmented";
 import { Tap } from "../ui/Tap";
+import { Icon3D } from "../ui/Icon3D";
 import { TaskRow } from "./TaskRow";
 import { Num } from "../ui/Num";
 
@@ -52,10 +53,10 @@ export function TasksScreen() {
             if (searching) setQuery("");
             setSearching((value) => !value);
           }}>
-            {searching ? <X size={20} weight="bold" /> : <MagnifyingGlass size={21} weight="bold" />}
+            {searching ? <X size={20} weight="bold" /> : <Icon3D name="search" size={28} />}
           </Tap>
           <Tap className="ph-icon-btn ph-icon-btn-accent" aria-label="Add a task" onClick={() => setEditing("new")} feel="heavy">
-            <Plus size={22} weight="bold" />
+            <Icon3D name="add" size={28} />
           </Tap>
         </>
       }
@@ -119,7 +120,7 @@ export function TasksScreen() {
           ))
         ) : (
           <Empty
-            icon={<Confetti size={40} weight="duotone" />}
+            icon={<Icon3D name="party" size={60} />}
             title={needle ? "Nothing matches" : filter === "late" ? "Nothing late. Clean." : filter === "doing" ? "Nothing in motion" : "All clear. Go touch grass."}
             hint={needle ? "Try another word or filter." : "Add a task, or tell JARVIS what's on your mind."}
             action={!needle && <Tap className="ph-btn ph-btn-primary" onClick={() => setEditing("new")}>Add a task</Tap>}

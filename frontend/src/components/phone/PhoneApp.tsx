@@ -4,7 +4,6 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion, MotionConfig, MotionGlobalConfig, useIsPresent } from "framer-motion";
 import { Toaster, toast } from "sonner";
-import { Brain, CalendarDots, CheckSquare, House } from "@phosphor-icons/react";
 
 import { useChatSession } from "@/lib/useChatSession";
 import { useCommandCenter } from "@/lib/useCommandCenter";
@@ -47,6 +46,7 @@ import { PlanScreen } from "./screens/PlanScreen";
 import { TasksScreen } from "./screens/TasksScreen";
 import { TodayScreen } from "./screens/TodayScreen";
 import { Tap } from "./ui/Tap";
+import { Icon3D, type Icon3DName } from "./ui/Icon3D";
 import { HoloFace } from "./voice/HoloFace";
 
 // Development only: `?instant` skips JS animations, for checking layouts in
@@ -59,11 +59,11 @@ if (process.env.NODE_ENV === "development" && typeof window !== "undefined" && n
 const SettingsScreen = dynamic(() => import("./screens/SettingsScreen").then((m) => m.SettingsScreen), { ssr: false });
 const VoiceScreen = dynamic(() => import("./voice/VoiceScreen").then((m) => m.VoiceScreen), { ssr: false });
 
-const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
-  { id: "today", label: "Today", icon: House },
-  { id: "tasks", label: "Tasks", icon: CheckSquare },
-  { id: "plan", label: "Plan", icon: CalendarDots },
-  { id: "memory", label: "Memory", icon: Brain },
+const TABS: Array<{ id: TabId; label: string; icon: Icon3DName }> = [
+  { id: "today", label: "Today", icon: "home" },
+  { id: "tasks", label: "Tasks", icon: "tasks" },
+  { id: "plan", label: "Plan", icon: "plan" },
+  { id: "memory", label: "Memory", icon: "memory" },
 ];
 
 /*
@@ -378,7 +378,7 @@ function Dock({ hidden }: { hidden: boolean }) {
   }, [hidden]);
   const left = TABS.slice(0, 2);
   const right = TABS.slice(2);
-  const item = ({ id, label, icon: Icon }: (typeof TABS)[number]) => {
+  const item = ({ id, label, icon }: (typeof TABS)[number]) => {
     const active = tab === id;
     return (
       <button
@@ -395,7 +395,7 @@ function Dock({ hidden }: { hidden: boolean }) {
         }}
       >
         <span className="ph-dock-icon" data-bounce={active}>
-          <Icon size={24} weight={active ? "fill" : "bold"} />
+          <Icon3D name={icon} size={30} />
         </span>
         <span className="ph-dock-label">{label}</span>
       </button>

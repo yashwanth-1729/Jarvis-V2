@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, Brain, Hourglass, Lightbulb, Notebook, Plus, PushPin, Sparkle } from "@phosphor-icons/react";
+import { ArrowRight, PushPin } from "@phosphor-icons/react";
 
 import type { NotePage } from "@/types";
 import { allPages, MEMORY_LABEL, MEMORY_TONE, pageCount, pageTone } from "../lib/derive";
@@ -10,13 +10,14 @@ import { PageSheet, type PageTarget } from "../sheets/NoteSheets";
 import { Chip, SectionHead, Skeleton, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
+import { Icon3D } from "../ui/Icon3D";
 import { Num } from "../ui/Num";
 
-export function pageIcon(page: NotePage, size = 30) {
-  if (page.kind === "LONG_TERM") return <Brain size={size} weight="duotone" />;
-  if (page.kind === "TEMPORARY") return <Hourglass size={size} weight="duotone" />;
-  if (page.kind === "OTHER") return <Lightbulb size={size} weight="duotone" />;
-  return <Notebook size={size} weight="duotone" />;
+export function pageIcon(page: NotePage, size = 40) {
+  if (page.kind === "LONG_TERM") return <Icon3D name="memory" size={size} />;
+  if (page.kind === "TEMPORARY") return <Icon3D name="hourglass" size={size} />;
+  if (page.kind === "OTHER") return <Icon3D name="bulb" size={size} />;
+  return <Icon3D name="notebook" size={size} />;
 }
 
 export function MemoryScreen() {
@@ -46,7 +47,7 @@ export function MemoryScreen() {
       eyebrow={<><Num value={active.length} /> things JARVIS knows · <Num value={ideas.length} /> notes</>}
       actions={
         <Tap className="ph-icon-btn ph-icon-btn-accent" aria-label="New page" onClick={() => setEditingPage("new")} feel="heavy">
-          <Plus size={22} weight="bold" />
+          <Icon3D name="add" size={28} />
         </Tap>
       }
     >
@@ -57,7 +58,7 @@ export function MemoryScreen() {
           <>
             {review.length > 0 && (
               <Tap className="ph-review" onClick={() => push({ kind: "notebook", uid: "notes-long-term", view: "REVIEW" })} squish={0.97}>
-                <Sparkle size={24} weight="fill" />
+                <Icon3D name="sparkle" size={34} />
                 <span>
                   <strong><Num value={review.length} /> {review.length === 1 ? "memory needs" : "memories need"} your call</strong>
                   <small>JARVIS picked these up. Keep or bin them.</small>
@@ -79,7 +80,7 @@ export function MemoryScreen() {
               ))}
               <div className="ph-drop-in" style={stagger(pages.length)}>
                 <Tap className="ph-book ph-book-new" onClick={() => setEditingPage("new")} squish={0.94}>
-                  <Plus size={30} weight="bold" />
+                  <Icon3D name="add" size={44} />
                   <strong className="ph-book-title">New page</strong>
                 </Tap>
               </div>

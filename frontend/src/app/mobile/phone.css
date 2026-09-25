@@ -193,8 +193,6 @@
   overscroll-behavior-y: contain;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* The big title, the bar's glass and the mini title follow this. */
-  scroll-timeline: --ph-scroll block;
 }
 .ph-screen::-webkit-scrollbar { display: none; }
 .ph-screen[data-pad="true"] { padding-bottom: var(--dock-space); }
@@ -219,18 +217,23 @@
   opacity: 0;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
+  transition: opacity 0.22s ease;
 }
+.ph-screen[data-scrolled="true"] .ph-topbar-glass { opacity: 1; }
 .ph-topbar-lead { position: relative; justify-self: start; display: flex; align-items: center; min-width: 0; }
 .ph-topbar-title {
   position: relative;
   max-width: 52vw;
   overflow: hidden;
   opacity: 0;
+  transform: translateY(8px);
   font: 700 15px/1 var(--font-head);
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: opacity 0.2s ease, transform var(--spring-snappy-ms) var(--spring-snappy);
 }
+.ph-screen[data-scrolled="true"] .ph-topbar-title { opacity: 1; transform: none; }
 .ph-topbar-actions { position: relative; justify-self: end; display: flex; align-items: center; gap: 8px; }
 
 .ph-hero { padding: 2px 20px 18px; }
@@ -248,34 +251,12 @@
   font: 800 44px/0.98 var(--font-head);
   letter-spacing: -0.055em;
   overflow-wrap: anywhere;
-  transform-origin: 0% 100%;
 }
-
-/* Scroll hand-over: compositor-driven, in lockstep with the finger. */
-@supports (animation-timeline: scroll()) {
-  .ph-title {
-    animation: ph-title-away linear both;
-    animation-timeline: --ph-scroll;
-    animation-range: 0px 120px;
-  }
-  .ph-topbar-glass {
-    animation: ph-show linear both;
-    animation-timeline: --ph-scroll;
-    animation-range: 8px 64px;
-  }
-  .ph-topbar-title {
-    animation: ph-mini-title linear both;
-    animation-timeline: --ph-scroll;
-    animation-range: 52px 92px;
-  }
-}
-@keyframes ph-title-away {
-  0% { opacity: 1; transform: none; }
-  66% { opacity: 0; }
-  100% { opacity: 0; transform: translateY(-36px) scale(0.94); }
-}
-@keyframes ph-show { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ph-mini-title { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Watched by Screen's IntersectionObserver: once it passes under the bar,
+   the bar turns solid and shows the mini title. It sits inside the lower
+   part of the big title (on Today, a little way into the greeting). */
+.ph-title-marker { position: relative; top: -28px; display: block; height: 1px; pointer-events: none; }
+.ph-today .ph-title-marker { top: 48px; }
 .ph-title::after {
   content: "";
   display: block;
@@ -325,6 +306,12 @@
   font-size: 14px;
 }
 
+/* ------------------------------------------------------------- 3D icons */
+/* Higgsfield-made candy icons (ui/Icon3D.tsx). A soft shadow lifts them off
+   same-coloured surfaces. */
+.ph-i3d { display: block; flex: none; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.22)); -webkit-user-drag: none; user-select: none; }
+.ph[data-theme="light"] .ph-i3d { filter: drop-shadow(0 2px 3px rgba(11, 11, 14, 0.18)); }
+
 /* --------------------------------------------------------------- buttons */
 
 .ph-icon-btn {
@@ -341,7 +328,7 @@
 }
 .ph-icon-btn:disabled { opacity: 0.4; }
 .ph-icon-btn[data-on="true"] { background: var(--fg); color: var(--bg); }
-.ph-icon-btn-accent { background: var(--lime); color: var(--ink-on-candy); border-color: transparent; box-shadow: 0 8px 22px -10px rgba(212, 255, 58, 0.8); }
+.ph-icon-btn-accent { background: var(--fg); color: var(--bg); border-color: transparent; box-shadow: 0 8px 22px -10px rgba(212, 255, 58, 0.8); }
 .ph-icon-btn-glass { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.14); color: #fff; }
 
 .ph-btn {
@@ -430,11 +417,9 @@
 .ph-empty-glyph {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 4px;
-  border-radius: 24px;
-  background: var(--tone-soft, var(--card-2));
+  width: 76px;
+  height: 76px;
+  margin-bottom: 2px;
   color: var(--tone-text, var(--accent-text));
   animation: ph-float 4.2s ease-in-out infinite;
 }
@@ -537,6 +522,7 @@
 .ph-dock-item[data-active="true"] { color: var(--ink-on-candy); transition: color 0.15s ease 0.1s; }
 .ph-dock-pill { position: absolute; top: 0; left: 0; opacity: 0; border-radius: 20px; background: var(--lime); box-shadow: 0 8px 20px -10px rgba(212, 255, 58, 0.85); pointer-events: none; }
 .ph-dock-icon { position: relative; display: grid; place-items: center; }
+.ph-dock-item:not([data-active="true"]) .ph-i3d { filter: saturate(0.45) brightness(0.92); opacity: 0.82; }
 /* The icon of the tab you just picked hops. */
 .ph-dock-icon[data-bounce="true"] { animation: ph-hop var(--spring-pop-ms) var(--spring-pop); }
 @keyframes ph-hop { from { transform: translateY(5px) scale(0.7); } }
@@ -720,7 +706,7 @@
   border: 1px solid rgba(255, 197, 61, 0.35);
   color: var(--fg);
 }
-.ph-offline > svg { color: var(--amber); }
+.ph-offline > .ph-i3d { align-self: center; }
 .ph-offline strong { display: block; font-size: 15px; }
 .ph-offline p { color: var(--fg-2); font-size: 13px; }
 
@@ -741,12 +727,8 @@
   width: 40px;
   height: 40px;
   flex: none;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, var(--lime), var(--sky), var(--pink), var(--lime));
-  color: var(--ink-on-candy);
-  animation: ph-spin-kf 9s linear infinite;
+  animation: ph-float 3.6s ease-in-out infinite;
 }
-.ph-ask-spark svg { animation: ph-spin-kf 9s linear infinite reverse; }
 .ph-ask-text { overflow: hidden; color: var(--fg-2); font-size: 16px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
 .ph-ask-mic {
   display: grid;
@@ -782,7 +764,7 @@
 .ph-tile-foot { font-size: 13.5px; font-weight: 600; opacity: 0.78; }
 .ph-ellipsis { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ph-tile-sticker { position: absolute; top: 14px; right: 12px; }
-.ph-tile-icon { position: absolute; top: 14px; right: 14px; opacity: 0.85; }
+.ph-tile-icon { position: absolute; top: 10px; right: 10px; }
 
 .ph-tile-now { min-height: 170px; }
 .ph-now-top { display: flex; align-items: center; gap: 10px; }
@@ -1029,8 +1011,8 @@
   border: 1px solid var(--line);
   text-align: left;
 }
-.ph-ping-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 15px; background: var(--pink); color: var(--ink-on-candy); }
-.ph-ping[data-late="true"] .ph-ping-icon { background: var(--red); color: #fff; }
+.ph-ping-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 15px; background: var(--tone-soft, rgba(255, 122, 198, 0.15)); }
+.ph-ping[data-late="true"] .ph-ping-icon { background: rgba(255, 77, 94, 0.18); }
 .ph-ping-body { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; }
 .ph-ping-body strong { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
 .ph-ping-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--fg-2); font-size: 13px; }
@@ -1071,7 +1053,7 @@
   text-align: left;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06), 0 16px 30px -22px rgba(0, 0, 0, 0.9);
 }
-.ph-book-icon { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 17px; background: rgba(255, 255, 255, 0.4); }
+.ph-book-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 18px; background: rgba(255, 255, 255, 0.42); }
 .ph-book-count { position: absolute; top: 12px; right: 14px; font: 800 30px/1 var(--font-head); letter-spacing: -0.05em; }
 .ph-book-title { margin-top: auto; font: 700 16.5px/1.15 var(--font-head); letter-spacing: -0.03em; overflow-wrap: anywhere; }
 .ph-book-kind { margin-top: 5px; font: 400 10px/1 var(--font-tag); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
@@ -1159,8 +1141,8 @@
   width: 64px;
   height: 64px;
   border-radius: 22px;
-  background: var(--lime);
-  color: var(--ink-on-candy);
+  background: var(--fg);
+  color: var(--bg);
   box-shadow: 0 16px 34px -12px rgba(212, 255, 58, 0.75), 0 4px 0 rgba(0, 0, 0, 0.25);
 }
 
@@ -1314,9 +1296,10 @@
   border: 2px solid var(--red);
   animation: ph-ring 1.2s ease-out infinite;
 }
-.ph-send { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--lime); color: var(--ink-on-candy); }
+.ph-send { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--fg); color: var(--bg); }
 .ph-send:disabled { background: var(--card-2); color: var(--fg-3); }
-.ph-send-stop { background: var(--fg); color: var(--bg); }
+.ph-send:disabled .ph-i3d { filter: grayscale(1); opacity: 0.45; }
+.ph-send-stop { background: var(--card-2); }
 
 /* ----------------------------------------------------------------- voice */
 
@@ -1740,8 +1723,7 @@
 .ph-rows { display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
 .ph-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; text-align: left; }
 .ph-row + .ph-row { border-top: 1px solid var(--line); }
-.ph-row-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 14px; background: var(--tone); color: var(--ink-on-candy); }
-.ph-row-icon[data-tone="red"] { color: #fff; }
+.ph-row-icon { display: grid; place-items: center; width: 46px; height: 46px; flex: none; border-radius: 15px; background: var(--tone-soft); }
 .ph-row-copy { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .ph-row-copy strong { font-size: 16px; font-weight: 700; }
 .ph-row-copy small { overflow: hidden; color: var(--fg-3); font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }

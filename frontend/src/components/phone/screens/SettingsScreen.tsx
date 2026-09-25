@@ -3,24 +3,11 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowsClockwise,
-  Broom,
   CaretLeft,
   CaretRight,
   CheckCircle,
   CircleNotch,
-  Cloud,
-  Crosshair,
-  DeviceMobile,
-  Eye,
   EyeSlash,
-  Flask,
-  HardDrives,
-  Key,
-  MapPin,
-  Moon,
-  Plug,
-  Sun,
   WarningCircle,
   XCircle,
 } from "@phosphor-icons/react";
@@ -36,18 +23,19 @@ import { useAppData, useLook, useNav, useSyncState } from "../PhoneContext";
 import { Choices, Field, TextInput } from "../ui/Form";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
+import { Icon3D, type Icon3DName } from "../ui/Icon3D";
 import { DesignLab } from "./DesignLab";
 
 type Page = "lab" | "keys" | "apps" | "sync" | "location" | "runtime" | "storage";
 
-const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: React.ElementType; group: string }> = [
-  { id: "lab", title: "Design lab", hint: "Try the icons, names, backgrounds and HOLO", tone: "pink", icon: Flask, group: "Make it yours" },
-  { id: "keys", title: "AI & voice keys", hint: "Sarvam, Gemini and OpenRouter", tone: "lime", icon: Key, group: "Connections" },
-  { id: "apps", title: "Connected apps", hint: "Google services and MCP tools", tone: "sky", icon: Plug, group: "Connections" },
-  { id: "sync", title: "Sync & backup", hint: "How your devices share data", tone: "lilac", icon: Cloud, group: "Connections" },
-  { id: "location", title: "Location", hint: "For weather and local results", tone: "orange", icon: MapPin, group: "This device" },
-  { id: "runtime", title: "Assistant connection", hint: "Runtime address and a quick test", tone: "mint", icon: HardDrives, group: "This device" },
-  { id: "storage", title: "Local storage", hint: "Reset this device's copy", tone: "red", icon: Broom, group: "This device" },
+const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: Icon3DName; group: string }> = [
+  { id: "lab", title: "Design lab", hint: "Try the icons, names, backgrounds and HOLO", tone: "lime", icon: "flask", group: "Make it yours" },
+  { id: "keys", title: "AI & voice keys", hint: "Sarvam, Gemini and OpenRouter", tone: "amber", icon: "key", group: "Connections" },
+  { id: "apps", title: "Connected apps", hint: "Google services and MCP tools", tone: "sky", icon: "plug", group: "Connections" },
+  { id: "sync", title: "Sync & backup", hint: "How your devices share data", tone: "lilac", icon: "sync", group: "Connections" },
+  { id: "location", title: "Location", hint: "For weather and local results", tone: "orange", icon: "compass", group: "This device" },
+  { id: "runtime", title: "Assistant connection", hint: "Runtime address and a quick test", tone: "mint", icon: "server", group: "This device" },
+  { id: "storage", title: "Local storage", hint: "Reset this device's copy", tone: "pink", icon: "broom", group: "This device" },
 ];
 
 export function SettingsScreen() {
@@ -125,7 +113,7 @@ export function SettingsScreen() {
                   <section key={group} className="ph-section">
                     <span className="ph-eyebrow">{group}</span>
                     <div className="ph-rows">
-                      {PAGES.filter((item) => item.group === group).map(({ id, title, hint, tone, icon: Icon }) => (
+                      {PAGES.filter((item) => item.group === group).map(({ id, title, hint, tone, icon }) => (
                         <Tap
                           key={id}
                           className="ph-row"
@@ -135,7 +123,7 @@ export function SettingsScreen() {
                           }}
                           squish={0.98}
                         >
-                          <span className="ph-row-icon" data-tone={tone}><Icon size={20} weight="fill" /></span>
+                          <span className="ph-row-icon" data-tone={tone}><Icon3D name={icon} size={34} /></span>
                           <span className="ph-row-copy">
                             <strong>{title}</strong>
                             <small>{hint}</small>
@@ -201,23 +189,23 @@ function StatusStrip() {
 
 function Appearance() {
   const theme = useLook();
-  const options: Array<{ value: ThemeChoice; label: string; icon: React.ElementType }> = [
-    { value: "system", label: "System", icon: DeviceMobile },
-    { value: "light", label: "Light", icon: Sun },
-    { value: "dark", label: "Dark", icon: Moon },
+  const options: Array<{ value: ThemeChoice; label: string; icon: Icon3DName }> = [
+    { value: "system", label: "System", icon: "phone" },
+    { value: "light", label: "Light", icon: "sun" },
+    { value: "dark", label: "Dark", icon: "moon" },
   ];
   return (
     <section className="ph-section">
       <span className="ph-eyebrow">Look</span>
       <div className="ph-themes" role="radiogroup" aria-label="Appearance">
-        {options.map(({ value, label, icon: Icon }) => (
+        {options.map(({ value, label, icon }) => (
           <Tap key={value} role="radio" aria-checked={theme.choice === value} className="ph-theme" data-choice={value} data-on={theme.choice === value} feel="select" onClick={() => theme.choose(value)}>
             <span className="ph-theme-preview" aria-hidden="true">
               <i />
               <i />
               <i />
             </span>
-            <span className="ph-theme-label"><Icon size={15} weight="fill" /> {label}</span>
+            <span className="ph-theme-label"><Icon3D name={icon} size={20} /> {label}</span>
           </Tap>
         ))}
       </div>
@@ -253,7 +241,7 @@ function Secret({ label, value, onChange, placeholder, status }: { label: string
           onChange={(event) => onChange(event.target.value)}
         />
         <button type="button" className="ph-secret-eye" aria-label={visible ? `Hide ${label}` : `Show ${label}`} onClick={() => setVisible((current) => !current)}>
-          {visible ? <EyeSlash size={18} weight="bold" /> : <Eye size={18} weight="bold" />}
+          {visible ? <EyeSlash size={18} weight="bold" /> : <Icon3D name="eye" size={24} />}
         </button>
       </div>
       {status !== null && (
@@ -397,7 +385,7 @@ function LocationPage({ model }: { model: SettingsModel }) {
             }}
           />
           <Tap className="ph-btn" disabled={model.locating} onClick={() => void (model.placeName.trim() ? model.nameIt() : model.locate())}>
-            {model.locating ? <CircleNotch size={18} className="ph-spin" /> : model.placeName.trim() ? "Set" : <><Crosshair size={18} weight="bold" /> GPS</>}
+            {model.locating ? <CircleNotch size={18} className="ph-spin" /> : model.placeName.trim() ? "Set" : <><Icon3D name="compass" size={22} /> GPS</>}
           </Tap>
         </div>
       </Field>
@@ -412,7 +400,7 @@ function RuntimePage({ model }: { model: SettingsModel }) {
         <div className="ph-inline">
           <TextInput label="Runtime address" type="url" mono placeholder={API_BASE} value={model.backend} onChange={model.setBackend} />
           <Tap className="ph-btn" onClick={() => void model.probeBackend()}>
-            {model.backendProbe === "checking" ? <CircleNotch size={18} className="ph-spin" /> : <><ArrowsClockwise size={16} weight="bold" /> Test</>}
+            {model.backendProbe === "checking" ? <CircleNotch size={18} className="ph-spin" /> : <><Icon3D name="refresh" size={20} /> Test</>}
           </Tap>
         </div>
       </Field>
