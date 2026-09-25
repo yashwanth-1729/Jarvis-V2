@@ -8,7 +8,7 @@ import { eventDraft, reminderDraft } from "@/lib/recordDrafts";
 import { parseLocal } from "@/lib/utils";
 import type { Reminder, ScheduleEvent } from "@/types";
 import { isoLocal } from "../lib/time";
-import { usePhone } from "../PhoneContext";
+import { useAppData } from "../PhoneContext";
 import { BigInput, Choices, DayPicker, Field, FormError, SheetActions, TextArea, TextInput, TimeInput, useRetained, useSheetForm, WhenPicker } from "../ui/Form";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
@@ -23,7 +23,7 @@ const DURATIONS = [30, 60, 90, 120, 180];
 
 /** Add or edit a routine, class or one-off block. */
 export function EventSheet({ target, onClose }: { target: EventTarget; onClose: () => void }) {
-  const { app, mode } = usePhone();
+  const { app, mode } = useAppData();
   const shown = useRetained(target);
   const event = shown && isEvent(shown) ? shown : null;
   const form = useSheetForm(target !== null, () =>
@@ -151,7 +151,7 @@ export type ReminderTarget = Reminder | "new" | null;
 
 /** Add or edit a one-off reminder. */
 export function ReminderSheet({ target, onClose }: { target: ReminderTarget; onClose: () => void }) {
-  const { app, reloadReminders } = usePhone();
+  const { app, reloadReminders } = useAppData();
   const shown = useRetained(target);
   const reminder = shown && shown !== "new" ? shown : null;
   const form = useSheetForm(target !== null, () => ({ text: reminder?.text ?? "", due_at: reminder?.due_at ?? "" }));

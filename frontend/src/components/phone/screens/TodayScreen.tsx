@@ -21,9 +21,9 @@ import {
 import type { Task } from "@/types";
 import { focusTasks, isOverdueTask, KIND_LABEL, KIND_TONE, nowAndNext, upcomingReminders, type Occurrence } from "../lib/derive";
 import { clock, duration, greeting, minutesUntil, relative } from "../lib/time";
-import { usePhone, useNow, type PlanSection } from "../PhoneContext";
+import { useAppData, useFinish, useNav, useNow, useSyncState, type PlanSection } from "../PhoneContext";
 import { TaskSheet, type TaskTarget } from "../sheets/TaskSheet";
-import { Chip, Empty, KineticText, SectionHead, Skeleton, Sticker } from "../ui/Bits";
+import { Chip, Empty, KineticText, SectionHead, Skeleton, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
 import { Ticker } from "../ui/Ticker";
@@ -33,7 +33,10 @@ import { Num } from "../ui/Num";
 const SECTION_FOR: Record<Occurrence["event"]["kind"], PlanSection> = { COLLEGE: "college", ROUTINE: "routine", SESSION: "session" };
 
 export function TodayScreen() {
-  const { app, go, openChat, openVoice, openPlan, push, reminders, finishing, sync } = usePhone();
+  const { app, reminders } = useAppData();
+  const { go, openChat, openVoice, openPlan, push } = useNav();
+  const { checked, finishing } = useFinish();
+  const sync = useSyncState();
   const now = useNow();
   const [editing, setEditing] = React.useState<TaskTarget>(null);
   const state = app.state;
@@ -68,10 +71,10 @@ export function TodayScreen() {
             <KineticText text={hello.word} className="ph-greet-b" delay={0.12} />
           </h2>
           {state && (
-            <motion.p className="ph-greet-sub" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
+            <p className="ph-greet-sub ph-fade-in">
               <Num value={open.length} /> open · <Num value={agenda.remaining} /> left on the plan
               {overdue > 0 && <> · <span className="ph-hot"><Num value={overdue} /> late</span></>}
-            </motion.p>
+            </p>
           )}
         </div>
       }
@@ -126,7 +129,7 @@ export function TodayScreen() {
                 <ul className="ph-task-list">
                   <AnimatePresence initial={false}>
                     {focus.map((task, index) => (
-                      <TaskRow key={task.uid ?? task.id} task={task} index={index} onEdit={(item: Task) => setEditing(item)} />
+                      <TaskRow key={task.uid ?? task.id} task={task} done={checked.has(task.id)} index={index} onEdit={setEditing} />
                     ))}
                   </AnimatePresence>
                 </ul>
@@ -196,7 +199,7 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
         {event.location && <><MapPin size={13} weight="fill" /> {event.location}</>}
       </span>
       <span className="ph-now-bar" aria-hidden="true">
-        <motion.span className="ph-now-fill" initial={false} animate={{ scaleX: live ? progress : 0 }} transition={{ type: "spring", stiffness: 120, damping: 24 }} />
+        <span className="ph-now-fill" style={{ transform: `scaleX(${live ? progress : 0})` }} />
       </span>
       <span className="ph-now-left">
         {live ? "ends in " : "starts in "}
@@ -207,30 +210,30 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
 }
 
 function BriefTile() {
-  const { app } = usePhone();
+  const { app } = useAppData();
   const [open, setOpen] = React.useState(false);
   const brief = app.state?.brief;
   if (!brief?.summary_text) return null;
   const bullets = brief.bullets.filter(Boolean);
   return (
-    <motion.div layout className="ph-tile ph-tile-wide ph-tile-brief" data-open={open}>
+    <div className="ph-tile ph-tile-wide ph-tile-brief" data-open={open}>
       <button type="button" className="ph-brief-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
         <span className="ph-brief-label"><Lightning size={16} weight="fill" /> JARVIS brief</span>
         {brief.urgent_count > 0 && <Sticker tone="red" tilt={3}>{brief.urgent_count} URGENT</Sticker>}
-        <motion.span className="ph-brief-caret" animate={{ rotate: open ? 180 : 0 }}><CaretDown size={16} weight="bold" /></motion.span>
+        <span className="ph-brief-caret"><CaretDown size={16} weight="bold" /></span>
       </button>
-      <motion.p layout="position" className="ph-brief-text">{brief.summary_text}</motion.p>
+      <p className="ph-brief-text">{brief.summary_text}</p>
       {bullets.length > 0 && !open && <Ticker items={bullets} />}
       <AnimatePresence initial={false}>
         {open && bullets.length > 0 && (
-          <motion.ul className="ph-brief-list" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+          <motion.ul className="ph-brief-list" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}>
             {bullets.map((bullet) => (
               <li key={bullet}>{bullet}</li>
             ))}
           </motion.ul>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 
@@ -242,13 +245,12 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
         const event = item.event;
         const progress = state === "now" ? (now - item.start) / (item.end - item.start) : 0;
         return (
-          <motion.li
+          <li
             key={`${event.uid ?? event.id}-${item.start}`}
+            className="ph-slide-in"
+            style={stagger(index)}
             data-state={state}
             data-tone={KIND_TONE[event.kind]}
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ type: "spring", stiffness: 360, damping: 30, delay: Math.min(index, 8) * 0.04 }}
           >
             <time className="ph-tl-time">{clock(new Date(item.start))}</time>
             <span className="ph-tl-rail" aria-hidden="true"><span className="ph-tl-dot" /></span>
@@ -265,7 +267,7 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
                 </span>
               )}
             </Tap>
-          </motion.li>
+          </li>
         );
       })}
     </ol>
@@ -292,7 +294,7 @@ function SyncBadge({ phase, message }: { phase: string; message: string | null }
 
 /** Offline / saved-data state, with a retry that never touches records. */
 function ConnectionCard() {
-  const { app } = usePhone();
+  const { app } = useAppData();
   const show = Boolean(app.error || app.localOnly);
   return (
     <AnimatePresence initial={false}>
@@ -300,9 +302,10 @@ function ConnectionCard() {
         <motion.div
           className="ph-offline"
           role="alert"
-          initial={{ opacity: 0, height: 0, y: -8 }}
-          animate={{ opacity: 1, height: "auto", y: 0 }}
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.26, ease: [0.2, 0, 0, 1] }}
         >
           <WifiSlash size={22} weight="bold" />
           <div>
@@ -319,7 +322,7 @@ function ConnectionCard() {
 }
 
 function NoData() {
-  const { push } = usePhone();
+  const { push } = useNav();
   return (
     <Empty
       icon={<Chip tone="lilac">NO DATA YET</Chip>}

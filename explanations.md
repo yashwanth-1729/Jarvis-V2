@@ -128,6 +128,49 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-25 · Claude Code · Phone motion on the compositor, live background, HOLO, voice fixes
+
+- User: animations "a bit stucky" on a Snapdragon 8 Gen 5; wanted a live
+  background reacting to every event, a new voice-mode character (picked a
+  "holo mascot"), and Higgsfield-made logos.
+- Motion: whole-`transform` WAAPI / CSS transitions only; `lib/motion.ts`
+  (springs → CSS `linear()`, gliding pills); CSS scroll-driven title hand-over;
+  idle tabs `content-visibility: hidden`; no `backdrop-filter`; vaul
+  `shouldScaleBackground={false}`; `PhoneContext.tsx` split into small contexts
+  and `usePhone()` REMOVED (use `useAppData`/`useNav`/`useNavState`/`useFinish`/
+  `useFinishAction`/`useChat`/`useSyncState`/`useLook`). `Tap` is a plain
+  button with a CSS `:active` squish (`.ph-tap`).
+- `components/phone/fx/`: WebGL live background + `fxBus` (every `haptic()`
+  emits an event; pass `visual=false` for none). Modes Vivid/Wild/Calm/Off in
+  Settings, `localStorage['jarvis.phone.fx']`.
+- `voice/HoloMascot.tsx` (three.js) replaces `OrbGL.tsx`; `voice/HoloFace.tsx`
+  (CSS) replaces `Orb.tsx` on the dock/chat. Both old files deleted.
+- Voice (from a read-only review, then verified line by line): `realtime.py`
+  no longer sends `input_failed` for a segment that transcribed empty (the
+  client's reflexive interrupt drained the input queue and could drop the next
+  segment); `end_turn` reports "couldn't make out any words" once, without
+  `input_failed`. New `tts_halted` latch: out-of-credit/auth TTS reported once,
+  later chunks captions only. Client: a chunk that fails to decode no longer
+  cancels the turn (`realtime.ts` audio case); mic `AudioContext` resumed after
+  a system suspension; phone passes `paused` to `useVoiceSession` while hidden
+  (session released, fresh one on return, transcript kept).
+- **For Codex (not changed, your uncommitted work):** `install_app`
+  (`tools_os_control.py` `INSTALL_TIMEOUT_SECONDS = 300`) is reachable from a
+  voice turn whenever system tools are on, but `realtime.py`
+  `TURN_TIMEOUT_SECONDS = 75` cancels the turn first; the cancellation closes
+  the kill-on-close Job Object and kills winget mid-install with no tool result
+  recorded. Either keep long system tools out of voice turns or give them a
+  budget below 75 s that returns an "in progress/uncertain" outcome.
+- Verified: tsc + focused eslint clean; 9/9 frontend suites (new
+  `tests/phone-motion.test.ts`); `backend/tests/voice_pipeline_test.py` 21/21
+  (3 new). Headless Chrome 412x915 against the fixture: Today dark/light, Tasks,
+  chat intro, settings, scripted voice through every state, no console errors.
+- Not done: `build:native`, APK build/install, anything on the phone (dev
+  machine was at 22.4/23.2 GB committed memory, dev server OOM'd; phone not on
+  ADB). Launcher icon and Play Store name wait for the user's pick (3 Higgsfield
+  icon concepts shown). `.claude/launch.json` phone-preview now sets
+  `NODE_OPTIONS=--max-old-space-size=3072`.
+
 ### 2026-09-25 · Claude Code · Phone app rebuilt from scratch ("Neon Candy")
 
 - User asked for a complete mobile redesign (bold, youthful, smooth micro-

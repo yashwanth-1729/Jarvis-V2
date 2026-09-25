@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
 import { ArrowRight, Brain, Hourglass, Lightbulb, Notebook, Plus, PushPin, Sparkle } from "@phosphor-icons/react";
 
 import type { NotePage } from "@/types";
 import { allPages, MEMORY_LABEL, MEMORY_TONE, pageCount, pageTone } from "../lib/derive";
-import { usePhone } from "../PhoneContext";
+import { useAppData, useNav } from "../PhoneContext";
 import { PageSheet, type PageTarget } from "../sheets/NoteSheets";
-import { Chip, SectionHead, Skeleton, Sticker } from "../ui/Bits";
+import { Chip, SectionHead, Skeleton, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
 import { Num } from "../ui/Num";
@@ -21,7 +20,8 @@ export function pageIcon(page: NotePage, size = 30) {
 }
 
 export function MemoryScreen() {
-  const { app, push } = usePhone();
+  const { app } = useAppData();
+  const { push } = useNav();
   const [editingPage, setEditingPage] = React.useState<PageTarget>(null);
   // A page created from the sheet opens once the sheet has closed, so the
   // sheet's history entry is rewound before the notebook's is pushed.
@@ -68,26 +68,21 @@ export function MemoryScreen() {
 
             <div className="ph-books">
               {pages.map((page, index) => (
-                <motion.div
-                  key={page.uid}
-                  initial={{ opacity: 0, y: 18, rotate: index % 2 ? 2 : -2 }}
-                  animate={{ opacity: 1, y: 0, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 320, damping: 24, delay: index * 0.05 }}
-                >
+                <div key={page.uid} className="ph-drop-in" style={{ ...stagger(index), "--tilt": index % 2 ? "2deg" : "-2deg" } as React.CSSProperties}>
                   <Tap className="ph-book" data-tone={pageTone(page)} onClick={() => push({ kind: "notebook", uid: page.uid, page })} squish={0.94}>
                     <span className="ph-book-icon">{pageIcon(page)}</span>
                     <span className="ph-book-count"><Num value={pageCount(page, ideas, memories, pages)} /></span>
                     <strong className="ph-book-title">{page.title}</strong>
                     <span className="ph-book-kind">{page.kind === "LONG_TERM" || page.kind === "TEMPORARY" ? "memory" : "notebook"}</span>
                   </Tap>
-                </motion.div>
+                </div>
               ))}
-              <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 320, damping: 24, delay: pages.length * 0.05 }}>
+              <div className="ph-drop-in" style={stagger(pages.length)}>
                 <Tap className="ph-book ph-book-new" onClick={() => setEditingPage("new")} squish={0.94}>
                   <Plus size={30} weight="bold" />
                   <strong className="ph-book-title">New page</strong>
                 </Tap>
-              </motion.div>
+              </div>
             </div>
 
             {recent.length > 0 && (
@@ -95,12 +90,7 @@ export function MemoryScreen() {
                 <SectionHead title="Fresh in memory" />
                 <ul className="ph-recent">
                   {recent.map((memory, index) => (
-                    <motion.li
-                      key={memory.uid ?? memory.id}
-                      initial={{ opacity: 0, x: 16 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ type: "spring", stiffness: 360, damping: 30, delay: 0.1 + index * 0.05 }}
-                    >
+                    <li key={memory.uid ?? memory.id} className="ph-slide-in" data-from="right" style={stagger(index + 2)}>
                       <Tap className="ph-recent-card" data-tone={MEMORY_TONE[memory.memory_type]} squish={0.97} onClick={() => push({ kind: "notebook", uid: memory.expires_at ? "notes-temporary" : "notes-long-term" })}>
                         <span className="ph-recent-head">
                           <Chip tone={MEMORY_TONE[memory.memory_type]}>{MEMORY_LABEL[memory.memory_type]}</Chip>
@@ -109,7 +99,7 @@ export function MemoryScreen() {
                         <strong>{memory.key_concept}</strong>
                         <p>{memory.content}</p>
                       </Tap>
-                    </motion.li>
+                    </li>
                   ))}
                 </ul>
               </section>

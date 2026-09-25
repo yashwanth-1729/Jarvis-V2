@@ -55,7 +55,8 @@
       "cwd": "frontend",
       "port": 3100,
       "env": {
-        "NEXT_PUBLIC_API_BASE": "http://127.0.0.1:8101"
+        "NEXT_PUBLIC_API_BASE": "http://127.0.0.1:8101",
+        "NODE_OPTIONS": "--max-old-space-size=3072"
       }
     }
   ]

@@ -225,6 +225,7 @@ class Microphone {
   private captureEpoch = 0;
   private sampleRate = TARGET_RATE;
   private minimumFrames = 0;
+  private releaseWake: (() => void) | null = null;
 
   // Barge-in state
   private playbackStartedAt = 0;
@@ -251,6 +252,17 @@ class Microphone {
     const context = new AudioContextCtor();
     this.context = context;
     if (context.state === "suspended") await context.resume();
+    // The system can suspend this context at any time (a call, audio focus
+    // moving elsewhere, the page going to the background). Nothing captured
+    // while suspended, so take it back as soon as the page is visible again.
+    const wake = () => {
+      if (this.context === context && context.state === "suspended" && document.visibilityState === "visible") {
+        void context.resume().catch(() => undefined);
+      }
+    };
+    context.onstatechange = wake;
+    document.addEventListener("visibilitychange", wake);
+    this.releaseWake = () => document.removeEventListener("visibilitychange", wake);
 
     this.source = context.createMediaStreamSource(this.stream);
     // ScriptProcessor is deprecated but is the only node available everywhere
@@ -444,6 +456,9 @@ class Microphone {
     this.source = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
+    this.releaseWake?.();
+    this.releaseWake = null;
+    if (this.context) this.context.onstatechange = null;
     void this.context?.close();
     this.context = null;
   }
@@ -727,10 +742,18 @@ export class VoiceSession {
         const binary = atob(String(payload.data ?? ""));
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-        await this.queue.push(
-          bytes.buffer, String(payload.text ?? ""), Number(payload.seq ?? 0),
-          payload.format === "pcm16" ? Number(payload.sample_rate) : undefined,
-        );
+        try {
+          await this.queue.push(
+            bytes.buffer, String(payload.text ?? ""), Number(payload.seq ?? 0),
+            payload.format === "pcm16" ? Number(payload.sample_rate) : undefined,
+          );
+        } catch (error) {
+          // One clip that will not decode (a truncated packet, an odd WAV)
+          // must not cancel the rest of the reply: the queue has already
+          // shown its caption and returned its playback credit. Letting this
+          // reject used to interrupt the whole turn mid-sentence.
+          console.warn("Skipped an audio chunk that could not be played", error);
+        }
         break;
       }
       case "phrase": {

@@ -6,7 +6,7 @@ import { Check, Fire, Leaf, Lightning, Play } from "@phosphor-icons/react";
 import { createTask, deleteTask, updateTask } from "@/lib/records";
 import { taskDraft } from "@/lib/recordDrafts";
 import type { Task } from "@/types";
-import { usePhone } from "../PhoneContext";
+import { useAppData, useFinishAction } from "../PhoneContext";
 import { BigInput, Choices, Field, FormError, SheetActions, Switch, TextInput, useRetained, useSheetForm, WhenPicker } from "../ui/Form";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
@@ -15,7 +15,8 @@ export type TaskTarget = Task | "new" | null;
 
 /** Add or edit a task. Completing and starting use the board's own toggle. */
 export function TaskSheet({ target, onClose }: { target: TaskTarget; onClose: () => void }) {
-  const { app, mode, finish } = usePhone();
+  const { app, mode } = useAppData();
+  const finish = useFinishAction();
   const shown = useRetained(target);
   const task = shown && shown !== "new" ? shown : null;
   const form = useSheetForm(target !== null, () => ({

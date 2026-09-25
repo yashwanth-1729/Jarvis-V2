@@ -9,6 +9,7 @@ import type { ChatSessionModel } from "@/lib/useChatSession";
 import type { RecordsMode } from "@/lib/records";
 import type { AutoSyncState } from "@/lib/useSync";
 import type { NotePage, Reminder, Task } from "@/types";
+import type { FxMode } from "./fx/LiveBackground";
 import { burstFrom } from "./lib/confetti";
 import { haptic } from "./lib/haptics";
 import type { ThemeChoice } from "./lib/theme";
@@ -21,42 +22,86 @@ export type Layer =
   | { kind: "settings" }
   | { kind: "notebook"; uid: string; view?: MemoryView; page?: NotePage };
 
-export interface PhoneModel {
+/*
+ * The phone app's state is split by how often it changes, so an update only
+ * re-renders what reads it: a streamed chat word touches chat, a tab switch
+ * touches navigation, a finished task touches the rows. One big context made
+ * every row re-render on every one of those, mid-animation.
+ */
+
+/** Records and the controller: changes when data refreshes. */
+export interface AppData {
   app: CommandCenter;
   mode: RecordsMode;
-  chat: ChatSessionModel;
-  tab: TabId;
-  go: (tab: TabId) => void;
-  planSection: PlanSection;
-  openPlan: (section: PlanSection) => void;
-  layers: Layer[];
-  push: (layer: Layer) => void;
-  pop: () => void;
-  chatOpen: boolean;
-  openChat: () => void;
-  closeChat: () => void;
-  openVoice: () => void;
   reminders: Reminder[];
   remindersLoaded: boolean;
   reloadReminders: () => Promise<void>;
+}
+
+/** Stable navigation actions. */
+export interface NavActions {
+  go: (tab: TabId) => void;
+  openPlan: (section: PlanSection) => void;
+  push: (layer: Layer) => void;
+  pop: () => void;
+  openChat: () => void;
+  closeChat: () => void;
+  openVoice: () => void;
+}
+
+/** Where the user is. */
+export interface NavState {
+  tab: TabId;
+  visited: ReadonlySet<TabId>;
+  planSection: PlanSection;
+  layers: Layer[];
+  chatOpen: boolean;
+}
+
+/** Tasks being ticked off, with their Undo window. */
+export interface FinishState {
   /** Tasks just ticked: their check is showing. */
   checked: ReadonlySet<number>;
   /** Tasks finished in the last few seconds, hidden while Undo is on offer. */
   finishing: ReadonlySet<number>;
   finish: (task: Task, origin?: Element | null) => void;
-  theme: { choice: ThemeChoice; choose: (choice: ThemeChoice) => void; dark: boolean };
-  /** Automatic sync status (mobile runs the only sync engine). */
-  sync: AutoSyncState;
 }
 
-export const PhoneContext = React.createContext<PhoneModel | null>(null);
+/** Appearance preferences. */
+export interface Look {
+  choice: ThemeChoice;
+  choose: (choice: ThemeChoice) => void;
+  dark: boolean;
+  fx: FxMode;
+  setFx: (mode: FxMode) => void;
+}
+
+export type FinishTask = FinishState["finish"];
+
+export const AppDataContext = React.createContext<AppData | null>(null);
+export const NavActionsContext = React.createContext<NavActions | null>(null);
+export const NavStateContext = React.createContext<NavState | null>(null);
+export const FinishContext = React.createContext<FinishState | null>(null);
+/** Just the stable `finish` action, so a row can finish itself without re-rendering when any other row is ticked. */
+export const FinishActionContext = React.createContext<FinishTask | null>(null);
+export const ChatContext = React.createContext<ChatSessionModel | null>(null);
+export const SyncContext = React.createContext<AutoSyncState | null>(null);
+export const LookContext = React.createContext<Look | null>(null);
 export const PhoneRootContext = React.createContext<HTMLElement | null>(null);
 
-export function usePhone(): PhoneModel {
-  const model = React.useContext(PhoneContext);
-  if (!model) throw new Error("usePhone must be used inside PhoneApp");
-  return model;
+function required<T>(value: T | null, name: string): T {
+  if (value === null) throw new Error(`${name} must be used inside PhoneApp`);
+  return value;
 }
+
+export const useAppData = () => required(React.useContext(AppDataContext), "useAppData");
+export const useNav = () => required(React.useContext(NavActionsContext), "useNav");
+export const useNavState = () => required(React.useContext(NavStateContext), "useNavState");
+export const useFinish = () => required(React.useContext(FinishContext), "useFinish");
+export const useFinishAction = () => required(React.useContext(FinishActionContext), "useFinishAction");
+export const useChat = () => required(React.useContext(ChatContext), "useChat");
+export const useSyncState = () => required(React.useContext(SyncContext), "useSyncState");
+export const useLook = () => required(React.useContext(LookContext), "useLook");
 
 /** The themed root element; sheets and menus portal into it. */
 export function usePhoneRoot(): HTMLElement | null {
@@ -114,7 +159,7 @@ const UNDO_MS = 4200;
  * `checked` flips at once (the row plays its check); `finishing` follows a
  * beat later and is what lists hide, so the row leaves after the check lands.
  */
-export function useFinishing(toggle: CommandCenter["handleToggleTask"]) {
+export function useFinishing(toggle: CommandCenter["handleToggleTask"]): FinishState {
   const [checked, setChecked] = React.useState<ReadonlySet<number>>(() => new Set());
   const [finishing, setFinishing] = React.useState<ReadonlySet<number>>(() => new Set());
   const waiting = React.useRef(new Map<number, { timer: number; hide: number; commit: () => void }>());
@@ -182,5 +227,5 @@ export function useFinishing(toggle: CommandCenter["handleToggleTask"]) {
     };
   }, []);
 
-  return { checked, finishing, finish };
+  return React.useMemo(() => ({ checked, finishing, finish }), [checked, finishing, finish]);
 }

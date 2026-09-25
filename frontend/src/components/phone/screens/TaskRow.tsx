@@ -9,18 +9,27 @@ import type { Task } from "@/types";
 import { isOverdueTask } from "../lib/derive";
 import { haptic } from "../lib/haptics";
 import { dayDelta, when } from "../lib/time";
-import { usePhone } from "../PhoneContext";
-import { Chip, Sticker } from "../ui/Bits";
+import { useAppData, useFinishAction } from "../PhoneContext";
+import { Chip, Sticker, stagger } from "../ui/Bits";
 
 const THRESHOLD = 92;
 
 /**
  * One task. Swipe right to finish it, left to start or pause it; tap the
  * circle to finish, tap the text to edit.
+ *
+ * Memoised with `done` passed in, so ticking one task re-renders that row
+ * and not the whole list. It rises in with a CSS animation and collapses out
+ * through AnimatePresence.
  */
-export function TaskRow({ task, onEdit, index = 0 }: { task: Task; onEdit: (task: Task) => void; index?: number }) {
-  const { finish, checked, app } = usePhone();
-  const done = checked.has(task.id);
+export const TaskRow = React.memo(function TaskRow({ task, done, onEdit, index = 0 }: {
+  task: Task;
+  done: boolean;
+  onEdit: (task: Task) => void;
+  index?: number;
+}) {
+  const finish = useFinishAction();
+  const { app } = useAppData();
   const checkRef = React.useRef<HTMLButtonElement>(null);
   const armed = React.useRef<"done" | "doing" | null>(null);
   const x = useMotionValue(0);
@@ -58,12 +67,10 @@ export function TaskRow({ task, onEdit, index = 0 }: { task: Task; onEdit: (task
 
   return (
     <motion.li
-      layout="position"
-      className="ph-task"
+      className="ph-task ph-rise"
+      style={stagger(index)}
       data-done={done}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0, transition: { type: "spring", stiffness: 420, damping: 30, delay: Math.min(index, 8) * 0.035 } }}
-      exit={{ opacity: 0, height: 0, marginBottom: 0, scale: 0.96, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
+      exit={{ opacity: 0, height: 0, marginBottom: 0, transform: "scale(0.96)", transition: { duration: 0.26, ease: [0.4, 0, 0.2, 1] } }}
     >
       <div className="ph-task-under" aria-hidden="true">
         <motion.span className="ph-task-under-done" style={{ opacity: doneReveal }}>
@@ -84,30 +91,20 @@ export function TaskRow({ task, onEdit, index = 0 }: { task: Task; onEdit: (task
         onDrag={onDrag}
         onDragEnd={onDragEnd}
       >
-        <motion.button
+        <button
           ref={checkRef}
           type="button"
-          className="ph-check"
+          className="ph-check ph-tap"
+          style={{ "--squish": 0.8 } as React.CSSProperties}
           data-status={done ? "COMPLETED" : task.status}
           aria-label={`Finish: ${task.title}`}
-          whileTap={{ scale: 0.8 }}
           onClick={complete}
         >
-          <motion.span
-            className="ph-check-fill"
-            initial={false}
-            animate={done ? { scale: [0.4, 1.25, 1], opacity: 1 } : { scale: 0.4, opacity: 0 }}
-            transition={{ duration: 0.38, ease: [0.34, 1.56, 0.64, 1] }}
-          />
+          <span className="ph-check-fill" />
           <svg viewBox="0 0 24 24" className="ph-check-mark" aria-hidden="true">
-            <motion.path
-              d="M6 12.5l4 4 8-9"
-              initial={false}
-              animate={{ pathLength: done ? 1 : 0, opacity: done ? 1 : 0 }}
-              transition={{ duration: 0.3, delay: done ? 0.08 : 0 }}
-            />
+            <path d="M6 12.5l4 4 8-9" pathLength={1} />
           </svg>
-        </motion.button>
+        </button>
         <button type="button" className="ph-task-body" onClick={() => onEdit(task)} aria-label={`Edit: ${task.title}`}>
           <strong className="ph-task-title">{task.title}</strong>
           <span className="ph-task-meta">
@@ -126,4 +123,4 @@ export function TaskRow({ task, onEdit, index = 0 }: { task: Task; onEdit: (task
       </motion.div>
     </motion.li>
   );
-}
+});

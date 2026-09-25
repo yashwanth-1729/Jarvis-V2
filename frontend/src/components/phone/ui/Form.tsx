@@ -202,8 +202,8 @@ export function DayPicker({ value, onChange }: { value: string; onChange: (value
             squish={0.85}
             onClick={() => onChange(String(index))}
           >
-            {day.slice(0, 1)}
-            {on && <motion.span layoutId="day-dot" className="ph-day-fill" transition={{ type: "spring", stiffness: 520, damping: 32 }} />}
+            {on && <span className="ph-day-fill" aria-hidden="true" />}
+            <span className="ph-day-letter">{day.slice(0, 1)}</span>
           </Tap>
         );
       })}
@@ -302,7 +302,7 @@ export function Switch({ on, onChange, label, hint }: { on: boolean; onChange: (
         {hint && <small>{hint}</small>}
       </span>
       <span className="ph-switch" data-on={on}>
-        <motion.span className="ph-switch-knob" layout transition={{ type: "spring", stiffness: 700, damping: 34 }} />
+        <span className="ph-switch-knob" />
       </span>
     </button>
   );
@@ -314,11 +314,11 @@ export function FormError({ message }: { message: string | null }) {
       {message && (
         <motion.p
           role="alert"
-          className="ph-form-error"
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: [0, -6, 6, -3, 0] }}
+          className="ph-form-error ph-shake"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: 0.2 }}
         >
           <Warning size={18} weight="fill" />
           {message}
@@ -343,9 +343,10 @@ export function SheetActions({ onSave, onDelete, busy, saveLabel = "Save", extra
         <motion.div
           key="confirm"
           className="ph-actions ph-actions-confirm"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
+          initial={{ opacity: 0, transform: "translateY(10px)" }}
+          animate={{ opacity: 1, transform: "translateY(0px)" }}
+          exit={{ opacity: 0, transform: "translateY(-6px)" }}
+          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
         >
           <span>Delete this for good?</span>
           <Tap className="ph-btn" onClick={() => setConfirming(false)} disabled={busy}>Keep it</Tap>
@@ -354,7 +355,14 @@ export function SheetActions({ onSave, onDelete, busy, saveLabel = "Save", extra
           </Tap>
         </motion.div>
       ) : (
-        <motion.div key="actions" className="ph-actions" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}>
+        <motion.div
+          key="actions"
+          className="ph-actions"
+          initial={{ opacity: 0, transform: "translateY(6px)" }}
+          animate={{ opacity: 1, transform: "translateY(0px)" }}
+          exit={{ opacity: 0, transform: "translateY(6px)" }}
+          transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+        >
           {onDelete && (
             <Tap className="ph-btn ph-btn-quiet-danger" aria-label="Delete" onClick={() => setConfirming(true)} disabled={busy}>
               <Trash size={20} weight="bold" />

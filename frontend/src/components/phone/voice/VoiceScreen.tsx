@@ -8,13 +8,13 @@ import { CLOUD_ENGINE_LANGUAGES, ENGINE_BY_LANGUAGE, useVoiceSession } from "@/l
 import type { RefreshDomain, VoiceSessionState } from "@/types";
 import { useBackLayer } from "../lib/backStack";
 import { haptic } from "../lib/haptics";
-import { usePhone } from "../PhoneContext";
+import { useAppData, useNav } from "../PhoneContext";
 import { Scramble } from "../ui/Scramble";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
 import { isVoiceDemo, useDemoVoice } from "./demoVoice";
-import { Orb } from "./Orb";
-import { OrbGL } from "./OrbGL";
+import { HoloMascot } from "./HoloMascot";
+import { HoloFace } from "./HoloFace";
 
 /** The bloom is a 100px circle grown from the dock orb until it covers the screen. */
 const BLOOM = 100;
@@ -42,17 +42,18 @@ const LABEL: Record<VoiceSessionState, string> = {
   speaking: "SPEAKING",
 };
 
-/** The glow canvas; the sphere itself (and the element that flies) is smaller. */
-const ORB_SIZE = 300;
-const SPHERE = 180;
+/** HOLO's canvas (room for its rings and projector); the tap target is smaller. */
+const MASCOT_SIZE = 330;
+const TARGET = 210;
 
 /**
  * JARVIS, out loud. VoiceMode's session logic, presented for a phone: the
- * whole screen blooms out of the dock orb, the orb itself flies to the
- * centre, and everything on screen follows the real session.
+ * whole screen blooms out of the dock orb, HOLO (the hologram mascot) beams
+ * in at the centre, and everything on screen follows the real session.
  */
 export function VoiceScreen() {
-  const { app, openChat } = usePhone();
+  const { app } = useAppData();
+  const { openChat } = useNav();
   const { setVoiceOpen, handleAgentRefresh, setSurface } = app;
   const close = React.useCallback(() => setVoiceOpen(false), [setVoiceOpen]);
   const onRefresh = React.useCallback((domains: string[]) => handleAgentRefresh(domains as RefreshDomain[]), [handleAgentRefresh]);
@@ -62,12 +63,19 @@ export function VoiceScreen() {
   // Leaving stops the session (and the microphone) at once, not after the
   // exit animation; coming back during the exit starts a fresh one.
   const present = useIsPresent();
-  const real = useVoiceSession({ open: present && !demo, onClose: close, onRefresh, onSurface: setSurface, reactiveLevel: false });
+  // In the background Android stops the microphone and suspends audio, which
+  // used to leave a session that looked like it was listening but heard
+  // nothing. Release it while hidden; a fresh one starts on return.
+  const visible = usePageVisible();
+  const real = useVoiceSession({ open: present && !demo, paused: !visible, onClose: close, onRefresh, onSurface: setSurface, reactiveLevel: false });
   const scripted = useDemoVoice(demo);
   const voice = demo ? scripted : real;
   useBackLayer(present, close);
 
-  const [glReady, setGlReady] = React.useState(false);
+  // HOLO needs WebGL; the CSS orb stands in only if that fails.
+  const [gl, setGl] = React.useState<"pending" | "ready" | "failed">("pending");
+  const onMascotReady = React.useCallback((ready: boolean) => setGl(ready ? "ready" : "failed"), []);
+  const [boop, setBoop] = React.useState(0);
   const [picker, setPicker] = React.useState<"language" | "voice" | null>(null);
   // Bloom from wherever the dock orb sits on this phone.
   const [bloom] = React.useState(measureBloom);
@@ -91,8 +99,9 @@ export function VoiceScreen() {
               : "Waking up";
 
   React.useEffect(() => {
-    if (state === "speaking") haptic("gesture");
-    else if (state === "thinking") haptic("select");
+    // The live background is paused under voice mode, so these are touch only.
+    if (state === "speaking") haptic("gesture", false);
+    else if (state === "thinking") haptic("select", false);
   }, [state]);
 
   const lastUserExchange = [...voice.exchanges].reverse().find((exchange) => exchange.role === "user");
@@ -114,8 +123,8 @@ export function VoiceScreen() {
         className="ph-voice-bloom"
         style={{ left: bloom.x - BLOOM / 2, top: bloom.y - BLOOM / 2, width: BLOOM, height: BLOOM }}
         variants={{
-          closed: { scale: 0.5, transition: { duration: 0.36, ease: [0.4, 0, 1, 1] } },
-          open: { scale: bloom.cover, transition: { duration: 0.62, ease: [0.16, 1, 0.3, 1] } },
+          closed: { transform: "scale(0.5)", transition: { duration: 0.36, ease: [0.4, 0, 1, 1] } },
+          open: { transform: `scale(${bloom.cover})`, transition: { duration: 0.62, ease: [0.16, 1, 0.3, 1] } },
         }}
       />
       <motion.div
@@ -146,35 +155,34 @@ export function VoiceScreen() {
       </motion.div>
 
       <div className="ph-voice-stage">
-        <motion.button
+        <button
           type="button"
-          layoutId="jarvis-orb"
           className="ph-voice-orb"
-          data-gl={glReady}
-          style={{ width: SPHERE, height: SPHERE }}
-          transition={{ type: "spring", stiffness: 210, damping: 26 }}
+          data-gl={gl}
+          style={{ width: TARGET, height: TARGET }}
           aria-label={speaking ? "Interrupt JARVIS" : label.toLowerCase()}
-          whileTap={{ scale: 0.94 }}
           onClick={() => {
+            setBoop((count) => count + 1);
             if (speaking || state === "thinking") {
-              haptic("heavy");
+              haptic("heavy", false);
               voice.interrupt();
             } else {
-              haptic("tap");
+              haptic("tap", false);
             }
           }}
         >
-          <Orb size={SPHERE} state={listeningMuted ? "muted" : state} className="ph-voice-orb-css" />
-          <OrbGL
-            className="ph-voice-orb-gl"
-            size={ORB_SIZE}
+          {gl === "failed" && <HoloFace size={TARGET - 40} state={listeningMuted ? "muted" : state} className="ph-voice-orb-css" />}
+          <HoloMascot
+            className="ph-voice-mascot"
+            size={MASCOT_SIZE}
             state={state}
             muted={muted}
+            boop={boop}
             levelRef={voice.levelRef}
             outputLevel={voice.outputLevel}
-            onReady={setGlReady}
+            onReady={onMascotReady}
           />
-        </motion.button>
+        </button>
 
         <motion.div
           className="ph-voice-readout"
@@ -318,6 +326,17 @@ export function VoiceScreen() {
       </Sheet>
     </motion.div>
   );
+}
+
+/** Whether the app is in the foreground. */
+function usePageVisible(): boolean {
+  const [visible, setVisible] = React.useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
+  React.useEffect(() => {
+    const update = () => setVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
+  return visible;
 }
 
 /** JARVIS's words, each popping in as its audio starts. */

@@ -98,11 +98,26 @@ components. Details, design and verification: `docs/mobile-app.md`.
   `handleToggleTask(id, "COMPLETED")`; hiding the page commits it immediately.
 - `SpeechQueue.outputLevel()` reads a passive `AnalyserNode` that each playback
   source feeds in addition to its unchanged destination connection;
-  `VoiceSession.outputLevel()` exposes it for the phone's WebGL orb.
+  `VoiceSession.outputLevel()` exposes it for HOLO, the phone's voice mascot
+  (`components/phone/voice/HoloMascot.tsx`, three.js).
+- Phone state is split into small contexts in `components/phone/PhoneContext.tsx`
+  (app data, navigation actions, navigation state, finishing and a stable
+  finish action, chat, sync, look); `usePhone()` no longer exists.
+- A live WebGL background (`components/phone/fx/`) sits behind every phone
+  screen. UI code never drives it directly: `fxBus.ts` carries events (every
+  `haptic()` also emits one at the last touch point), activity levels (chat
+  streaming, sync) and the current tab's palette. Its mode (Vivid, Wild, Calm,
+  Off) is a per-device preference in localStorage (`jarvis.phone.fx`).
+- Phone motion runs on the compositor: CSS transitions/animations and Web
+  Animations on `transform`/`opacity` only (springs sampled into CSS `linear()`
+  in `components/phone/lib/motion.ts`), CSS scroll-driven animations for the
+  title hand-over, and `content-visibility: hidden` for tabs that have finished
+  leaving. No `backdrop-filter` on the phone route.
 - Android `MainActivity` attaches `JarvisHapticsBridge` (`window.JarvisHaptics`),
   which maps UI feedback kinds to `performHapticFeedback`.
 - New frontend dependencies, phone route only: framer-motion, vaul, sonner,
-  @number-flow/react, @phosphor-icons/react, canvas-confetti.
+  @number-flow/react, @phosphor-icons/react, canvas-confetti. three (already a
+  dependency for the desktop core) now also draws HOLO.
 - Tool surfaces remain disabled in voice mode here, as on the desktop route.
 
 `tests/phone-fixture.mjs` is a loopback-only, in-memory API fixture for UI

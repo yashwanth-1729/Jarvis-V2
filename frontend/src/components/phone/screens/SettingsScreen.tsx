@@ -17,9 +17,13 @@ import {
   HardDrives,
   Key,
   MapPin,
+  Lightning,
   Moon,
   Plug,
+  Prohibit,
+  Sparkle,
   Sun,
+  Waves,
   WarningCircle,
   XCircle,
 } from "@phosphor-icons/react";
@@ -29,8 +33,11 @@ import { API_BASE, isNativeShell } from "@/lib/api";
 import { useSettingsModel, type SettingsModel } from "@/lib/useSettingsModel";
 import { useBackLayer } from "../lib/backStack";
 import type { Tone } from "../lib/derive";
+import type { FxMode } from "../fx/LiveBackground";
+import { emitFx } from "../fx/fxBus";
+import { haptic } from "../lib/haptics";
 import type { ThemeChoice } from "../lib/theme";
-import { usePhone } from "../PhoneContext";
+import { useAppData, useLook, useNav, useSyncState } from "../PhoneContext";
 import { Choices, Field, TextInput } from "../ui/Form";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
@@ -47,7 +54,7 @@ const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: Re
 ];
 
 export function SettingsScreen() {
-  const { pop } = usePhone();
+  const { pop } = useNav();
   const model = useSettingsModel();
   const [page, setPage] = React.useState<Page | null>(null);
   const [direction, setDirection] = React.useState(1);
@@ -66,9 +73,9 @@ export function SettingsScreen() {
             key={current.id}
             className="ph-settings-page"
             custom={direction}
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
+            initial={{ opacity: 0, transform: "translateX(36%)" }}
+            animate={{ opacity: 1, transform: "translateX(0%)" }}
+            exit={{ opacity: 0, transform: "translateX(36%)", transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
             transition={{ type: "spring", stiffness: 380, damping: 40 }}
           >
             <Screen
@@ -96,9 +103,9 @@ export function SettingsScreen() {
           <motion.div
             key="home"
             className="ph-settings-page"
-            initial={{ x: "-24%", opacity: 0.6 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "-24%", opacity: 0.4 }}
+            initial={{ opacity: 0, transform: "translateX(-18%)" }}
+            animate={{ opacity: 1, transform: "translateX(0%)" }}
+            exit={{ opacity: 0, transform: "translateX(-18%)", transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
             transition={{ type: "spring", stiffness: 380, damping: 40 }}
           >
             <Screen
@@ -115,6 +122,7 @@ export function SettingsScreen() {
               <div className="ph-stack ph-settings-body">
                 <StatusStrip />
                 <Appearance />
+                <LiveBackdrop />
                 {["Connections", "This device"].map((group) => (
                   <section key={group} className="ph-section">
                     <span className="ph-eyebrow">{group}</span>
@@ -149,7 +157,13 @@ export function SettingsScreen() {
 
       <AnimatePresence>
         {model.dirty && (
-          <motion.div className="ph-savebar" initial={{ y: 120 }} animate={{ y: 0 }} exit={{ y: 120 }} transition={{ type: "spring", stiffness: 420, damping: 34 }}>
+          <motion.div
+            className="ph-savebar"
+            initial={{ transform: "translateY(120px)" }}
+            animate={{ transform: "translateY(0px)" }}
+            exit={{ transform: "translateY(120px)" }}
+            transition={{ type: "spring", stiffness: 420, damping: 34 }}
+          >
             <span>Unsaved connection changes</span>
             <Tap className="ph-btn ph-btn-primary" onClick={() => model.save()} feel="success">
               Save & restart
@@ -162,7 +176,8 @@ export function SettingsScreen() {
 }
 
 function StatusStrip() {
-  const { app, sync } = usePhone();
+  const { app } = useAppData();
+  const sync = useSyncState();
   const online = !app.error && !app.localOnly && app.status !== "offline";
   const items = [
     { label: "Assistant", value: online ? "Online" : "Offline", ok: online },
@@ -176,18 +191,18 @@ function StatusStrip() {
   return (
     <div className="ph-status-strip">
       {items.map((item, index) => (
-        <motion.div key={item.label} className="ph-status" data-ok={item.ok} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}>
+        <div key={item.label} className="ph-status ph-rise" data-ok={item.ok} style={{ "--i": index } as React.CSSProperties}>
           <span className="ph-status-dot" />
           <small>{item.label}</small>
           <strong>{item.value}</strong>
-        </motion.div>
+        </div>
       ))}
     </div>
   );
 }
 
 function Appearance() {
-  const { theme } = usePhone();
+  const theme = useLook();
   const options: Array<{ value: ThemeChoice; label: string; icon: React.ElementType }> = [
     { value: "system", label: "System", icon: DeviceMobile },
     { value: "light", label: "Light", icon: Sun },
@@ -209,6 +224,50 @@ function Appearance() {
         ))}
       </div>
       <p className="ph-field-hint">System follows your phone. Applies instantly.</p>
+    </section>
+  );
+}
+
+const BACKDROPS: Array<{ value: FxMode; label: string; hint: string; icon: React.ElementType }> = [
+  { value: "vivid", label: "Vivid", hint: "Colour that flows and answers every tap", icon: Sparkle },
+  { value: "wild", label: "Wild", hint: "Louder flow, bigger shockwaves, sparks", icon: Lightning },
+  { value: "calm", label: "Calm", hint: "A slow, quiet glow", icon: Waves },
+  { value: "off", label: "Off", hint: "Plain background, nothing moving", icon: Prohibit },
+];
+
+/** The live background: how loud it is, or off. */
+function LiveBackdrop() {
+  const { fx, setFx } = useLook();
+  return (
+    <section className="ph-section">
+      <span className="ph-eyebrow">Live background</span>
+      <div className="ph-backdrops" role="radiogroup" aria-label="Live background">
+        {BACKDROPS.map(({ value, label, hint, icon: Icon }) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={fx === value}
+            className="ph-backdrop-choice ph-tap"
+            data-mode={value}
+            data-on={fx === value}
+            onClick={(event) => {
+              if (fx === value) return;
+              const origin = event.currentTarget;
+              setFx(value);
+              haptic("select", false);
+              // Show off the new mode right where it was chosen.
+              window.setTimeout(() => emitFx(value === "wild" ? "success" : "heavy", origin), 60);
+            }}
+          >
+            <span className="ph-backdrop-swatch" aria-hidden="true"><i /><i /><i /></span>
+            <span className="ph-backdrop-copy">
+              <strong><Icon size={15} weight="fill" /> {label}</strong>
+              <small>{hint}</small>
+            </span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

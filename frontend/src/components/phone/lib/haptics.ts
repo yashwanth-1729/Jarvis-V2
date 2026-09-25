@@ -6,7 +6,13 @@
  * vibration permission, and it follows the user's "Touch feedback" setting.
  * Anywhere else it falls back to the Vibration API, which most desktops simply
  * ignore.
+ *
+ * Every haptic is also an event for the live background, so a tap ripples, a
+ * finished task blooms and a delete sends a red shockwave, each from where
+ * the finger was.
  */
+
+import { emitFx } from "../fx/fxBus";
 
 export type HapticKind = "tap" | "select" | "success" | "warning" | "heavy" | "toggle-on" | "toggle-off" | "gesture";
 
@@ -25,8 +31,9 @@ const FALLBACK: Record<HapticKind, number | number[]> = {
   gesture: 6,
 };
 
-export function haptic(kind: HapticKind = "tap"): void {
+export function haptic(kind: HapticKind = "tap", visual = true): void {
   if (typeof window === "undefined") return;
+  if (visual) emitFx(kind);
   const bridge = (window as unknown as { JarvisHaptics?: HapticsBridge }).JarvisHaptics;
   try {
     if (bridge?.perform) {

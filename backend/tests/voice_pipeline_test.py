@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
-from app.providers.base import AudioPacket, ProviderError, Speech, Transcript
+from app.providers.base import AudioPacket, ProviderError, ProviderOutOfCredit, Speech, Transcript
 from app.providers.sarvam import SarvamTTS, SarvamSTT
 from app.services.voice_pipeline import SpeechPipeline
 from app.services import speech, voice_metrics
@@ -217,6 +217,85 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.gather(task, return_exceptions=True)
         self.assertEqual([p["seq"] for p in sent], list(range(1, 26)))
         self.assertEqual(sum(bool(p["text"]) for p in sent), 1)
+
+    async def test_empty_segment_keeps_listening_without_resetting_input(self):
+        # A breath or click at the start of an utterance transcribes to nothing
+        # while the user is still talking. That must not be reported as a
+        # failed request (the client resets input on `input_failed`, which
+        # could discard the words that follow).
+        events = []
+        class Socket:
+            query_params = {}
+            async def send_json(self, payload): events.append(payload)
+        replies = iter([Transcript(""), Transcript("what is on today")])
+        class STT:
+            async def transcribe(self, *args, **kwargs): return next(replies)
+        asked = []
+        async def agent(text, *args, **kwargs):
+            asked.append(text)
+            yield {"type": "text", "data": {"text": "Nothing much."}}
+        async def synth(*args, **kwargs): yield Speech(b"test-audio")
+        session = realtime.VoiceSession(Socket())
+        with patch.object(realtime, "get_stt_provider", return_value=STT()), patch.object(realtime, "run_turn", agent), patch.object(speech, "stream", synth):
+            await session.on_segment("YQ==")
+            self.assertFalse(any(e.get("input_failed") for e in events))
+            self.assertFalse(any(e["type"] == "error" for e in events))
+            await session.on_segment("YQ==")
+            await session.end_turn()
+            await asyncio.wait_for(session.turn, 1)
+        self.assertEqual(asked, ["what is on today"])
+
+    async def test_utterance_with_no_words_says_so_once_at_its_end(self):
+        events = []
+        class Socket:
+            query_params = {}
+            async def send_json(self, payload): events.append(payload)
+        class STT:
+            async def transcribe(self, *args, **kwargs): return Transcript("")
+        session = realtime.VoiceSession(Socket())
+        with patch.object(realtime, "get_stt_provider", return_value=STT()):
+            await session.on_segment("YQ==")
+            await session.on_segment("YQ==")
+            await session.end_turn()
+        errors = [e for e in events if e["type"] == "error"]
+        self.assertEqual(len(errors), 1)
+        self.assertNotIn("input_failed", errors[0])
+        self.assertEqual(events[-1], {"type": "state", "value": "listening"})
+        self.assertIsNone(session.turn)
+        # Silence alone (no segment at all) stays quiet.
+        events.clear()
+        await session.end_turn()
+        self.assertEqual(events, [{"type": "state", "value": "listening"}])
+
+    async def test_speech_out_of_credit_reports_once_and_falls_back_to_captions(self):
+        events = []
+        class Socket:
+            query_params = {}
+            async def send_json(self, payload): events.append(payload)
+        calls = []
+        async def synth(text, *args, **kwargs):
+            calls.append(text)
+            raise ProviderOutOfCredit("Speech credit ran out.")
+            yield  # pragma: no cover - makes this an async generator
+        async def agent(*args, **kwargs):
+            yield {"type": "text", "data": {"text": "First part of the answer. "}}
+            await asyncio.sleep(0.05)
+            yield {"type": "text", "data": {"text": "Second part of the answer. "}}
+            await asyncio.sleep(0.05)
+            yield {"type": "text", "data": {"text": "Third part of the answer."}}
+        session = realtime.VoiceSession(Socket())
+        with patch.object(realtime, "run_turn", agent), patch.object(speech, "stream", synth):
+            await asyncio.wait_for(session.handle_turn("hello", 0), 2)
+            first_turn_calls = len(calls)
+            await asyncio.wait_for(session.handle_turn("again", 0), 2)
+        self.assertTrue(session.tts_halted)
+        self.assertLess(first_turn_calls, 3, "later chunks were still sent for synthesis")
+        self.assertEqual(len(calls), first_turn_calls, "the next turn tried to synthesize again")
+        credit_errors = [e for e in events if e["type"] == "error" and "credit" in e["message"]]
+        self.assertEqual(len(credit_errors), 1)
+        captions = " ".join(e["text"] for e in events if e["type"] == "caption")
+        for part in ("First part", "Second part", "Third part"):
+            self.assertIn(part, captions)
 
     async def test_generation_is_checked_after_acquiring_send_lock(self):
         sent = []

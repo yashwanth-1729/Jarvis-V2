@@ -8,10 +8,11 @@ import { parseLocal } from "@/lib/utils";
 import type { Reminder, ScheduleEvent } from "@/types";
 import { KIND_TONE } from "../lib/derive";
 import { haptic } from "../lib/haptics";
+import { useSlidingPill } from "../lib/motion";
 import { clock, dayDelta, mondayIndex, relative, when, WEEKDAYS } from "../lib/time";
-import { usePhone, useNow, type PlanSection } from "../PhoneContext";
+import { useAppData, useNav, useNavState, useNow, type PlanSection } from "../PhoneContext";
 import { EventSheet, ReminderSheet, type EventTarget, type ReminderTarget } from "../sheets/PlanSheets";
-import { Chip, Empty, SectionHead, Skeleton, Sticker } from "../ui/Bits";
+import { Chip, Empty, SectionHead, Skeleton, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
 import { Segmented } from "../ui/Segmented";
 import { Tap } from "../ui/Tap";
@@ -23,7 +24,9 @@ const SECTION_KIND: Record<Exclude<PlanSection, "reminders">, ScheduleEvent["kin
 };
 
 export function PlanScreen() {
-  const { app, planSection, openPlan, reminders, remindersLoaded } = usePhone();
+  const { app, reminders, remindersLoaded } = useAppData();
+  const { planSection } = useNavState();
+  const { openPlan } = useNav();
   const now = useNow();
   const [day, setDay] = React.useState(() => mondayIndex(new Date()));
   const [editing, setEditing] = React.useState<EventTarget>(null);
@@ -67,9 +70,9 @@ export function PlanScreen() {
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={planSection}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
+              initial={{ opacity: 0, transform: "translateY(12px)" }}
+              animate={{ opacity: 1, transform: "translateY(0px)" }}
+              exit={{ opacity: 0, transform: "translateY(-8px)", transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
               transition={{ type: "spring", stiffness: 420, damping: 34 }}
             >
               {planSection === "routine" && (
@@ -146,6 +149,7 @@ function WeekView({ entries, day, setDay, clashes, conflicts, onEdit, onAdd, ico
 }) {
   const today = mondayIndex(new Date());
   const [direction, setDirection] = React.useState(0);
+  const { container: strip, pill } = useSlidingPill<HTMLDivElement, HTMLSpanElement>(day, ".ph-daystrip-day");
   const items = entries.filter((entry) => entry.day_of_week === day).sort((a, b) => minutesOf(a.start_time) - minutesOf(b.start_time));
   const change = (next: number) => {
     const wrapped = (next + 7) % 7;
@@ -160,7 +164,8 @@ function WeekView({ entries, day, setDay, clashes, conflicts, onEdit, onAdd, ico
 
   return (
     <>
-      <div className="ph-daystrip" role="tablist" aria-label="Day of the week">
+      <div ref={strip} className="ph-daystrip" role="tablist" aria-label="Day of the week">
+        <span ref={pill} className="ph-daystrip-pill" aria-hidden="true" />
         {WEEKDAYS.map((name, index) => {
           const has = entries.some((entry) => entry.day_of_week === index);
           const on = index === day;
@@ -178,7 +183,6 @@ function WeekView({ entries, day, setDay, clashes, conflicts, onEdit, onAdd, ico
                 if (!on) change(index);
               }}
             >
-              {on && <motion.span layoutId="daystrip-pill" className="ph-daystrip-pill" transition={{ type: "spring", stiffness: 500, damping: 34 }} />}
               <span className="ph-daystrip-letter">{name.slice(0, 3)}</span>
               <span className="ph-daystrip-dot" data-has={has} />
             </button>
@@ -196,9 +200,9 @@ function WeekView({ entries, day, setDay, clashes, conflicts, onEdit, onAdd, ico
             key={day}
             custom={direction}
             variants={{
-              enter: (dir: number) => ({ opacity: 0, x: dir * 60 }),
-              center: { opacity: 1, x: 0 },
-              exit: (dir: number) => ({ opacity: 0, x: dir * -60 }),
+              enter: (dir: number) => ({ opacity: 0, transform: `translateX(${dir * 60}px)` }),
+              center: { opacity: 1, transform: "translateX(0px)" },
+              exit: (dir: number) => ({ opacity: 0, transform: `translateX(${dir * -60}px)` }),
             }}
             initial="enter"
             animate="center"
@@ -231,11 +235,7 @@ function AgendaCard({ entry, index, clash, onEdit }: { entry: ScheduleEvent; ind
   // The room is often repeated inside the notes; show it once.
   const extra = room && notes.toLowerCase().includes(room.toLowerCase()) ? notes.split("|")[0].trim() : notes;
   return (
-    <motion.li
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30, delay: Math.min(index, 8) * 0.04 }}
-    >
+    <li className="ph-rise" style={stagger(index)}>
       <Tap className="ph-agenda-card" data-tone={KIND_TONE[entry.kind]} onClick={() => onEdit(entry)} squish={0.97}>
         <span className="ph-agenda-time">
           {entry.window ? (
@@ -259,7 +259,7 @@ function AgendaCard({ entry, index, clash, onEdit }: { entry: ScheduleEvent; ind
         </span>
         {clash && <span className="ph-agenda-sticker"><Sticker tone="amber" tilt={5}>CLASH</Sticker></span>}
       </Tap>
-    </motion.li>
+    </li>
   );
 }
 
@@ -288,7 +288,7 @@ function Blocks({ blocks, now, onEdit, onAdd }: { blocks: ScheduleEvent[]; now: 
                 const end = parseLocal(block.time_end);
                 const live = start && end && start.getTime() <= now.getTime() && now.getTime() < end.getTime();
                 return (
-                  <motion.li key={block.uid ?? block.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 400, damping: 30, delay: Math.min(index++, 8) * 0.04 }}>
+                  <li key={block.uid ?? block.id} className="ph-rise" style={stagger(index++)}>
                     <Tap className="ph-agenda-card" data-tone="orange" data-live={Boolean(live)} onClick={() => onEdit(block)} squish={0.97}>
                       <span className="ph-agenda-time">
                         <strong>{start ? clock(start).split(" ")[0] : "--"}</strong>
@@ -304,7 +304,7 @@ function Blocks({ blocks, now, onEdit, onAdd }: { blocks: ScheduleEvent[]; now: 
                       </span>
                       {live && <span className="ph-agenda-sticker"><Sticker tone="red" tilt={-4} pulse>LIVE</Sticker></span>}
                     </Tap>
-                  </motion.li>
+                  </li>
                 );
               })}
             </ol>
@@ -326,7 +326,7 @@ function Reminders({ reminders, now, onEdit, onAdd }: { reminders: Reminder[]; n
         const due = parseLocal(reminder.due_at);
         const late = Boolean(due && due.getTime() < now.getTime() && !reminder.fired_at);
         return (
-          <motion.li key={reminder.id} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} transition={{ type: "spring", stiffness: 380, damping: 30, delay: Math.min(index, 8) * 0.04 }}>
+          <li key={reminder.id} className="ph-slide-in" style={stagger(index)}>
             <Tap className="ph-ping" data-late={late} onClick={() => onEdit(reminder)} squish={0.97}>
               <span className="ph-ping-icon"><BellRinging size={20} weight="fill" /></span>
               <span className="ph-ping-body">
@@ -338,7 +338,7 @@ function Reminders({ reminders, now, onEdit, onAdd }: { reminders: Reminder[]; n
               </span>
               <NotePencil size={18} weight="bold" className="ph-ping-edit" aria-hidden="true" />
             </Tap>
-          </motion.li>
+          </li>
         );
       })}
     </ol>

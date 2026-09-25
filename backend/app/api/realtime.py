@@ -29,7 +29,7 @@ from app.llm.agent import run_turn
 from app.providers import get_stt_provider, get_tts_provider
 from app.services import speech, voice_metrics
 from app.services.voice_pipeline import SpeechPipeline
-from app.providers.base import AudioPacket, ProviderError, ProviderOutOfCredit
+from app.providers.base import AudioPacket, ProviderAuthError, ProviderError, ProviderOutOfCredit
 
 logger = logging.getLogger("jarvis.api.realtime")
 
@@ -382,6 +382,12 @@ class VoiceSession:
         #: Set when the vendor account is empty. Nothing this session does will
         #: change that, so further audio is dropped rather than re-sent.
         self.halted = False
+        #: Set when speech synthesis is out of credit or its key is refused.
+        #: Replies keep arriving as captions; nothing is sent for synthesis
+        #: again this session (each chunk used to fail and report it anew).
+        self.tts_halted = False
+        #: Segments received for the utterance being spoken, recognised or not.
+        self._segments = 0
         self.voice = DEFAULT_VOICE
         self.incremental_audio = getattr(socket, "query_params", {}).get("audio") == "pcm16"
         #: Mobile only: the client has a native English voice and will
@@ -408,6 +414,7 @@ class VoiceSession:
         while not self._input_queue.empty():
             self._input_queue.get_nowait()
         self._heard.clear()
+        self._segments = 0
         self._input_failed = False
 
     async def enqueue_input(self, message: dict[str, Any]) -> None:
@@ -471,6 +478,7 @@ class VoiceSession:
         # Whatever was heard belongs to the abandoned turn; carrying it into the
         # next utterance would prepend a fragment of the old question.
         self._heard.clear()
+        self._segments = 0
         self._generation += 1
         task = self.turn
         self.turn = None
@@ -554,7 +562,13 @@ class VoiceSession:
                 logger.warning("TTS phrase failed: %s", packet)
                 # Do not repeat the caption if some of this phrase already played.
                 if index not in revealed:
+                    revealed.add(index)
                     await emit({"type": "caption", "text": spoken_text})
+                if isinstance(packet, (ProviderOutOfCredit, ProviderAuthError)):
+                    if not self.tts_halted:
+                        self.tts_halted = True
+                        await emit({"type": "error", "message": f"{packet} Speech is off for this conversation; replies continue as text."})
+                    return
                 await emit({"type": "error", "message": "Speech was interrupted by a synthesis error; the reply is available as text."})
                 return
             if self.incremental_audio:
@@ -596,7 +610,7 @@ class VoiceSession:
                 for piece in _bound(speech_text, limit=chunk_limit):
                     await queue(piece, bound=False)
                 return
-            if seq >= MAX_SPOKEN_CHUNKS:
+            if seq >= MAX_SPOKEN_CHUNKS or self.tts_halted:
                 await emit({"type": "caption", "text": speech_text})
                 return
             spoken_any = True
@@ -850,18 +864,18 @@ class VoiceSession:
         logger.info("stt: %.2fs for %d bytes, transcript_chars=%d", time.perf_counter() - stt_started, len(audio), len(result.text))
 
         text, finished = strip_stop_word(result.text)
+        self._segments += 1
         if text:
             self._heard.append(text)
             if not settings.jarvis_voice_strict_language:
                 await self._follow_spoken_language(result)
 
         # Echo the running transcript so the screen keeps up with the speaker.
+        # A segment that came back empty says nothing yet: the next one may
+        # carry the words, and `end_turn` decides once the utterance is over.
         combined = " ".join(self._heard).strip()
         if combined:
             await self.send({"type": "transcript", "text": combined})
-        else:
-            await self.send({"type": "error", "input_failed": True, "message": "I couldn't make out any words. Please try again."})
-            await self.send({"type": "state", "value": "listening"})
 
         if finished:
             logger.info("Turn ended by stop word")
@@ -914,6 +928,7 @@ class VoiceSession:
 
     async def end_turn(self) -> None:
         """Close the utterance and run whatever has accumulated."""
+        segments, self._segments = self._segments, 0
         if self.halted:
             self._heard.clear()
             return
@@ -927,7 +942,11 @@ class VoiceSession:
 
         if not combined:
             # Silence, noise, or a bare stop word — back to listening rather
-            # than burning a model call on nothing.
+            # than burning a model call on nothing. If speech was heard but no
+            # words came out of it, say so (without `input_failed`: there is
+            # nothing to reset, and resetting could drop the user's next words).
+            if segments:
+                await self.send({"type": "error", "message": "I couldn't make out any words. Please try again."})
             await self.send({"type": "state", "value": "listening"})
             return
 

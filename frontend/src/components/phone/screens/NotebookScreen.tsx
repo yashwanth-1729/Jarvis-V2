@@ -7,9 +7,9 @@ import { CaretLeft, Clock, MagnifyingGlass, NotePencil, PencilSimple, Plus, Push
 import type { Idea, Memory, NotePage } from "@/types";
 import { allPages, isMemoryPage, MEMORY_LABEL, MEMORY_TONE, pageIdeas, pageTone } from "../lib/derive";
 import { when } from "../lib/time";
-import { usePhone, type MemoryView } from "../PhoneContext";
+import { useAppData, useNav, type MemoryView } from "../PhoneContext";
 import { MemorySheet, NoteSheet, PageSheet, type MemoryTarget, type NoteTarget, type PageTarget } from "../sheets/NoteSheets";
-import { Chip, Empty, Sticker } from "../ui/Bits";
+import { Chip, Empty, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
 import { pageIcon } from "./MemoryScreen";
@@ -35,7 +35,8 @@ const VIEW_TONE: Partial<Record<MemoryView, string>> = {
 
 /** One notes page: a memory page with role filters, or a page of notes. */
 export function NotebookScreen({ uid, initialView = "ALL", fallback }: { uid: string; initialView?: MemoryView; fallback?: NotePage }) {
-  const { app, pop } = usePhone();
+  const { app } = useAppData();
+  const { pop } = useNav();
   const [view, setView] = React.useState<MemoryView>(initialView);
   const [query, setQuery] = React.useState("");
   const [renamed, setRenamed] = React.useState<NotePage | null>(null);
@@ -125,13 +126,13 @@ export function NotebookScreen({ uid, initialView = "ALL", fallback }: { uid: st
 
           <AnimatePresence mode="popLayout" initial={false}>
             {count ? (
-              <motion.ul key={`${page.uid}-${view}`} className="ph-cards" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.ul key={`${page.uid}-${view}`} className="ph-cards" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
                 {memoryPage
                   ? shownMemories.map((memory, index) => <MemoryCard key={memory.uid ?? memory.id} memory={memory} index={index} onOpen={() => setEditingMemory(memory)} />)
                   : shownIdeas.map((idea, index) => <IdeaCard key={idea.uid ?? idea.id} idea={idea} index={index} onOpen={() => setEditingNote(idea)} />)}
               </motion.ul>
             ) : (
-              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
                 <Empty
                   icon={<NotePencil size={36} weight="duotone" />}
                   title={needle ? "Nothing matches" : view === "REVIEW" ? "Nothing to review" : "A little room for your next thought"}
@@ -163,12 +164,7 @@ export function NotebookScreen({ uid, initialView = "ALL", fallback }: { uid: st
 function MemoryCard({ memory, index, onOpen }: { memory: Memory; index: number; onOpen: () => void }) {
   const tone = MEMORY_TONE[memory.memory_type];
   return (
-    <motion.li
-      layout="position"
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 380, damping: 30, delay: Math.min(index, 8) * 0.035 }}
-    >
+    <li className="ph-rise" style={stagger(index)}>
       <Tap className="ph-memory" data-tone={tone} data-review={memory.memory_status === "CANDIDATE"} onClick={onOpen} squish={0.97} aria-label={`Edit ${memory.key_concept}`}>
         <span className="ph-memory-head">
           <Chip tone={tone}>{MEMORY_LABEL[memory.memory_type]}</Chip>
@@ -187,22 +183,17 @@ function MemoryCard({ memory, index, onOpen }: { memory: Memory; index: number; 
           )}
         </span>
       </Tap>
-    </motion.li>
+    </li>
   );
 }
 
 function IdeaCard({ idea, index, onOpen }: { idea: Idea; index: number; onOpen: () => void }) {
   return (
-    <motion.li
-      layout="position"
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 380, damping: 30, delay: Math.min(index, 8) * 0.035 }}
-    >
+    <li className="ph-rise" style={stagger(index)}>
       <Tap className="ph-idea" onClick={onOpen} squish={0.97} aria-label={`Edit ${idea.title}`}>
         <strong>{idea.title}</strong>
         <p>{idea.description || "Add a few details…"}</p>
       </Tap>
-    </motion.li>
+    </li>
   );
 }

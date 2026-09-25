@@ -78,8 +78,10 @@ release does not update its bundled frontend; a new Windows release was not buil
 
 **`/mobile/`** is the phone app and the route the Android build opens. It was
 rebuilt from scratch on 2026-09-25 ("Neon Candy"): a black canvas (or paper in
-light mode) with candy-coloured tiles, wide display type, pixel-font tags and one
-iridescent JARVIS orb in the dock. Four tabs sit around the orb:
+light mode) with candy-coloured tiles, wide display type, pixel-font tags, a
+live animated background that reacts to what you do, and HOLO — a little
+hologram robot that is JARVIS's face — on the dock's voice button. Four tabs sit
+around it:
 
 - **Today**: greeting, Ask bar (chat) and mic (voice), now/next block with live
   progress, task and reminder tiles, the JARVIS brief with a scrolling ticker,
@@ -94,11 +96,15 @@ iridescent JARVIS orb in the dock. Four tabs sit around the orb:
 
 Chat is a full-screen sheet with streaming replies, dictation, read-aloud, copy
 and clear-with-confirmation; drafts survive closing it. Voice blooms out of the
-dock orb into a WebGL orb that follows the real microphone and playback levels,
-with language/voice pickers, Mute & send, Stop reply, Type instead and the
-voice-interruption switch (half-duplex stays the default). Settings covers theme
-(saved under the same key as before), keys, connected apps, sync, location,
-runtime address and local erase. Every editor is a drag-to-dismiss sheet and
+dock and HOLO beams in as a 3D hologram whose face, eyes, mouth and antenna
+follow the real session (listening, hearing your microphone level, thinking,
+speaking to JARVIS's playback level, muted), with language/voice pickers, Mute &
+send, Stop reply, Type instead and the voice-interruption switch (half-duplex
+stays the default). The live background ripples, blooms and sweeps in
+proportion to each event (a tap, a finished task, a delete, a tab switch, a reply
+streaming in); Settings → Live background picks Vivid, Wild, Calm or Off.
+Settings also covers theme (saved under the same key as before), keys, connected
+apps, sync, location, runtime address and local erase. Every editor is a drag-to-dismiss sheet and
 every delete still asks first. Android's back button closes the top sheet or
 screen instead of leaving the app, and the Android build now plays system
 haptics through `window.JarvisHaptics`. Data ownership, sync, notifications,
@@ -320,6 +326,16 @@ Ambiguous or cross-day updates are refused without mutating another class.
    including gaps between packets. The existing optional barge-in switch remains.
    Stop/interrupt discards active audio, pending decoding and reveal timers;
    generation IDs reject obsolete turn events.
+8. A segment that transcribes to nothing (a breath, a click) is ignored; the
+   utterance is judged once it ends, and only then does "I couldn't make out any
+   words" appear, without resetting input. A clip that fails to decode on the
+   client is skipped (its caption still shows) instead of cancelling the reply.
+   If speech synthesis runs out of credit or its key is refused, the session says
+   so once and answers as captions for the rest of the conversation.
+9. The phone releases the microphone and socket while the app is in the
+   background (Android stops capture there) and starts a fresh session on
+   return, keeping the conversation on screen. The microphone's audio context is
+   also resumed whenever the system suspends it and the page is visible.
 
 `JARVIS_STREAMING_TTS=false` restores the phrase-WAV provider path. Old clients
 that do not negotiate PCM also receive WAV. If streaming fails before any audio
@@ -489,6 +505,46 @@ not a percentile benchmark, a comparison against the old implementation, or a
 microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
+
+### 2026-09-25: Smoother phone motion, a live background, HOLO, voice fixes
+
+- Motion rebuilt to run on the compositor (the user reported stutter on a
+  Snapdragon 8 Gen 5): whole-`transform` WAAPI animations and CSS
+  transitions/keyframes instead of JS-driven `x`/`y`/`scale`, `whileTap` and
+  layout animations; springs sampled into CSS `linear()` (`lib/motion.ts`);
+  gliding pills; CSS scroll-driven title/top-bar hand-over; idle tabs get
+  `content-visibility: hidden`; no `backdrop-filter`; vaul no longer scales the
+  app; state split into small contexts (`usePhone()` removed) so a chat word or
+  tab switch stops re-rendering every screen.
+- New live background (`components/phone/fx/`): a WebGL colour flow per tab that
+  reacts to every haptic event in proportion (tap ripple, success bloom, red
+  delete shockwave, tab sweep) and to activity (chat streaming, sync). Settings →
+  Live background: Vivid (default), Wild, Calm, Off (`jarvis.phone.fx`).
+- HOLO replaces the voice orb: a three.js hologram robot (`voice/HoloMascot.tsx`)
+  driven by the real session, compiled with `compileAsync`, plus a CSS version
+  (`voice/HoloFace.tsx`) on the dock button and in chat. `Orb.tsx` and
+  `OrbGL.tsx` are removed. Layers, settings and chat are see-through over the
+  live background; the dock and scrolled top bar are solid.
+- Voice reliability, from a read-only review of the whole pipeline: empty
+  transcripts of single segments no longer trigger an `input_failed` reset
+  that could drop the next words; a client audio chunk that fails to decode no
+  longer cancels the rest of the reply; a text-to-speech credit/auth failure is
+  reported once and later chunks become captions; the phone pauses the voice
+  session while hidden (fresh session on return); the microphone context is
+  resumed after a system suspension. Not changed (in another agent's
+  uncommitted work, recorded in `explanations.md`): `install_app`'s 300 s
+  installer timeout exceeds the 75 s voice turn limit.
+- Validation: TypeScript and focused ESLint clean; all 9 frontend suites pass,
+  including new `tests/phone-motion.test.ts`; `backend/tests/voice_pipeline_test.py`
+  21/21 with three new cases (empty segment, no-words utterance, speech out of
+  credit). Headless Chrome at 412x915 against `tests/phone-fixture.mjs` (sample
+  data only): Today (dark and light), Tasks, chat intro, settings with the new
+  Live background picker, and the scripted voice session through connecting,
+  listening, hearing, thinking and speaking with no console errors. Not yet
+  done: `build:native`, an APK build/install and any on-device check (the dev
+  machine was out of memory during this session; the phone was not connected).
+  The launcher icon is not changed yet: three Higgsfield concepts are waiting
+  for the user's pick.
 
 ### 2026-09-25: Phone app rebuilt from scratch ("Neon Candy")
 

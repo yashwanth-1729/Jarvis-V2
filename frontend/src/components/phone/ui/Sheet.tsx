@@ -9,12 +9,14 @@ import { usePhoneRoot } from "../PhoneContext";
 import { Tap } from "./Tap";
 
 /**
- * A bottom sheet: drag it down to dismiss, the app behind it sinks back a
- * little, and Android's back button closes it.
+ * A bottom sheet: drag it down to dismiss, and Android's back button closes
+ * it.
  *
  * vaul does the physics (velocity-aware release, scroll-vs-drag arbitration
  * inside long forms, keyboard repositioning); this wrapper adds the phone's
- * look, the history entry and a real close button.
+ * look, the history entry and a real close button. The app behind is not
+ * scaled back: that re-rasterised the whole screen at the phone's pixel
+ * density on every open, which is where sheets used to stutter.
  */
 export function Sheet({
   open,
@@ -42,8 +44,7 @@ export function Sheet({
         if (!next) onClose();
       }}
       container={root}
-      shouldScaleBackground
-      setBackgroundColorOnScale={false}
+      shouldScaleBackground={false}
       noBodyStyles
       repositionInputs
     >

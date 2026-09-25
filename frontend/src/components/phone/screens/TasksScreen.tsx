@@ -6,7 +6,7 @@ import { Confetti, MagnifyingGlass, Plus, X } from "@phosphor-icons/react";
 
 import type { Task } from "@/types";
 import { groupTasks, isOverdueTask, type TaskSort } from "../lib/derive";
-import { usePhone } from "../PhoneContext";
+import { useAppData, useFinish } from "../PhoneContext";
 import { TaskSheet, type TaskTarget } from "../sheets/TaskSheet";
 import { Empty, SectionHead, Skeleton } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
@@ -18,7 +18,8 @@ import { Num } from "../ui/Num";
 type Filter = "all" | "doing" | "late";
 
 export function TasksScreen() {
-  const { app, finishing } = usePhone();
+  const { app } = useAppData();
+  const { checked, finishing } = useFinish();
   const [filter, setFilter] = React.useState<Filter>("all");
   const [sort, setSort] = React.useState<TaskSort>("due");
   const [searching, setSearching] = React.useState(false);
@@ -67,6 +68,7 @@ export function TasksScreen() {
                 initial={{ opacity: 0, height: 0, marginBottom: 0 }}
                 animate={{ opacity: 1, height: 52, marginBottom: 12 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
               >
                 <MagnifyingGlass size={18} weight="bold" />
                 <input ref={searchRef} aria-label="Search tasks" placeholder="Find a task" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -109,7 +111,7 @@ export function TasksScreen() {
               <ul className="ph-task-list">
                 <AnimatePresence initial={false}>
                   {group.tasks.map((task: Task) => (
-                    <TaskRow key={task.uid ?? task.id} task={task} index={index++} onEdit={setEditing} />
+                    <TaskRow key={task.uid ?? task.id} task={task} done={checked.has(task.id)} index={index++} onEdit={setEditing} />
                   ))}
                 </AnimatePresence>
               </ul>

@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
 
 import { haptic } from "../lib/haptics";
+import { useSlidingPill } from "../lib/motion";
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -12,8 +12,8 @@ export interface SegmentOption<T extends string> {
 }
 
 /**
- * A row of choices with one lime pill that slides (and squashes a little on
- * the way) to the selected option.
+ * A row of choices with one lime pill that glides (stretching on the way,
+ * squashing as it lands) to the selected option.
  */
 export function Segmented<T extends string>({
   options,
@@ -28,31 +28,26 @@ export function Segmented<T extends string>({
   label: string;
   size?: "md" | "sm";
 }) {
-  const id = React.useId();
+  const active = options.findIndex((option) => option.value === value);
+  const { container, pill } = useSlidingPill<HTMLDivElement, HTMLSpanElement>(active, ".ph-seg-option");
   return (
-    <div className="ph-seg" data-size={size} role="tablist" aria-label={label}>
+    <div ref={container} className="ph-seg" data-size={size} role="tablist" aria-label={label}>
+      <span ref={pill} className="ph-seg-pill" aria-hidden="true" />
       {options.map((option) => {
-        const active = option.value === value;
+        const on = option.value === value;
         return (
           <button
             key={option.value}
             type="button"
             role="tab"
-            aria-selected={active}
+            aria-selected={on}
             className="ph-seg-option"
             onClick={() => {
-              if (active) return;
+              if (on) return;
               haptic("select");
               onChange(option.value);
             }}
           >
-            {active && (
-              <motion.span
-                layoutId={`seg-${id}`}
-                className="ph-seg-pill"
-                transition={{ type: "spring", stiffness: 520, damping: 34, mass: 0.8 }}
-              />
-            )}
             <span className="ph-seg-label">
               {option.label}
               {option.count !== undefined && option.count > 0 && <span className="ph-seg-count">{option.count}</span>}

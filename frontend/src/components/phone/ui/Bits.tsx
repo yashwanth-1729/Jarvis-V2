@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
 
 import type { Tone } from "../lib/derive";
 
@@ -43,7 +42,7 @@ export function SectionHead({ title, action, count }: { title: string; action?: 
   );
 }
 
-/** Friendly empty state with a floating emoji-free glyph. */
+/** Friendly empty state; its glyph floats (a CSS loop, so it costs no JavaScript). */
 export function Empty({ icon, title, hint, action }: {
   icon: React.ReactNode;
   title: string;
@@ -51,23 +50,12 @@ export function Empty({ icon, title, hint, action }: {
   action?: React.ReactNode;
 }) {
   return (
-    <motion.div
-      className="ph-empty"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 260, damping: 26 }}
-    >
-      <motion.span
-        className="ph-empty-glyph"
-        animate={{ y: [0, -6, 0], rotate: [0, -4, 0] }}
-        transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
-      >
-        {icon}
-      </motion.span>
+    <div className="ph-empty ph-rise">
+      <span className="ph-empty-glyph">{icon}</span>
       <h3>{title}</h3>
       {hint && <p>{hint}</p>}
       {action}
-    </motion.div>
+    </div>
   );
 }
 
@@ -82,7 +70,10 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-/** Words that arrive one after another, springing up into place. */
+/**
+ * Words that arrive one after another, springing up into place. Each word is
+ * a CSS animation with its own delay, so the cascade plays on the compositor.
+ */
 export function KineticText({ text, as: Tag = "span", className, delay = 0, step = 0.045 }: {
   text: string;
   as?: "span" | "h1" | "h2" | "p";
@@ -94,18 +85,19 @@ export function KineticText({ text, as: Tag = "span", className, delay = 0, step
   return (
     <Tag className={className} aria-label={text}>
       {words.map((word, index) => (
-        <motion.span
-          key={`${word}-${index}`}
-          aria-hidden="true"
-          className="ph-kinetic-word"
-          initial={{ opacity: 0, y: "0.6em", rotate: 4 }}
-          animate={{ opacity: 1, y: 0, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 380, damping: 22, delay: delay + index * step }}
-        >
-          {word}
-          {index < words.length - 1 ? " " : ""}
-        </motion.span>
+        <React.Fragment key={`${word}-${index}`}>
+          <span aria-hidden="true" className="ph-kinetic-word" style={{ animationDelay: `${Math.round((delay + index * step) * 1000)}ms` }}>
+            {word}
+          </span>
+          {/* The space sits between the words: inside an inline-block it would be trimmed. */}
+          {index < words.length - 1 ? " " : null}
+        </React.Fragment>
       ))}
     </Tag>
   );
+}
+
+/** Stagger index for the CSS entrance classes (`ph-rise`, `ph-slide-in`, `ph-drop-in`). */
+export function stagger(index: number): React.CSSProperties {
+  return { "--i": Math.min(index, 8) } as React.CSSProperties;
 }

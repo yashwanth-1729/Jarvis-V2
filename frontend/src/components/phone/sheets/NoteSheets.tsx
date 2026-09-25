@@ -6,7 +6,7 @@ import { createIdea, createMemory, deleteIdea, deleteMemory, deleteNotePage, sav
 import { ideaDraft, memoryDraft, pageTitle } from "@/lib/recordDrafts";
 import type { Idea, Memory, NotePage } from "@/types";
 import { MEMORY_LABEL, MEMORY_TONE, type Tone } from "../lib/derive";
-import { usePhone, type MemoryView } from "../PhoneContext";
+import { useAppData, type MemoryView } from "../PhoneContext";
 import { BigInput, Choices, Field, FormError, SheetActions, Switch, TextArea, useRetained, useSheetForm, WhenPicker } from "../ui/Form";
 import { Sheet } from "../ui/Sheet";
 
@@ -16,7 +16,7 @@ const ROLES: Memory["memory_type"][] = ["SEMANTIC", "PROCEDURAL", "EPISODIC", "P
 
 /** Add or edit something JARVIS remembers. */
 export function MemorySheet({ target, onClose }: { target: MemoryTarget; onClose: () => void }) {
-  const { app, mode } = usePhone();
+  const { app, mode } = useAppData();
   const shown = useRetained(target);
   const memory = shown && !("new" in shown) ? shown : null;
   const fresh = shown && "new" in shown ? shown : null;
@@ -137,7 +137,7 @@ export type NoteTarget = Idea | { new: true; page: string } | null;
 
 /** Add or edit a note on a notes page. */
 export function NoteSheet({ target, onClose, pages }: { target: NoteTarget; onClose: () => void; pages: NotePage[] }) {
-  const { app, mode } = usePhone();
+  const { app, mode } = useAppData();
   const shown = useRetained(target);
   const idea = shown && !("new" in shown) ? shown : null;
   const form = useSheetForm(target !== null, () =>
@@ -202,7 +202,7 @@ export function PageSheet({ target, onClose, pages, onSaved, onDeleted }: {
   onSaved: (page: NotePage) => void;
   onDeleted?: () => void;
 }) {
-  const { app, mode } = usePhone();
+  const { app, mode } = useAppData();
   const shown = useRetained(target);
   const page = shown && shown !== "new" ? shown : null;
   const form = useSheetForm(target !== null, () => ({ title: page?.title ?? "" }));

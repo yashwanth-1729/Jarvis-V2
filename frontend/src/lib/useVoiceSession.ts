@@ -37,6 +37,13 @@ const nextId = () => `x${Date.now()}-${exchangeCounter++}`;
 
 export interface VoiceSessionOptions {
   open: boolean;
+  /**
+   * Hold the session without closing voice mode: the microphone and socket are
+   * released while true, and a fresh session starts when it turns false again,
+   * keeping the conversation on screen. The phone sets it while the app is in
+   * the background, where Android stops capture and suspends audio anyway.
+   */
+  paused?: boolean;
   onClose: () => void;
   onRefresh: (domains: string[]) => void;
   /** A spoken request that named an interface to open. */
@@ -63,6 +70,7 @@ export interface VoiceSessionOptions {
  */
 export function useVoiceSession({
   open,
+  paused = false,
   onClose,
   onRefresh,
   onSurface,
@@ -142,14 +150,21 @@ export function useVoiceSession({
 
   /* ---------------------------------------------------------------- session */
 
+  // A new visit to voice mode starts a new conversation on screen...
   React.useEffect(() => {
     if (!open) return;
+    setExchanges([]);
+    setLive("");
+  }, [open]);
+
+  // ...while a session resumed after a pause keeps it.
+  const active = open && !paused;
+  React.useEffect(() => {
+    if (!active) return;
 
     let disposed = false;
     setError(null);
     setProgress("");
-    setExchanges([]);
-    setLive("");
     setMicMuted(false);
 
     const commitReply = () => {
@@ -241,7 +256,7 @@ export function useVoiceSession({
       sessionRef.current = null;
       levelRef.current = 0;
     };
-  }, [open, releaseSurface]);
+  }, [active, releaseSurface]);
 
   /* ----------------------------------------------------------------- effects */
 
