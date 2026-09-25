@@ -7,4 +7,8 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- Adaptive-icon backgrounds for the alternative launcher icons. -->
+    <color name="launcher_holo_background">#FF030407</color>
+    <color name="launcher_orb_background">#FF040406</color>
+    <color name="launcher_bubble_background">#FF060507</color>
 </resources>

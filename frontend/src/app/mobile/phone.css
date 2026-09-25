@@ -1689,6 +1689,54 @@
 .ph-backdrop-copy { display: flex; flex-direction: column; gap: 3px; padding: 0 4px; }
 .ph-backdrop-copy strong { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 800; }
 .ph-backdrop-copy small { color: var(--fg-3); font-size: 12px; line-height: 1.3; }
+
+/* ------------------------------------------------------------- design lab */
+/* Settings → Design lab: try the icon, name, background and HOLO on the phone. */
+
+.ph-lab { display: flex; flex-direction: column; gap: 26px; }
+.ph-lab-intro { color: var(--fg-2); font-size: 14.5px; line-height: 1.45; }
+.ph-lab-preview { display: flex; flex-direction: column; gap: 10px; }
+.ph-lab-home {
+  padding: 22px 12px 16px;
+  border-radius: 26px;
+  background:
+    radial-gradient(120% 90% at 15% 0%, #3b2b72, transparent 60%),
+    radial-gradient(100% 80% at 100% 100%, #0f5260, transparent 60%),
+    #0b0b14;
+}
+.ph-lab-apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ph-lab-app { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
+.ph-lab-app i,
+.ph-lab-app img { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; }
+.ph-lab-app i { background: var(--tone); color: var(--ink-on-candy); }
+.ph-lab-app img { box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.9); }
+.ph-lab-app small { max-width: 100%; overflow: hidden; color: #fff; font-size: 11.5px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+.ph-lab-store { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); }
+.ph-lab-store img { width: 64px; height: 64px; flex: none; border-radius: 16px; }
+.ph-lab-store-copy { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.ph-lab-store-copy strong { overflow: hidden; font: 800 19px/1.1 var(--font-head); letter-spacing: -0.03em; white-space: nowrap; text-overflow: ellipsis; }
+.ph-lab-store-copy small { color: var(--fg-3); font-size: 12.5px; }
+.ph-lab-install { flex: none; padding: 9px 16px; border-radius: 999px; background: var(--lime); color: var(--ink-on-candy); font-weight: 800; font-size: 13.5px; }
+.ph-lab-icons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ph-lab-icon { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px 12px; border-radius: 22px; background: var(--card); border: 2px solid var(--line); text-align: center; }
+.ph-lab-icon[data-on="true"] { border-color: var(--lime); }
+.ph[data-theme="light"] .ph-lab-icon[data-on="true"] { border-color: var(--fg); }
+.ph-lab-icon img { width: 78px; height: 78px; border-radius: 50%; box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.9); }
+.ph-lab-icon strong { font-size: 14.5px; font-weight: 800; }
+.ph-lab-icon small { color: var(--fg-3); font-size: 12px; line-height: 1.3; }
+.ph-lab-icon[data-on="true"] small { color: var(--accent-text); }
+.ph-lab-holo { display: grid; place-items: center; height: 300px; overflow: hidden; border-radius: 26px; background: radial-gradient(closest-side, rgba(34, 227, 255, 0.12), transparent), #060609; }
+.ph-lab-holo-stage { display: grid; place-items: center; width: 100%; height: 100%; }
+.ph-lab-peek { -webkit-touch-callout: none; }
+/* Holding "see the background alone" fades the whole page away. */
+.ph-screen:has(.ph-lab) > * { transition: opacity 0.18s ease; }
+.ph-screen:has(.ph-lab[data-peek="true"]) > * { opacity: 0.04; }
+.ph-lab-summary { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 24px; background: var(--card); border: 1.5px solid var(--lime); }
+.ph[data-theme="light"] .ph-lab-summary { border-color: var(--fg); }
+.ph-lab-summary ul { display: flex; flex-direction: column; gap: 8px; }
+.ph-lab-summary li { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+.ph-lab-summary li span { color: var(--fg-3); }
+.ph-lab-summary li strong { font-weight: 800; text-transform: capitalize; }
 .ph-rows { display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
 .ph-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; text-align: left; }
 .ph-row + .ph-row { border-top: 1px solid var(--line); }

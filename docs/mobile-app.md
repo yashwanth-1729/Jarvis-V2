@@ -35,7 +35,7 @@ youthful look. Nothing of the old layout was kept; every feature was.
 | Memory | Notebook cards with counts, a review callout for candidate memories, recent memories, new page. Each page opens a notebook screen: role filters with counts (Active, Knowledge, Rules, Episodes, Goals, Patterns, Review), search, memory/idea cards, floating add, rename/delete page. |
 | Chat | Full-screen sheet (drag the header down to close). Intro with prompt cards, streaming replies (word cascade, then markdown), read aloud, copy, dictation, stop, clear with confirmation, jump-to-latest. The session lives at app level, so drafts and streams survive closing it. |
 | Voice | Blooms out of the dock button and HOLO beams in at the centre (tap it to interrupt a reply; it reacts to the tap). Scrambled status label, hint, live captions, Stop reply, Mute & send, Type instead, voice-interruption switch, reply language and speaking voice pickers. |
-| Settings | Status strip (assistant, voice, sync), instant theme tiles (System/Light/Dark), live background (Vivid, Wild, Calm or Off; remembered on the device), AI & voice keys, Connected apps (the shared connectors form), Sync & backup (Supabase or SLDT), Location, Assistant connection with Test, Local storage erase (confirm step). "Save & restart" appears only when connection settings change. |
+| Settings | Design lab (below), status strip (assistant, voice, sync), instant theme tiles (System/Light/Dark), live background (Vivid, Wild, Calm or Off; remembered on the device), AI & voice keys, Connected apps (the shared connectors form), Sync & backup (Supabase or SLDT), Location, Assistant connection with Test, Local storage erase (confirm step). "Save & restart" appears only when connection settings change. |
 
 Every record editor is a bottom sheet: title as a big headline, chips for choices,
 quick date picks (In 1 hour, Tonight, Tomorrow, Next week) plus the native picker,
@@ -95,8 +95,39 @@ the app. Closing from the UI rewinds the entry. Layers register while
 `useIsPresent()` is true, so reopening one during its exit animation still gets a
 fresh entry. A restart (Settings → Save & restart) unwinds a stale entry on load.
 
+## Design lab
+
+Settings → Design lab is where the open design decisions are tried on the phone
+itself (added 2026-09-25 at the user's request, to finalize before publishing):
+
+- **App icon**: the current icon and three Higgsfield concepts (HOLO face,
+  Candy spark, Talk & done). "Put it on my home screen" switches the real
+  launcher icon: the manifest declares one `activity-alias` per icon
+  (`.LauncherClassic`, `.LauncherHolo`, `.LauncherOrb`, `.LauncherBubble`, all
+  opening `MainActivity`), and `JarvisAppIconBridge` (`window.JarvisAppIcon`,
+  `JarvisAppIcon.kt`) enables exactly one. The classic icon stays the default
+  until another is picked. Launchers take a few seconds; a home-screen shortcut
+  to the old alias can vanish and need re-adding from the app drawer.
+- **App name**: the candidate names (or your own) previewed on a mock home
+  screen and store card. Preview only; the real rename happens once chosen.
+- **Live background**: the mode picker, each tab's palette, buttons that fire
+  every reaction (tap, select, task done, delete, big press, toggle, JARVIS
+  typing) and "Hold to see the background alone".
+- **HOLO**: the mascot in every voice state (waking up, listening, hearing
+  you, thinking, speaking, muted, offline) with a simulated voice level; tap
+  it to boop it. It only draws while its stage is on screen.
+
+Picks are stored on the device (`localStorage['jarvis.phone.picks']`) and
+"Copy my picks" puts them on the clipboard as one line. Launcher icon assets:
+`gen/android/app/src/main/res/mipmap-*/ic_launcher_{holo,orb,bubble}*.png` and
+adaptive-icon XMLs in `mipmap-anydpi-v26/`, generated from the 1024 px concepts
+(subject kept inside the 66 dp safe zone); in-app previews are
+`public/brand/icon-*.{webp,png}`.
+
 ## Native bridges
 
+- App icon: `JarvisAppIconBridge` as `window.JarvisAppIcon` with `current()`
+  and `set(name)` (classic, holo, orb, bubble); see Design lab above.
 - Haptics: `MainActivity` attaches `JarvisHapticsBridge` as
   `window.JarvisHaptics`. `perform(kind)` maps tap/select/success/warning/heavy/
   toggle/gesture to `performHapticFeedback` constants (no VIBRATE permission;
@@ -190,7 +221,15 @@ behave as before. Tool surfaces stay disabled in voice mode, as on the desktop
 route. The user-supplied `public/mobile/sea-glass-loop.png` is no longer used
 by the phone app and was left in place.
 
-## Validation boundary (2026-09-25)
+## Validation boundary (2026-09-25, second round)
+
+Installed on the OnePlus CPH2767 (Android 16, WebView 153): the icon and haptics
+bridges answer, the live background renders at half resolution, HOLO's face is
+on the dock, and a launcher-icon switch from the Design lab took effect (the
+app relaunched through `.LauncherBubble`). Frame timing on the device and a real
+voice conversation were not measured in this round.
+
+## Validation boundary (2026-09-25, first round)
 
 Checked in a 375×812 emulated browser against the fixture: every screen in both
 themes, finish/undo, add/edit/approve flows, schedule and reminder creation,

@@ -14,16 +14,13 @@ import {
   DeviceMobile,
   Eye,
   EyeSlash,
+  Flask,
   HardDrives,
   Key,
   MapPin,
-  Lightning,
   Moon,
   Plug,
-  Prohibit,
-  Sparkle,
   Sun,
-  Waves,
   WarningCircle,
   XCircle,
 } from "@phosphor-icons/react";
@@ -33,18 +30,18 @@ import { API_BASE, isNativeShell } from "@/lib/api";
 import { useSettingsModel, type SettingsModel } from "@/lib/useSettingsModel";
 import { useBackLayer } from "../lib/backStack";
 import type { Tone } from "../lib/derive";
-import type { FxMode } from "../fx/LiveBackground";
-import { emitFx } from "../fx/fxBus";
-import { haptic } from "../lib/haptics";
+import { LiveBackdropPicker } from "../fx/LiveBackdropPicker";
 import type { ThemeChoice } from "../lib/theme";
 import { useAppData, useLook, useNav, useSyncState } from "../PhoneContext";
 import { Choices, Field, TextInput } from "../ui/Form";
 import { Screen } from "../ui/Screen";
 import { Tap } from "../ui/Tap";
+import { DesignLab } from "./DesignLab";
 
-type Page = "keys" | "apps" | "sync" | "location" | "runtime" | "storage";
+type Page = "lab" | "keys" | "apps" | "sync" | "location" | "runtime" | "storage";
 
 const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: React.ElementType; group: string }> = [
+  { id: "lab", title: "Design lab", hint: "Try the icons, names, backgrounds and HOLO", tone: "pink", icon: Flask, group: "Make it yours" },
   { id: "keys", title: "AI & voice keys", hint: "Sarvam, Gemini and OpenRouter", tone: "lime", icon: Key, group: "Connections" },
   { id: "apps", title: "Connected apps", hint: "Google services and MCP tools", tone: "sky", icon: Plug, group: "Connections" },
   { id: "sync", title: "Sync & backup", hint: "How your devices share data", tone: "lilac", icon: Cloud, group: "Connections" },
@@ -90,6 +87,7 @@ export function SettingsScreen() {
               eyebrow={current.hint}
             >
               <div className="ph-stack ph-settings-body">
+                {current.id === "lab" && <DesignLab />}
                 {current.id === "keys" && <KeysPage model={model} />}
                 {current.id === "apps" && <div className="ph-legacy"><ConnectorsSection /></div>}
                 {current.id === "sync" && <SyncPage model={model} />}
@@ -123,7 +121,7 @@ export function SettingsScreen() {
                 <StatusStrip />
                 <Appearance />
                 <LiveBackdrop />
-                {["Connections", "This device"].map((group) => (
+                {["Make it yours", "Connections", "This device"].map((group) => (
                   <section key={group} className="ph-section">
                     <span className="ph-eyebrow">{group}</span>
                     <div className="ph-rows">
@@ -228,46 +226,12 @@ function Appearance() {
   );
 }
 
-const BACKDROPS: Array<{ value: FxMode; label: string; hint: string; icon: React.ElementType }> = [
-  { value: "vivid", label: "Vivid", hint: "Colour that flows and answers every tap", icon: Sparkle },
-  { value: "wild", label: "Wild", hint: "Louder flow, bigger shockwaves, sparks", icon: Lightning },
-  { value: "calm", label: "Calm", hint: "A slow, quiet glow", icon: Waves },
-  { value: "off", label: "Off", hint: "Plain background, nothing moving", icon: Prohibit },
-];
-
 /** The live background: how loud it is, or off. */
 function LiveBackdrop() {
-  const { fx, setFx } = useLook();
   return (
     <section className="ph-section">
       <span className="ph-eyebrow">Live background</span>
-      <div className="ph-backdrops" role="radiogroup" aria-label="Live background">
-        {BACKDROPS.map(({ value, label, hint, icon: Icon }) => (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={fx === value}
-            className="ph-backdrop-choice ph-tap"
-            data-mode={value}
-            data-on={fx === value}
-            onClick={(event) => {
-              if (fx === value) return;
-              const origin = event.currentTarget;
-              setFx(value);
-              haptic("select", false);
-              // Show off the new mode right where it was chosen.
-              window.setTimeout(() => emitFx(value === "wild" ? "success" : "heavy", origin), 60);
-            }}
-          >
-            <span className="ph-backdrop-swatch" aria-hidden="true"><i /><i /><i /></span>
-            <span className="ph-backdrop-copy">
-              <strong><Icon size={15} weight="fill" /> {label}</strong>
-              <small>{hint}</small>
-            </span>
-          </button>
-        ))}
-      </div>
+      <LiveBackdropPicker />
     </section>
   );
 }

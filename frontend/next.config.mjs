@@ -24,6 +24,10 @@ const nextConfig = {
   // about this build is unaffected.
   experimental: {
     externalDir: true,
+    // Static generation otherwise starts one worker per CPU (15 on a 16-thread
+    // dev machine), each loading the whole app; that alone exhausted memory
+    // there. A handful of pages needs no more than four.
+    cpus: 4,
   },
 
   // jarvis-oss/sldt is authored as standard ESM TypeScript: its own relative

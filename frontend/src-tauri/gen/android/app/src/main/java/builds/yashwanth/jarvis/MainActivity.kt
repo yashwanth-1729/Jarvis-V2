@@ -51,6 +51,7 @@ class MainActivity : TauriActivity() {
       "JarvisNotifications",
     )
     webView.addJavascriptInterface(JarvisHapticsBridge(webView), "JarvisHaptics")
+    webView.addJavascriptInterface(JarvisAppIconBridge(applicationContext), "JarvisAppIcon")
     webView.evaluateJavascript(
       "window.dispatchEvent(new Event('jarvis-native-notifications-ready'))",
       null,

@@ -114,7 +114,10 @@ components. Details, design and verification: `docs/mobile-app.md`.
   title hand-over, and `content-visibility: hidden` for tabs that have finished
   leaving. No `backdrop-filter` on the phone route.
 - Android `MainActivity` attaches `JarvisHapticsBridge` (`window.JarvisHaptics`),
-  which maps UI feedback kinds to `performHapticFeedback`.
+  which maps UI feedback kinds to `performHapticFeedback`, and
+  `JarvisAppIconBridge` (`window.JarvisAppIcon`), which switches the launcher
+  icon by enabling one of four manifest `activity-alias` entries (the
+  launcher intent filter now lives on the aliases, not on `MainActivity`).
 - New frontend dependencies, phone route only: framer-motion, vaul, sonner,
   @number-flow/react, @phosphor-icons/react, canvas-confetti. three (already a
   dependency for the desktop core) now also draws HOLO.

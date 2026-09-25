@@ -103,6 +103,10 @@ send, Stop reply, Type instead and the voice-interruption switch (half-duplex
 stays the default). The live background ripples, blooms and sweeps in
 proportion to each event (a tap, a finished task, a delete, a tab switch, a reply
 streaming in); Settings → Live background picks Vivid, Wild, Calm or Off.
+Settings → Design lab tries the open design choices on the phone: it switches
+the real launcher icon between the current one and three Higgsfield concepts,
+previews name candidates on a mock home screen and store card, fires every
+background reaction on demand, and plays HOLO in each voice state.
 Settings also covers theme (saved under the same key as before), keys, connected
 apps, sync, location, runtime address and local erase. Every editor is a drag-to-dismiss sheet and
 every delete still asks first. Android's back button closes the top sheet or
@@ -540,11 +544,20 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
   credit). Headless Chrome at 412x915 against `tests/phone-fixture.mjs` (sample
   data only): Today (dark and light), Tasks, chat intro, settings with the new
   Live background picker, and the scripted voice session through connecting,
-  listening, hearing, thinking and speaking with no console errors. Not yet
-  done: `build:native`, an APK build/install and any on-device check (the dev
-  machine was out of memory during this session; the phone was not connected).
-  The launcher icon is not changed yet: three Higgsfield concepts are waiting
-  for the user's pick.
+  listening, hearing, thinking and speaking with no console errors.
+- Design lab (Settings): switchable launcher icon (four manifest aliases and a
+  `JarvisAppIcon` bridge; three Higgsfield concepts plus the classic icon),
+  name previews, background reaction buttons, HOLO in every state. Next's
+  static generation is capped at 4 workers (`experimental.cpus`) after the
+  build exhausted memory on the 16-thread dev machine.
+- Built and installed: the arm64 debug APK (45.7 MB, `build-android.mjs`,
+  which runs `build:native`) was installed with `adb install -r` on the
+  OnePlus CPH2767 (Android 16). Checked on the device over WebView DevTools:
+  `JarvisAppIcon` and `JarvisHaptics` present, the live background running at
+  182x400 for a 363x800 CSS screen (DPR 3.5), HOLO's face on the dock. The
+  user switched the launcher icon from the Design lab and relaunched from it
+  (the resumed activity was `.LauncherBubble`). Not measured: on-device frame
+  timing (the user was using the app) and a real voice conversation.
 
 ### 2026-09-25: Phone app rebuilt from scratch ("Neon Candy")
 

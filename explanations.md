@@ -128,6 +128,29 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-25 · Claude Code · Design lab + switchable launcher icon
+
+- User asked to "check each thing directly from app" before finalizing.
+  Settings → Design lab (`screens/DesignLab.tsx`): real launcher-icon switch
+  (classic + 3 Higgsfield concepts), name candidates on a mock home screen and
+  store card, live-background modes/palettes/reaction buttons and a "hold to
+  see the background alone" peek, HOLO in every voice state with simulated
+  levels. Picks in `localStorage['jarvis.phone.picks']`, "Copy my picks".
+- Android: `MainActivity` lost its LAUNCHER intent filter; four
+  `activity-alias` entries carry it (`.LauncherClassic` enabled by default,
+  `.LauncherHolo/Orb/Bubble` disabled). `JarvisAppIcon.kt` enables exactly one
+  (`window.JarvisAppIcon.current()/set()`). Icon assets are generated into
+  `res/mipmap-*` + `mipmap-anydpi-v26` (adaptive, own background colours in
+  `values/colors.xml`); previews in `frontend/public/brand/`.
+- `LiveBackdropPicker` moved to `fx/` so Settings and the lab share it.
+- `next.config.mjs`: `experimental.cpus: 4` (the build ran out of memory with
+  15 static-generation workers on the 16-thread dev machine).
+- Verified: tsc + eslint clean; APK built (45.7 MB) and installed on the
+  CPH2767; over DevTools the bridges answer and the live background runs; the
+  user switched the icon to `bubble` in the lab and relaunched through
+  `.LauncherBubble`. User's picks so far: icon bubble, background wild, name
+  still JARVIS. Not done: on-device frame timing (user was using the app).
+
 ### 2026-09-25 · Claude Code · Phone motion on the compositor, live background, HOLO, voice fixes
 
 - User: animations "a bit stucky" on a Snapdragon 8 Gen 5; wanted a live
