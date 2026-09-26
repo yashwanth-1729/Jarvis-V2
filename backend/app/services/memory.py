@@ -460,6 +460,8 @@ def action_label(tool_name: str, arguments: dict[str, Any] | None) -> str:
         "delete_record": "Delete record",
         "save_idea_or_note": "Save knowledge",
         "set_reminder": "Create reminder",
+        "set_routine": "Set weekly routine",
+        "undo_last_change": "Undo last change",
         "configure_notifications": "Change notification policy",
         "set_language": "Change spoken language",
     }

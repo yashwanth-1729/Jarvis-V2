@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal
 
@@ -126,6 +127,7 @@ from app.llm.tools_browser import (
     browser_title,
     browser_type,
 )
+from app.services import journal
 from app.services import memory as memory_service
 from app.services import notification_policy, proactive, search, weather
 
@@ -271,6 +273,43 @@ class BulkDeleteTasksInput(BaseModel):
     def _clean_matching(cls, value: str | None) -> str | None:
         cleaned = (value or "").strip()
         return cleaned or None
+
+
+class RoutineBlockInput(BaseModel):
+    day_of_week: Any
+    start_time: str = Field(min_length=1, max_length=20)
+    end_time: str | None = None
+    name: str = Field(min_length=1, max_length=300)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name cannot be blank")
+        return cleaned
+
+
+class SetRoutineInput(BaseModel):
+    """A whole weekly routine in one call.
+
+    Added 2026-09-26 after "replace my routine with this pasted timetable"
+    went wrong on the phone: 27 blocks meant a two-step delete plus 27
+    separate add calls inside an 8-round turn. The model deleted the old
+    routine, added nothing, claimed it had, and copied three college classes
+    onto the wrong day. One call, one confirmation, all or nothing.
+    """
+
+    blocks: list[RoutineBlockInput] = Field(min_length=1, max_length=150)
+    #: Replace every existing ROUTINE block (the default) or add to them.
+    replace: bool = True
+    confirmed: bool = False
+    #: The current-block count quoted in the confirmation. Required to replace.
+    expect_count: int | None = Field(default=None, ge=0)
+
+
+class UndoLastChangeInput(BaseModel):
+    pass
 
 
 class SetVoiceInput(BaseModel):
@@ -1449,6 +1488,122 @@ async def _handle_add_schedule_event(payload: AddScheduleEventInput) -> ToolOutc
     )
 
 
+_WEEKDAY_SHORT = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _per_day(blocks: list[dict[str, Any]]) -> str:
+    counts = [0] * 7
+    for block in blocks:
+        counts[block["day_of_week"]] += 1
+    return ", ".join(f"{_WEEKDAY_SHORT[day]} {count}" for day, count in enumerate(counts) if count)
+
+
+async def _handle_set_routine(payload: SetRoutineInput) -> ToolOutcome:
+    blocks: list[dict[str, Any]] = []
+    problems: list[str] = []
+    seen: set[tuple[Any, ...]] = set()
+    for index, block in enumerate(payload.blocks, start=1):
+        day = parse_weekday(block.day_of_week)
+        start = parse_clock(block.start_time)
+        end = parse_clock(block.end_time) if block.end_time else None
+        if day is None or start is None or (block.end_time and end is None) or (end is not None and end <= start):
+            problems.append(f"#{index} '{block.name}' ({block.day_of_week} {block.start_time}-{block.end_time or '?'})")
+            continue
+        key = (day, start, end, block.name.casefold())
+        if key not in seen:
+            seen.add(key)
+            blocks.append({"day_of_week": day, "start_time": start, "end_time": end, "event_name": block.name})
+    if problems:
+        more = f" (and {len(problems) - 8} more)" if len(problems) > 8 else ""
+        return ToolOutcome(
+            content=(
+                "Nothing saved. Every block needs a weekday (0=Monday..6=Sunday or its name), a "
+                "start time and an end after the start. Fix these and send the whole routine "
+                "again: " + "; ".join(problems[:8]) + more
+            ),
+            is_error=True,
+        )
+
+    count = len(await crud.list_schedules("ROUTINE")) if payload.replace else 0
+    days = _per_day(blocks)
+    if count and not payload.confirmed:
+        return ToolOutcome(
+            content=(
+                f"CONFIRMATION REQUIRED. This replaces all {count} current routine block(s) with "
+                f"these {len(blocks)} ({days}). College classes and one-off blocks are not "
+                "touched. Nothing has changed yet.\n"
+                "Tell the user both numbers and get ONE confirmation. Then call again with the "
+                f"same blocks, confirmed=true and expect_count={count}."
+            ),
+            display={"kind": "ROUTINE", "state": "pending", "current": count, "new": len(blocks), "days": days},
+        )
+    if count and payload.expect_count != count:
+        return ToolOutcome(
+            content=(
+                f"Refusing to replace: expect_count must be {count}, the number of routine blocks "
+                "the user agreed to replace. Nothing changed. Tell the user the real number and "
+                "ask again."
+            ),
+            is_error=True,
+        )
+
+    removed, added = await crud.replace_routine(blocks, replace=payload.replace)
+    college = await crud.list_schedules("COLLEGE")
+    clashes = [
+        f"{_WEEKDAY_SHORT[block['day_of_week']]} {block['start_time']} {block['event_name']} vs {row['event_name']}"
+        for block in blocks
+        for row in college
+        if crud._overlaps({**block, "kind": "ROUTINE"}, row)
+    ]
+    inner = [
+        f"{_WEEKDAY_SHORT[a['day_of_week']]} {a['start_time']} {a['event_name']} vs {b['event_name']}"
+        for i, a in enumerate(blocks)
+        for b in blocks[i + 1:]
+        if crud._overlaps({**a, "kind": "ROUTINE"}, {**b, "kind": "ROUTINE"})
+    ]
+    parts = [
+        f"Routine {'replaced' if payload.replace else 'extended'}: "
+        + (f"removed {len(removed)}, " if payload.replace else "")
+        + f"added {len(added)} ({days}). College classes untouched."
+    ]
+    if clashes:
+        parts.append("Clashes with college classes (saved anyway; tell the user): " + "; ".join(clashes[:6]) + ".")
+    if inner:
+        parts.append("These new blocks overlap each other: " + "; ".join(inner[:6]) + ".")
+    return ToolOutcome(
+        content=" ".join(parts),
+        refresh={"schedule", "brief"},
+        display={"kind": "ROUTINE", "state": "done", "removed": len(removed), "added": len(added), "days": days},
+    )
+
+
+_UNDO_REFRESH = {"tasks": "tasks", "schedules": "schedule", "memories": "memories",
+                 "ideas": "ideas", "note_pages": "ideas", "reminders": "schedule"}
+
+
+async def _handle_undo_last_change(_: UndoLastChangeInput) -> ToolOutcome:
+    result = await journal.undo_last()
+    if result is None:
+        return ToolOutcome(content="Nothing to undo: no change made by JARVIS is on record on this device.")
+    done = [
+        f"{verb} {result[key]}"
+        for key, verb in (("removed", "removed"), ("restored", "restored"), ("reverted", "reverted"))
+        if result[key]
+    ]
+    skipped = (
+        f" Left {result['skipped']} item(s) alone because they were changed after that."
+        if result["skipped"] else ""
+    )
+    return ToolOutcome(
+        content=(
+            f"Undid the last change ({result['label']}): {', '.join(done) or 'nothing needed changing'}."
+            f"{skipped} Calling this again undoes the change before it."
+        ),
+        refresh={_UNDO_REFRESH[table] for table in result["tables"]} | {"brief"},
+        display={"undone": result["label"], **{key: result[key] for key in ("removed", "restored", "reverted", "skipped")}},
+    )
+
+
 async def _handle_update_task(payload: UpdateTaskInput) -> ToolOutcome:
     fields: dict[str, Any] = {}
     if payload.title is not None:
@@ -1935,7 +2090,7 @@ async def _handle_delete_record(payload: DeleteRecordInput) -> ToolOutcome:
         )
 
     return ToolOutcome(
-        content=f"Deleted {summary}. This cannot be undone, but it can be re-created.",
+        content=f"Deleted {summary}. undo_last_change can bring it back if the user changes their mind.",
         refresh=refreshes[record_type],
         display=_confirm_display(
             "done",
@@ -3012,6 +3167,57 @@ TOOL_REGISTRY: tuple[ToolSpec, ...] = (
         },
         model=BulkDeleteScheduleInput,
         handler=_handle_bulk_delete_schedule,
+    ),
+    ToolSpec(
+        name="set_routine",
+        description=(
+            "Save a whole weekly routine in ONE call: study blocks, gym, shifts, anything "
+            "weekly that is not a college class. Use it whenever the user gives several "
+            "routine blocks or pastes a timetable; never add a timetable block by block.\n"
+            "replace=true (default) swaps out every existing ROUTINE block; replace=false "
+            "adds to them. COLLEGE classes and one-off blocks are never touched.\n"
+            "Replacing existing blocks is two-step: call without confirmed, tell the user "
+            "the two numbers you get back, then call again with the same blocks, "
+            "confirmed=true and expect_count."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "blocks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "day_of_week": {"type": "integer", "minimum": 0, "maximum": 6, "description": "0=Monday … 6=Sunday."},
+                            "start_time": {"type": "string", "description": "HH:MM, 24-hour."},
+                            "end_time": {"type": "string", "description": "HH:MM, 24-hour."},
+                            "name": {"type": "string"},
+                        },
+                        "required": ["day_of_week", "start_time", "name"],
+                    },
+                },
+                "replace": {"type": "boolean", "description": "true (default) replaces the whole routine; false adds to it."},
+                "confirmed": {"type": "boolean", "description": "Leave false first; true once the user agreed to the replacement."},
+                "expect_count": {"type": "integer", "description": "The current-block count you were given. Required with confirmed=true."},
+            },
+            "required": ["blocks"],
+        },
+        model=SetRoutineInput,
+        handler=_handle_set_routine,
+        risk="medium",
+    ),
+    ToolSpec(
+        name="undo_last_change",
+        description=(
+            "Undo the last change JARVIS made to tasks, schedule, notes, memories or "
+            "reminders (the whole turn at once); call again to go one change further back. "
+            "Only when the user asks to undo, revert or put back what you did. Items the "
+            "user edited since are left alone."
+        ),
+        input_schema={"type": "object", "properties": {}},
+        model=UndoLastChangeInput,
+        handler=_handle_undo_last_change,
+        risk="medium",
     ),
     ToolSpec(
         name="set_voice",
@@ -4113,11 +4319,30 @@ def _spec_named(name: str) -> ToolSpec | None:
     return _BY_NAME.get(name) or connectors.lookup(name)
 
 
+#: Tools that can change the user's records. Each call is bracketed by
+#: snapshots so `undo_last_change` can revert it (services/journal.py).
+JOURNALED_TOOLS = frozenset({
+    "add_task", "update_task_status", "update_task", "bulk_delete_tasks",
+    "add_schedule_event", "update_schedule_event", "bulk_delete_schedule", "set_routine",
+    "save_idea_or_note", "update_idea", "bulk_delete_notes", "delete_record", "set_reminder",
+})
+
+
+async def _journal(name: str, raw_input: dict[str, Any] | None, before: Any, batch: str | None) -> None:
+    if before is None:
+        return
+    try:
+        await journal.record(batch or uuid.uuid4().hex, memory_service.action_label(name, raw_input), before)
+    except Exception:  # noqa: BLE001 - undo bookkeeping must never break an action
+        logger.exception("Could not journal %s", name)
+
+
 async def execute_tool(
     name: str,
     raw_input: dict[str, Any] | None,
     *,
     source_turn_ref: str | None = None,
+    turn_ref: str | None = None,
 ) -> ToolOutcome:
     """Validate and run one tool call. Never raises — failures come back as
     ``is_error`` outcomes so the model can recover inside the same turn."""
@@ -4151,8 +4376,17 @@ async def execute_tool(
         )
         return ToolOutcome(content=f"Invalid input for {name} — {details}", is_error=True)
 
+    # One undo batch per turn; calls outside a turn get their own batch.
+    before = None
+    if name in JOURNALED_TOOLS:
+        try:
+            before = await journal.snapshot()
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not snapshot before %s", name)
+
     try:
         outcome = await spec.handler(payload)
+        await _journal(name, raw_input, before, turn_ref or source_turn_ref)
         try:
             await memory_service.record_action(
                 name,
@@ -4166,6 +4400,7 @@ async def execute_tool(
         return outcome
     except Exception as exc:  # noqa: BLE001 — tool failures must not kill the turn
         logger.exception("Tool %s failed", name)
+        await _journal(name, raw_input, before, turn_ref or source_turn_ref)
         try:
             await memory_service.record_action(
                 name,

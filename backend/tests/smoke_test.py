@@ -93,7 +93,9 @@ async def main() -> int:
     core = [s for s in TOOL_REGISTRY if s.capability == "core"]
     # Bump deliberately when a core tool is added — the point of pinning it is
     # to notice, since every tool costs ~230 tokens on every single request.
-    check("21 core tools registered", len(core) == 21, str(len(core)))
+    # 23 since 2026-09-26: set_routine (a whole timetable in one call) and
+    # undo_last_change.
+    check("23 core tools registered", len(core) == 23, str(len(core)))
     check("set_reminder is one of them", any(s.name == "set_reminder" for s in core))
     check(
         "configure_notifications is one of them",
@@ -728,6 +730,8 @@ async def main() -> int:
         "add_schedule_event": {"event_name": "probe", "day_of_week": 0, "start_time": "09:00"},
         "bulk_delete_tasks": {"scope": "completed"},
         "bulk_delete_schedule": {"matching": "zzz-nonexistent-zzz"},
+        "set_routine": {"blocks": [{"day_of_week": 0, "start_time": "10:00", "end_time": "11:00", "name": "probe"}]},
+        "undo_last_change": {},
         "bulk_delete_notes": {"record_type": "idea", "matching": "zzz-nonexistent-zzz"},
         "update_task": {"task_id": 999_999, "title": "probe"},
         "update_schedule_event": {

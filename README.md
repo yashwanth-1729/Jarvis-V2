@@ -287,10 +287,13 @@ Semantic vectors remain an optional future rank signal. Normal recall does not
 depend on a remote embedding request, a native Android vector extension or an
 additional provider, preserving offline operation and voice latency.
 
-There are 21 core tools for tasks, schedules, memories/ideas, brief generation,
+There are 23 core tools for tasks, schedules, memories/ideas, brief generation,
 weather, search/fetch, reminders, notification policy and voice/language selection —
 including bulk deletion for tasks, schedule entries, and memories/ideas alike, each
-gated by a two-step, count-verified confirmation.
+gated by a two-step, count-verified confirmation. `set_routine` writes a whole weekly
+routine (a pasted timetable) in one all-or-nothing call and never touches college
+classes. `undo_last_change` reverts JARVIS's last change to tasks, schedule, notes,
+memories or reminders, one turn at a time, and leaves alone anything edited since.
 Six shell/filesystem tools plus 27 computer-control tools (Windows UI Automation,
 browser DOM control, OS-level process/clipboard/hotkey control — see
 [docs/computer-control.md](docs/computer-control.md)) are offered only when desktop
@@ -514,6 +517,45 @@ not a percentile benchmark, a comparison against the old implementation, or a
 microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
+
+### 2026-09-26 (second): One-call routine, undo, a history window that holds the conversation
+
+On the phone, a "replace my routine with this pasted timetable" chat went badly:
+- the old routine was deleted and none of the 27 new blocks were saved;
+- it claimed they had been saved;
+- it copied three college classes onto Monday;
+- "undo what you did" had nothing behind it.
+
+The routine was repaired by hand on the phone. These fixes stop it happening again:
+- **`set_routine`:** the whole timetable in one call.
+  - Replacing asks once, with the exact counts, and writes all or nothing.
+  - College classes and one-off blocks are never touched.
+  - Only real clashes are reported, so back-to-back blocks are not flagged.
+- **`undo_last_change`:** JARVIS's changes are journaled per turn in a local
+  `change_journal` table, which is never synced.
+  - Undo reverts the last turn; asking again goes further back.
+  - It skips anything edited since, and restored rows beat their tombstones on
+    every device.
+  - Deleting a record no longer tells the user it cannot be undone.
+- **History:** the window is still 6 messages, but finished turns no longer
+  spend it on tool calls and tool results.
+  - One busy turn used to push a pasted timetable out of view; now it stays.
+  - A pending "CONFIRMATION REQUIRED" round stays visible for the user's "yes".
+  - On a tool-heavy test chat the history dropped from 2,367 to 241 characters.
+- **Validation:** isolated fixtures only.
+  - New `routine_undo_test` (30 checks) passed.
+  - These suites passed: memory 35, lifecycle 9, delete 16, records 46, bulk
+    delete 20, schedule update, scheduler 37, context budget 7, tool-budget
+    finalization 5, receipt order 5, identity 9, reminder lead 22,
+    notification policy 7, system tools 109 and the full smoke test (now 23
+    core tools).
+  - The arm64 debug APK (48.5 MB) was built and installed on the CPH2767.
+  - After a restart, the phone's backend reached "SQLite ready", which only
+    happens after the v8 migration. It seeded 46 schedule rows (the 27 repaired
+    routine blocks plus 19 college classes), showed no tracebacks, and
+    `/api/health` answered ok.
+  - Not yet done on the phone: a real chat that replaces a routine or undoes a
+    change.
 
 ### 2026-09-26: Memory fixes
 

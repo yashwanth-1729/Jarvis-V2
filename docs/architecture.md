@@ -353,6 +353,31 @@ before the new user turn; the model cannot resume an abandoned mutation batch as
 though it belonged to the new request. Pasted context alone does not authorize
 splitting its contents into durable notes.
 
+The history window (`JARVIS_LLM_HISTORY_MESSAGES`, 6) counts only what was
+said. Finished turns reach the model as the user's message and the final reply
+text; their tool calls and results are dropped (`agent._conversation_only`).
+There is one exception: the previous turn's last tool round stays, uncounted,
+when its result is still waiting on a `CONFIRMATION REQUIRED` answer, so the
+user's "yes" can repeat that exact call. Tool effects stay visible through the
+state block, the action ledger and the reply that reported them.
+
+`set_routine` writes a whole weekly routine in one transaction
+(`crud.replace_routine`). Replacing existing ROUTINE rows goes through the same
+count-and-confirm gate as bulk deletes and tombstones every row it removes.
+COLLEGE and SESSION rows are never touched.
+
+Undo is a local change journal (`services/journal.py`, schema v8
+`change_journal`). Each mutating tool call is bracketed by snapshots of tasks,
+schedules, memories, ideas, note pages and reminders; the difference is stored
+under the turn's batch id. `undo_last_change` reverts the newest batch that is
+not yet undone and walks back one batch per call. Rows are keyed by `uid`,
+because Android renumbers ids from uids on every seed. A row is reverted only
+if its `updated_at` still matches what JARVIS wrote. Restored rows get a fresh
+`updated_at` and lose their local tombstone, so they win over the earlier
+deletion on the phone and in Supabase. The journal is never synced or seeded
+over. It keeps 50 batches or 14 days, and skips rows that lapse on their own
+(ended Blocks, expired rules).
+
 `update_schedule_event` no longer treats a model-supplied SQLite row ID as enough
 authority to mutate a schedule. The request must include a human-readable current
 name or course code, and current weekday when weekday matters. An optional ID is

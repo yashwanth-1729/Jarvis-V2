@@ -128,6 +128,29 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-26 · Claude Code · set_routine, undo, conversation-only history
+
+- **New tools (23 core now):**
+  - `set_routine`: a whole weekly routine in one call, one confirmation,
+    atomic via `crud.replace_routine`; never touches COLLEGE or SESSION rows.
+  - `undo_last_change`: reverts JARVIS's last turn of changes.
+- **Undo journal:** `services/journal.py` plus schema v8 `change_journal`,
+  local only.
+  - `execute_tool` snapshots the record tables around every tool in
+    `JOURNALED_TOOLS`.
+  - The agent passes a per-turn `turn_ref`, so a turn is one batch.
+  - Rows are keyed by uid and reverted only if `updated_at` still matches.
+- **History:** the window is still 6 (the user explicitly doesn't want it
+  raised, for token cost). Finished turns no longer spend it on tool traffic.
+  A pending CONFIRMATION REQUIRED round is kept, uncounted, for the "yes".
+- **Tests:**
+  - New `tests/routine_undo_test.py` (30 checks).
+  - Two agent tests: their `execute_tool` fakes now accept `turn_ref`.
+  - `smoke_test`: 23 core tools and probes for the two new tools. I committed
+    only my `smoke_test` and `tools.py` hunks; your uncommitted `install_app`
+    lines stay in the working tree.
+- **Verified:** all isolated suites listed in the README entry pass.
+
 ### 2026-09-26 · Claude Code · Manual routine repair on the phone
 
 - **What went wrong:** on the phone (gpt-4.1-nano), a "replace my routine with this

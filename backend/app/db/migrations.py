@@ -17,7 +17,7 @@ import aiosqlite
 logger = logging.getLogger("jarvis.db.migrations")
 
 #: Bump when adding a migration below.
-TARGET_VERSION = 7
+TARGET_VERSION = 8
 
 
 async def _columns(conn: aiosqlite.Connection, table: str) -> set[str]:
@@ -419,6 +419,32 @@ async def _v7_reminder_lead(conn: aiosqlite.Connection) -> None:
         await conn.execute("ALTER TABLE reminders ADD COLUMN target_at DATETIME")
 
 
+async def _v8_change_journal(conn: aiosqlite.Connection) -> None:
+    """Local undo journal for JARVIS's own changes (services/journal.py).
+
+    Never synced and never seeded over: the Android reseed replaces only the
+    synced tables and their sync bookkeeping.
+    """
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS change_journal (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch       TEXT NOT NULL,
+            label       TEXT NOT NULL,
+            table_name  TEXT NOT NULL,
+            row_key     TEXT NOT NULL,
+            before_row  TEXT,
+            after_row   TEXT,
+            created_at  DATETIME NOT NULL,
+            undone_at   DATETIME
+        )
+        """
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_change_journal_batch ON change_journal (batch)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[aiosqlite.Connection], Awaitable[None]]] = {
     1: _v1_schedule_kinds,
     2: _v2_sync_identity,
@@ -427,6 +453,7 @@ MIGRATIONS: dict[int, Callable[[aiosqlite.Connection], Awaitable[None]]] = {
     5: _v5_notes_pages,
     6: _v6_systematic_memory,
     7: _v7_reminder_lead,
+    8: _v8_change_journal,
 }
 
 

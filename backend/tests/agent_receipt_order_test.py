@@ -79,7 +79,7 @@ async def main() -> int:
 
     import app.llm.agent as agent
 
-    async def fake_execute_tool(name, arguments, *, source_turn_ref=None):  # noqa: ANN001
+    async def fake_execute_tool(name, arguments, *, source_turn_ref=None, turn_ref=None):  # noqa: ANN001
         assert (name, arguments, source_turn_ref) == ("fixture_tool", {}, "fixture-call-1")
         return ToolOutcome(content="fixture action completed")
 

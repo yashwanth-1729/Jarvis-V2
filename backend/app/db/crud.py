@@ -829,6 +829,60 @@ async def delete_schedules_where(
     return doomed
 
 
+async def replace_routine(
+    blocks: Sequence[dict[str, Any]], *, replace: bool
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Write a weekly routine in one transaction: all of it or none of it.
+
+    ``replace`` first removes every ROUTINE row, with tombstones so the removal
+    syncs. COLLEGE and SESSION rows are never touched. Returns
+    ``(removed rows, added rows)``.
+    """
+    stamp = now_iso()
+    removed: list[dict[str, Any]] = []
+    added_ids: list[int] = []
+    async with db.write() as conn:
+        await conn.execute("BEGIN IMMEDIATE")
+        try:
+            if replace:
+                async with conn.execute("SELECT * FROM schedules WHERE kind = 'ROUTINE'") as cursor:
+                    removed = [dict(row) for row in await cursor.fetchall()]
+                for row in removed:
+                    if not row.get("uid"):
+                        continue
+                    await conn.execute(
+                        "INSERT INTO sync_tombstones (table_name, uid, deleted_at) VALUES ('schedules', ?, ?) "
+                        "ON CONFLICT(table_name, uid) DO UPDATE SET deleted_at = MAX(deleted_at, excluded.deleted_at)",
+                        (row["uid"], max(stamp, row.get("updated_at") or stamp)),
+                    )
+                    await conn.execute(
+                        "DELETE FROM sync_pending WHERE table_name = 'schedules' AND uid = ?", (row["uid"],)
+                    )
+                await conn.execute("DELETE FROM schedules WHERE kind = 'ROUTINE'")
+            for block in blocks:
+                cursor = await conn.execute(
+                    """
+                    INSERT INTO schedules (uid, event_name, kind, time_start, time_end,
+                                           day_of_week, start_time, end_time,
+                                           location, notes, created_at, updated_at)
+                    VALUES (?, ?, 'ROUTINE', NULL, NULL, ?, ?, ?, NULL, NULL, ?, ?)
+                    """,
+                    (new_uid(), block["event_name"], block["day_of_week"], block["start_time"],
+                     block.get("end_time"), stamp, stamp),
+                )
+                added_ids.append(cursor.lastrowid)
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
+    added: list[dict[str, Any]] = []
+    if added_ids:
+        placeholders = ",".join("?" for _ in added_ids)
+        rows = await db.fetch_all(f"SELECT * FROM schedules WHERE id IN ({placeholders})", added_ids)
+        added = [decorated for row in rows if (decorated := _decorate(row)) is not None]
+    return removed, added
+
+
 # ---------------------------------------------------------------------------
 # ideas / notes
 # ---------------------------------------------------------------------------

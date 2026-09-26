@@ -86,7 +86,7 @@ async def main() -> int:
     original_limit = settings.jarvis_max_tool_iterations
     settings.jarvis_max_tool_iterations = 2
 
-    async def fake_execute(name, arguments, *, source_turn_ref=None):  # noqa: ANN001
+    async def fake_execute(name, arguments, *, source_turn_ref=None, turn_ref=None):  # noqa: ANN001
         return ToolOutcome(content=f"{name} completed for {source_turn_ref}")
 
     async def no_candidate(_text: str):

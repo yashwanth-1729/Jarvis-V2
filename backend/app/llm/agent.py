@@ -24,6 +24,7 @@ import json
 import logging
 import re
 import time
+import uuid
 from typing import Any, AsyncIterator
 
 from app.core.config import settings
@@ -67,6 +68,85 @@ def _trim_to_safe_boundary(messages: list[dict[str, Any]]) -> list[dict[str, Any
         if message.get("role") == "user" and not _has_tool_role(message):
             return messages[index:]
     return []
+
+
+#: A tool result still waiting on the user. The next turn ("yes") has to repeat
+#: that call with the same arguments, so it must still be able to see it.
+_AWAITING_USER = "CONFIRMATION REQUIRED"
+
+
+def _conversation_only(messages: list[dict[str, Any]]) -> list[tuple[dict[str, Any], bool]]:
+    """Earlier turns as what was said, without their tool traffic.
+
+    Returns ``(message, counted)`` pairs; see `_window`.
+
+    The history window used to count every tool call and tool result. One busy
+    turn ("replace my routine with this", then a delete and a string of adds)
+    filled it with tool receipts, so the next turn no longer saw the timetable
+    the user had pasted. Asked to "just add these", the model answered "please
+    provide the routine details" (phone, 2026-09-26). The window keeps its
+    size; it now holds the conversation. Old tool results were also the bulkiest
+    thing in it, so this costs fewer tokens, not more. What the tools did stays
+    visible where it matters: the state block, the action ledger and the reply
+    that reported it.
+
+    One exception rides along uncounted: the previous turn's last tool round
+    when it is waiting on a confirmation, because the user's "yes" must repeat
+    that exact call.
+    """
+    users = [i for i, m in enumerate(messages) if m.get("role") == "user" and not _has_tool_role(m)]
+    keep: set[int] = set()
+    if len(users) >= 2:
+        start, end = users[-2], users[-1]
+        calls = [
+            i for i in range(start + 1, end)
+            if messages[i].get("role") == "assistant" and messages[i].get("tool_calls")
+        ]
+        if calls:
+            results = []
+            for i in range(calls[-1] + 1, end):
+                if not _has_tool_role(messages[i]):
+                    break
+                results.append(i)
+            if any(_AWAITING_USER in str(messages[i].get("content") or "") for i in results):
+                keep = {calls[-1], *results}
+
+    kept: list[tuple[dict[str, Any], bool]] = []
+    for index, message in enumerate(messages):
+        if index in keep:
+            kept.append((message, False))
+            continue
+        if _has_tool_role(message):
+            continue
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            text = message.get("content")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            message = {"role": "assistant", "content": text.strip()}
+        if (
+            kept and kept[-1][1]
+            and message.get("role") == "assistant" and kept[-1][0].get("role") == "assistant"
+            and isinstance(message.get("content"), str)
+            and isinstance(kept[-1][0].get("content"), str)
+        ):
+            joined = f"{kept[-1][0]['content']} {message['content']}".strip()
+            kept[-1] = ({"role": "assistant", "content": joined}, True)
+            continue
+        kept.append((message, True))
+    return kept
+
+
+def _window(pairs: list[tuple[dict[str, Any], bool]], limit: int) -> list[dict[str, Any]]:
+    """The last ``limit`` counted messages, plus uncounted ones between them."""
+    counted = 0
+    start = len(pairs)
+    for index in range(len(pairs) - 1, -1, -1):
+        if pairs[index][1]:
+            if counted == limit:
+                break
+            counted += 1
+        start = index
+    return [message for message, _ in pairs[start:]]
 
 
 def _close_interrupted_tool_cycles(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -318,10 +398,11 @@ async def _load_history() -> list[dict[str, Any]]:
                 text = strip_time_opener(text)
             messages.append({"role": row["role"], "content": text})
     cleaned = _close_interrupted_tool_cycles(_defuse_clock_only_replies(messages))
-    # Only the last N reach the model -- see `jarvis_llm_history_messages`.
+    # Only the last N reach the model -- see `jarvis_llm_history_messages` --
+    # and N counts what was said, not tool traffic (see `_conversation_only`).
     # Trimmed to a safe boundary a second time: cutting to the last N can
     # itself land mid tool-cycle even though `cleaned` already started clean.
-    windowed = cleaned[-settings.jarvis_llm_history_messages :]
+    windowed = _window(_conversation_only(cleaned), settings.jarvis_llm_history_messages)
     return _trim_to_safe_boundary(windowed)
 
 
@@ -592,6 +673,8 @@ async def run_turn(
 
     user_payload = {"role": "user", "content": user_text}
     await crud.append_chat_message("user", user_text, user_payload)
+    # Everything this turn changes is one undo batch (services/journal.py).
+    turn_ref = uuid.uuid4().hex
     inferred_candidate = None
     try:
         inferred_candidate = await memory_service.capture_inferred_candidate(user_text)
@@ -907,7 +990,7 @@ async def run_turn(
                     ok = False
                 else:
                     outcome = await execute_tool(
-                        call.name, arguments, source_turn_ref=call.id
+                        call.name, arguments, source_turn_ref=call.id, turn_ref=turn_ref
                     )
                     outcome_text = outcome.content
                     ok = not outcome.is_error

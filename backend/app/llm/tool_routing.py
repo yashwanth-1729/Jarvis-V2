@@ -1,7 +1,7 @@
 """Picks which tool schemas a turn actually needs, instead of sending every
 tool on every request.
 
-Scoped to the "core" tool set only (the 21 tools active whenever
+Scoped to the "core" tool set only (the 23 tools active whenever
 ``system_tools_enabled`` is off, which is every Android turn -- see
 ``config.system_tools_enabled``). The 35 desktop-only "system" tools
 (computer control, browser, filesystem) are a separate, unmeasured problem on
@@ -34,7 +34,7 @@ TOOL_GROUPS: dict[str, tuple[str, ...]] = {
     "tasks": ("add_task", "update_task_status", "update_task", "bulk_delete_tasks"),
     "schedule": (
         "add_schedule_event", "update_schedule_event", "bulk_delete_schedule",
-        "get_dashboard_summary",
+        "set_routine", "get_dashboard_summary",
     ),
     "notes": ("save_idea_or_note", "update_idea", "bulk_delete_notes"),
     "memory": ("search_memory", "generate_proactive_brief"),
@@ -45,6 +45,7 @@ TOOL_GROUPS: dict[str, tuple[str, ...]] = {
     # ("delete that task", "remove this note"), so it rides with any
     # deletion-shaped phrase rather than living in one domain's group.
     "record": ("delete_record",),
+    "undo": ("undo_last_change",),
 }
 
 _KEYWORDS: dict[str, re.Pattern[str]] = {
@@ -82,6 +83,10 @@ _KEYWORDS: dict[str, re.Pattern[str]] = {
         r"nudge me|remember(?:\s+\w+){0,2}\s+to)\b", re.I
     ),
     "record": re.compile(r"\b(delete|remove|get rid of|clear)\b", re.I),
+    "undo": re.compile(
+        r"\b(undo|revert|restore|put (it|that|them|those) back|take (it|that) back|"
+        r"go back|reverse (it|that))\b", re.I
+    ),
 }
 
 def _assert_full_coverage() -> None:

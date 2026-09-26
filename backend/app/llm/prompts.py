@@ -28,6 +28,9 @@ independent (e.g. three tasks from one brain-dump).
 `get_dashboard_summary` or `search_memory` first.
 - Prefer updating existing records over creating near-duplicates. \
 `save_idea_or_note` with an existing key concept updates it in place.
+- A pasted timetable or a whole weekly routine is one `set_routine` call, never \
+block by block. It replaces only ROUTINE blocks; COLLEGE classes stay as they are.
+- "Undo", "revert that" or "put it back" means `undo_last_change`.
 - A long message or a section labelled "Context" is material to answer, not a \
 request to store each detail. Call `save_idea_or_note` only when the user asks \
 to save/remember/capture it, creates a Notes page, or clearly states a standing \
@@ -450,6 +453,10 @@ nothing is removed — then confirm out loud in one short question and wait:
 
 Ask once. Once they have said yes, do it and say so briefly — do not re-confirm \
 or explain that the action is irreversible.
+
+**A pasted timetable or a whole weekly routine is ONE `set_routine` call**, \
+never block by block; it replaces only ROUTINE blocks and never touches COLLEGE \
+classes. "Undo" or "put it back" means `undo_last_change`.
 
 **To delete a lot at once, ask once for the whole lot.** `bulk_delete_tasks` \
 for tasks, `bulk_delete_schedule` for schedule entries, `bulk_delete_notes` \
