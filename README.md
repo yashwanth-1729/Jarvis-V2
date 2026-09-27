@@ -518,6 +518,34 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-09-28: GPT-6 Luna for every language, a near-invisible sync status
+
+- **GPT-6 Luna for every language.** The chat model is `openai/gpt-6-luna`,
+  Telugu and Hindi included, at the user's request.
+  - `OPENROUTER_MODEL` defaults to it (the phone has no `.env`), and the
+    laptop `.env` was switched too.
+  - `OPENROUTER_INDIC_MODEL` is now empty; it used to send Indic replies to
+    gemini-2.5-flash.
+  - Price: $0.10 / $0.50 per million tokens, against nano's $0.10 / $0.40 and
+    Gemini's $0.30 / $2.50.
+  - A live probe through OpenRouter made a correct `set_reminder` call and a
+    natural Telugu reply. By default Luna reasons first (5.45s for the tool
+    turn). GPT-5/6 requests now carry reasoning effort "minimal", and the same
+    turn took 1.57s. Turns that ask for more effort keep it.
+  - Laptop typed turns stay on deepseek-v4-pro.
+  - Luna has not yet been through the 12-action benchmark that picked nano.
+- **Sync status is nearly invisible.** The spinning icon in Today's top bar and
+  the live background's reaction to syncs are gone. What remains is a 4 px dot
+  in the top-right corner: a faint pulse while syncing, dim amber while waiting
+  to retry, nothing otherwise. Settings → Sync & backup keeps the details.
+- **Validation (source only):**
+  - TypeScript and ESLint passed.
+  - OpenRouter transport passed 41 checks, including two new reasoning checks.
+  - Smoke, context budget and routine/undo passed.
+  - The APK is not built or installed yet. The laptop had 1.9 GB of free
+    commit memory, the build needs 3 GB, and the phone was not connected.
+
+
 ### 2026-09-26 (second): One-call routine, undo, a history window that holds the conversation
 
 On the phone, a "replace my routine with this pasted timetable" chat went badly:

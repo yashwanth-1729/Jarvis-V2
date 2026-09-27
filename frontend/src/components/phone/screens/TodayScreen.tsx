@@ -12,14 +12,13 @@ import {
   MapPin,
   Microphone,
   Sparkle,
-  WarningCircle,
   WifiSlash,
 } from "@phosphor-icons/react";
 
 import type { Task } from "@/types";
 import { focusTasks, isOverdueTask, KIND_LABEL, KIND_TONE, nowAndNext, upcomingReminders, type Occurrence } from "../lib/derive";
 import { clock, duration, greeting, minutesUntil, relative } from "../lib/time";
-import { useAppData, useFinish, useNav, useNow, useSyncState, type PlanSection } from "../PhoneContext";
+import { useAppData, useFinish, useNav, useNow, type PlanSection } from "../PhoneContext";
 import { TaskSheet, type TaskTarget } from "../sheets/TaskSheet";
 import { Chip, Empty, KineticText, SectionHead, Skeleton, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
@@ -35,7 +34,6 @@ export function TodayScreen() {
   const { app, reminders } = useAppData();
   const { go, openChat, openVoice, openPlan, push } = useNav();
   const { checked, finishing } = useFinish();
-  const sync = useSyncState();
   const now = useNow();
   const [editing, setEditing] = React.useState<TaskTarget>(null);
   const state = app.state;
@@ -56,12 +54,9 @@ export function TodayScreen() {
       tone="lime"
       leading={<span className="ph-date-tag">{date}</span>}
       actions={
-        <>
-          <SyncBadge phase={sync.phase} message={sync.message} />
-          <Tap className="ph-icon-btn" aria-label="Settings" onClick={() => push({ kind: "settings" })}>
-            <GearSix size={22} weight="bold" />
-          </Tap>
-        </>
+        <Tap className="ph-icon-btn" aria-label="Settings" onClick={() => push({ kind: "settings" })}>
+          <GearSix size={22} weight="bold" />
+        </Tap>
       }
       hero={
         <div className="ph-greet-wrap">
@@ -271,24 +266,6 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
       })}
     </ol>
   );
-}
-
-function SyncBadge({ phase, message }: { phase: string; message: string | null }) {
-  if (phase === "syncing") {
-    return (
-      <span className="ph-sync" data-phase="syncing" role="status" aria-label="Syncing">
-        <ArrowsClockwise size={18} weight="bold" className="ph-spin" />
-      </span>
-    );
-  }
-  if (phase === "error") {
-    return (
-      <span className="ph-sync" data-phase="error" role="status" aria-label={message ?? "Sync failed, will retry"} title={message ?? undefined}>
-        <WarningCircle size={20} weight="fill" />
-      </span>
-    );
-  }
-  return null;
 }
 
 /** Offline / saved-data state, with a retry that never touches records. */

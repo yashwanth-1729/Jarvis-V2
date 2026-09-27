@@ -658,11 +658,15 @@ and controls run while ASR is awaiting network I/O.
 ## Provider and speech policy
 
 Chat model selection under the cloud stack (`JARVIS_VOICE_STACK=cloud`, all
-through OpenRouter): English replies use `OPENROUTER_MODEL`
-(`openai/gpt-4.1-nano`); any non-English reply language uses
-`OPENROUTER_INDIC_MODEL` (`google/gemini-2.5-flash`), passed as a per-turn
-`model=` override in `agent.run_turn`. Empty `OPENROUTER_INDIC_MODEL` puts every
-language on `OPENROUTER_MODEL`. The reply register for Telugu and Hindi is
+through OpenRouter): since 2026-09-28 every reply language, Telugu and Hindi
+included, uses `OPENROUTER_MODEL` (`openai/gpt-6-luna`).
+`OPENROUTER_INDIC_MODEL` is empty by default. Setting it routes non-English
+replies to another model again, as a per-turn `model=` override in
+`agent.run_turn`; it used to be `google/gemini-2.5-flash`. GPT-5/6 requests
+carry `reasoning.effort` "minimal" unless a turn asks for more: by default
+GPT-6 Luna reasoned first, and a one-tool reminder turn took 5.45s instead of
+1.57s. Laptop typed turns keep `OPENROUTER_DESKTOP_MODEL`
+(`deepseek/deepseek-v4-pro`). The reply register for Telugu and Hindi is
 casual code-mixed Tenglish/Hinglish (English everyday words in Latin script,
 native grammar in native script), defined by `reply_directive` and
 `reply_reminder` in `app/core/languages.py`. Parts of the Piper/Sarvam

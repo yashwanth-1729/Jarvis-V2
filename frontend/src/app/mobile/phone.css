@@ -679,8 +679,24 @@
   font: 400 11px/1 var(--font-tag);
   letter-spacing: 0.05em;
 }
-.ph-sync { display: grid; place-items: center; width: 36px; height: 36px; color: var(--fg-2); }
-.ph-sync[data-phase="error"] { color: var(--amber); }
+/* Sync status, meant to go unnoticed: a 4 px dot in the top-right corner,
+   only while a sync runs (a faint pulse) or waits to retry (dim amber). */
+.ph-sync-dot {
+  position: fixed;
+  z-index: 80;
+  top: calc(env(safe-area-inset-top, 0px) + 5px);
+  right: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg);
+  opacity: 0.2;
+  pointer-events: none;
+  animation: ph-sync-breathe 1.8s ease-in-out infinite;
+}
+.ph-sync-dot[data-phase="error"] { background: var(--amber); opacity: 0.5; animation: none; }
+@keyframes ph-sync-breathe { 0%, 100% { opacity: 0.06; } 50% { opacity: 0.28; } }
+@media (prefers-reduced-motion: reduce) { .ph-sync-dot { animation: none; } }
 
 .ph-today .ph-title { display: none; }
 .ph-greet-wrap { padding-top: 6px; }

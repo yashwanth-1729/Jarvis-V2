@@ -529,6 +529,12 @@ class OpenRouterChat:
             payload["reasoning"] = (
                 {"effort": reasoning_effort} if reasoning_effort else {"max_tokens": 0}
             )
+        # GPT-5/6 models think by default. Measured 2026-09-28 on GPT-6 Luna
+        # through OpenRouter: the same one-tool reminder turn took 5.45s with
+        # 31 reasoning tokens by default, and 1.57s with 0 at effort "minimal",
+        # with an identical, correct tool call.
+        elif requested_model.startswith(("openai/gpt-5", "openai/gpt-6")):
+            payload["reasoning"] = {"effort": reasoning_effort or "minimal"}
 
         self._result = ChatResult()
 

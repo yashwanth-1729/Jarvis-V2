@@ -29,7 +29,7 @@ youthful look. Nothing of the old layout was kept; every feature was.
 
 | Area | What it has |
 | --- | --- |
-| Today | Greeting, live counts, Ask bar (opens chat) with a mic (opens voice), bento tiles: now/next block with live progress, open tasks (+ late sticker), reminders, JARVIS brief with a scrolling ticker (tap to expand). Up next tasks, today's timeline. Offline/saved-data card with Retry; sync spinner/warning in the top bar. |
+| Today | Greeting, live counts, Ask bar (opens chat) with a mic (opens voice), bento tiles: now/next block with live progress, open tasks (+ late sticker), reminders, JARVIS brief with a scrolling ticker (tap to expand). Up next tasks, today's timeline. Offline/saved-data card with Retry. Sync status is only a 4 px dot in the top-right corner of the app, shown while a sync runs (faint pulse) or waits to retry (dim amber); Settings → Sync & backup has the details. |
 | Tasks | Filters All / Doing / Late with counts, sort Due / Priority / New, search, grouped buckets (Overdue, Today, Tomorrow, This week, Later, Whenever). |
 | Plan | The three schedule sections (My routine, College, Blocks) plus Reminders. Weekday strip (tap or swipe the list) for weekly sections, clash banner and stickers, blocks grouped by date, reminders with relative time and "spoken" state. |
 | Memory | Notebook cards with counts, a review callout for candidate memories, recent memories, new page. Each page opens a notebook screen: role filters with counts (Active, Knowledge, Rules, Episodes, Goals, Patterns, Review), search, memory/idea cards, floating add, rename/delete page. |
@@ -165,8 +165,8 @@ dithering so gradients never band. It reacts to the app through `fx/fxBus.ts`:
   barely stirs, a heavy press or a finished task blooms (lime), a delete or a
   warning sends a red shockwave, toggles pulse, a tab switch sweeps the colour
   flow in the direction you moved and cross-fades to the new tab's palette.
-- Continuous activity raises the flow's energy: a chat reply streaming in, a
-  sync running. A finished reply settles with a small ripple.
+- Continuous activity raises the flow's energy: a chat reply streaming in. A
+  finished reply settles with a small ripple. Syncing no longer stirs it.
 - Modes (Settings → Live background, stored as `jarvis.phone.fx` on the
   device): Vivid (default), Wild (brighter, bigger shockwaves, sparks), Calm
   (slow and dim) and Off (plain background, nothing drawn).

@@ -301,9 +301,13 @@ async def main() -> int:
     await collect(OpenRouterChat(), model="google/gemini-2.5-flash")
     await collect(OpenRouterChat(), model="google/gemini-2.5-flash", reasoning_effort="high")
     await collect(OpenRouterChat(), model="openai/gpt-4.1-nano")
+    await collect(OpenRouterChat(), model="openai/gpt-6-luna")
+    await collect(OpenRouterChat(), model="openai/gpt-6-luna", reasoning_effort="high")
     check("Gemini ordinary turns disable thinking", bodies[0].get("reasoning") == {"max_tokens": 0}, str(bodies[0].get("reasoning")))
     check("Gemini reasoning turns keep their effort", bodies[1].get("reasoning") == {"effort": "high"}, str(bodies[1].get("reasoning")))
     check("nano requests carry no reasoning field", "reasoning" not in bodies[2])
+    check("GPT-6 Luna ordinary turns think minimally", bodies[3].get("reasoning") == {"effort": "minimal"}, str(bodies[3].get("reasoning")))
+    check("GPT-6 Luna reasoning turns keep their effort", bodies[4].get("reasoning") == {"effort": "high"}, str(bodies[4].get("reasoning")))
 
     await openrouter.close_shared_client()
 

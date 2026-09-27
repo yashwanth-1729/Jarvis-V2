@@ -53,8 +53,10 @@ There are 35 system tools in `backend/app/llm/tools.py`:
 
 ### Brain (the limiting factor)
 - All work happens inside **one chat turn**: at most **8 tool steps** and **240s**.
-- The model is **gpt-4.1-nano**. It's right for fast voice replies and wrong
-  for planning a 40-step job.
+- The voice and chat model is **GPT-6 Luna** (`openai/gpt-6-luna`, since
+  2026-09-28; before that gpt-4.1-nano). It's right for fast voice replies and
+  wrong for planning a 40-step job. Laptop typed turns still use
+  deepseek-v4-pro.
 - **No plan, no checkpoints, no verification, no resume.**
 - **Sight is limited to the accessibility tree.** Electron apps, installers
   and custom UIs are often invisible to it.
@@ -205,7 +207,7 @@ against OpenClaw's audited 57%.
 
 | Role | Model | Why | Price (per M tokens, in / out) |
 |---|---|---|---|
-| Voice and chat | gpt-4.1-nano (current) | Fast; 11/12 real actions in our tests | $0.10 / $0.40 |
+| Voice and chat | GPT-6 Luna (current, every language) | Fast at reasoning effort "minimal" (1.6s tool turn); not yet run through the 12-action test (nano did 11/12) | $0.10 / $0.50 |
 | Supervisor, vision GUI steps, final audit | **Qwen3.8-Max** (recommended) | #1 on OSWorld-Verified (86.1%); 1M context; Qwen family | $2 / $6 |
 | Simple deterministic steps (shell/API) | gpt-4.1-nano or qwen3-30b-a3b | Cheap; no judgment needed | ≤ $0.10 / $0.40 |
 

@@ -128,6 +128,22 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-28 · Claude Code · GPT-6 Luna everywhere, minimal sync dot
+
+- **Model:** the user asked for GPT-6 Luna for all languages.
+  - `openrouter_model` defaults to `openai/gpt-6-luna` and
+    `openrouter_indic_model` to "" (one model). The laptop `.env`
+    `OPENROUTER_MODEL` was changed too; it's gitignored.
+  - `providers/openrouter.py` sends `reasoning.effort` "minimal" to
+    `openai/gpt-5*`/`gpt-6*` unless a turn asks for more. A live probe
+    measured 5.45s by default vs 1.57s at minimal.
+  - Laptop typed turns are still deepseek-v4-pro (the user said "for all
+    languages"; I didn't touch the multi-step laptop model).
+- **Sync UI:** SyncBadge was removed from Today, and the fx "sync" activity is
+  gone. `SyncDot` in PhoneApp is a 4 px corner dot shown only while syncing or
+  retrying.
+- **APK:** pending. The build is waiting for memory and the phone.
+
 ### 2026-09-26 · Claude Code · set_routine, undo, conversation-only history
 
 - **New tools (23 core now):**

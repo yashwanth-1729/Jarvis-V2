@@ -32,6 +32,7 @@ import {
   useNav,
   useNavState,
   useReminders,
+  useSyncState,
   type AppData,
   type Layer,
   type Look,
@@ -137,14 +138,31 @@ function DataProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** The phone runs the only sync engine; its status feeds the top bar. */
+/** The phone runs the only sync engine. Its status shows only as `SyncDot`. */
 function SyncProvider({ children }: { children: React.ReactNode }) {
   const { app } = useAppData();
   const sync = useAutoSync({ enabled: app.recordsLocal, onPulled: app.handleSynced });
-  React.useEffect(() => {
-    setFxActivity("sync", sync.phase === "syncing" ? 0.25 : 0);
-  }, [sync.phase]);
   return <SyncContext.Provider value={sync}>{children}</SyncContext.Provider>;
+}
+
+/**
+ * Sync status, kept deliberately close to invisible (the user asked,
+ * 2026-09-28): a 4 px dot in the top-right corner, a faint pulse while a sync
+ * runs and dim amber while one waits to retry, nothing otherwise. It replaced
+ * the spinning icon in Today's top bar and the live background's reaction to
+ * syncs.
+ */
+function SyncDot() {
+  const sync = useSyncState();
+  if (sync.phase !== "syncing" && sync.phase !== "error") return null;
+  return (
+    <span
+      className="ph-sync-dot"
+      data-phase={sync.phase}
+      role="status"
+      aria-label={sync.phase === "syncing" ? "Syncing" : sync.message ?? "Sync will retry"}
+    />
+  );
 }
 
 /** The conversation lives here, so closing chat keeps drafts and streams. */
@@ -267,6 +285,7 @@ function Shell() {
             <AnimatePresence>{chatOpen && <ChatScreen key="chat" />}</AnimatePresence>
           </div>
           <AnimatePresence>{app.voiceOpen && <VoiceScreen key="voice" />}</AnimatePresence>
+          <SyncDot />
           <Toaster
             theme={look.dark ? "dark" : "light"}
             position="bottom-center"

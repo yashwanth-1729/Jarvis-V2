@@ -198,14 +198,20 @@ class Settings(BaseSettings):
     #: OpenRouter is an OpenAI-shaped gateway (same wire format Sarvam already
     #: speaks), used as the chat provider when jarvis_voice_stack="cloud".
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
-    #: gpt-4.1-nano since 2026-09-18. Measured through the real agent with
-    #: database checks: qwen-2.5-7b performed 1 of 12 requested voice actions
-    #: and claimed success on the other 11 ("Got it, added" -- nothing saved);
-    #: no prompt change fixed it. gpt-4.1-nano did 11/12 with no false claims,
-    #: same input price, ~0.7s slower first output. Android has no .env, so
-    #: this default is what the phone runs.
+    #: GPT-6 Luna for every reply language since 2026-09-28, at the user's
+    #: request. It costs $0.10/$0.50 per M tokens, against nano's $0.10/$0.40
+    #: and gemini-2.5-flash's $0.30/$2.50. A live probe that day made the right
+    #: set_reminder call and wrote natural Telugu. It thinks by default (5.45s);
+    #: at reasoning effort "minimal" the same call took 1.57s, which
+    #: providers/openrouter.py now sends. It has not yet been run through the
+    #: 12-action benchmark below.
+    #: History: gpt-4.1-nano from 2026-09-18. Measured through the real agent
+    #: with database checks, qwen-2.5-7b performed 1 of 12 requested voice
+    #: actions and claimed success on the other 11 ("Got it, added", nothing
+    #: saved). gpt-4.1-nano did 11 of 12 with no false claims.
+    #: Android has no .env, so this default is what the phone runs.
     openrouter_model: str = Field(
-        default="openai/gpt-4.1-nano", alias="OPENROUTER_MODEL"
+        default="openai/gpt-6-luna", alias="OPENROUTER_MODEL"
     )
     openrouter_chat_timeout: float = Field(default=30.0, alias="OPENROUTER_CHAT_TIMEOUT")
     #: Chat model for non-English replies (Telugu, Hindi, ...). Added 2026-09-19
@@ -223,8 +229,11 @@ class Settings(BaseSettings):
     openrouter_desktop_model: str = Field(
         default="deepseek/deepseek-v4-pro", alias="OPENROUTER_DESKTOP_MODEL"
     )
+    #: Empty since 2026-09-28: every language, Telugu and Hindi included, uses
+    #: `openrouter_model` (GPT-6 Luna), at the user's request. The setting
+    #: remains for routing Indic replies to a different model again.
     openrouter_indic_model: str = Field(
-        default="google/gemini-2.5-flash", alias="OPENROUTER_INDIC_MODEL"
+        default="", alias="OPENROUTER_INDIC_MODEL"
     )
     #: STT/TTS calls carry a full audio payload (base64 JSON, ~33% bigger than
     #: the raw bytes) and a phone's uplink is slower and less stable than the
