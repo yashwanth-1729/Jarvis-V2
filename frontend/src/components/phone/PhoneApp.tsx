@@ -98,7 +98,7 @@ export function PhoneApp() {
   );
 }
 
-function LookProvider({ children }: { children: React.ReactNode }) {
+export function LookProvider({ children }: { children: React.ReactNode }) {
   const theme = useTheme();
   const fx = useFxMode();
   const value = React.useMemo<Look>(
@@ -108,7 +108,7 @@ function LookProvider({ children }: { children: React.ReactNode }) {
   return <LookContext.Provider value={value}>{children}</LookContext.Provider>;
 }
 
-function DataProvider({ children }: { children: React.ReactNode }) {
+export function DataProvider({ children }: { children: React.ReactNode }) {
   const center = useCommandCenter();
   const reminders = useReminders(center.state);
   // `useCommandCenter` builds a fresh object every render; hold one per real
@@ -139,7 +139,7 @@ function DataProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** The phone runs the only sync engine. Its status shows only as `SyncDot`. */
-function SyncProvider({ children }: { children: React.ReactNode }) {
+export function SyncProvider({ children }: { children: React.ReactNode }) {
   const { app } = useAppData();
   const sync = useAutoSync({ enabled: app.recordsLocal, onPulled: app.handleSynced });
   return <SyncContext.Provider value={sync}>{children}</SyncContext.Provider>;
@@ -152,7 +152,7 @@ function SyncProvider({ children }: { children: React.ReactNode }) {
  * the spinning icon in Today's top bar and the live background's reaction to
  * syncs.
  */
-function SyncDot() {
+export function SyncDot() {
   const sync = useSyncState();
   if (sync.phase !== "syncing" && sync.phase !== "error") return null;
   return (
@@ -166,7 +166,7 @@ function SyncDot() {
 }
 
 /** The conversation lives here, so closing chat keeps drafts and streams. */
-function ChatProvider({ children }: { children: React.ReactNode }) {
+export function ChatProvider({ children }: { children: React.ReactNode }) {
   const { app } = useAppData();
   const chat = useChatSession({ onRefresh: app.handleAgentRefresh, onSurface: app.setSurface });
   const wasStreaming = React.useRef(false);
@@ -179,7 +179,7 @@ function ChatProvider({ children }: { children: React.ReactNode }) {
   return <ChatContext.Provider value={chat}>{children}</ChatContext.Provider>;
 }
 
-function NavProvider({ children }: { children: React.ReactNode }) {
+export function NavProvider({ children }: { children: React.ReactNode }) {
   const { app } = useAppData();
   const [tab, setTab] = React.useState<TabId>("today");
   const [visited, setVisited] = React.useState<ReadonlySet<TabId>>(() => new Set<TabId>(["today"]));
@@ -335,7 +335,7 @@ function useKeyboardInset(root: HTMLElement | null) {
  * Once a pane has faded out it goes idle (`content-visibility: hidden`), so
  * the hidden tabs cost nothing to style, lay out or paint.
  */
-function Pane({ active, children }: { active: boolean; children: React.ReactNode }) {
+export function Pane({ active, children }: { active: boolean; children: React.ReactNode }) {
   const ref = React.useRef<HTMLElement>(null);
   const [idle, setIdle] = React.useState(!active);
   const activeNow = React.useRef(active);
@@ -368,7 +368,7 @@ function Pane({ active, children }: { active: boolean; children: React.ReactNode
   );
 }
 
-function LayerView({ layer }: { layer: Layer }) {
+export function LayerView({ layer }: { layer: Layer }) {
   const { pop } = useNav();
   useBackLayer(useIsPresent(), pop);
   return (

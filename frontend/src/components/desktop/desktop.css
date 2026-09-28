@@ -1,0 +1,179 @@
+/*
+ * The desktop shell for the phone's design (components/desktop/DesktopApp).
+ *
+ * Every rule here is scoped under .dk, a class only the desktop page renders,
+ * so none of it can reach the phone app. It reuses the phone's tokens (colours,
+ * fonts, springs) from app/mobile/phone.css and only changes arrangement:
+ * rail on the left, the screen in the middle, chat docked on the right.
+ */
+
+.ph.dk {
+  --rail-w: 112px;
+  --chat-w: clamp(340px, 31vw, 470px);
+  --gap: 14px;
+  /* Screens leave room for the phone's bottom dock; the rail is at the side. */
+  --dock-space: 44px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dk .dk-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--chat-w);
+}
+
+/* ---------------------------------------------------------------- centre */
+
+.dk .dk-center { position: relative; min-width: 0; overflow: hidden; }
+
+/* A readable column in the middle of whatever width the window has. */
+.dk .dk-center .ph-screen {
+  padding-inline: max(0px, calc((100% - 800px) / 2));
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+/* ------------------------------------------------------------------ rail */
+
+.dk .dk-rail {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--gap) + 6px) 0 var(--gap) var(--gap);
+}
+.dk .dk-brand {
+  font: 700 11px/1 var(--font-tag);
+  letter-spacing: 0.14em;
+  color: var(--fg-3);
+}
+.dk .dk-rail-tabs {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 36px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift);
+}
+.dk .dk-rail .ph-dock-item { width: 74px; height: 62px; border-radius: 22px; }
+.dk .dk-rail .ph-dock-pill { border-radius: 22px; transform-origin: center; }
+.dk .dk-rail .dk-rail-orb {
+  margin: 6px 0;
+  box-shadow: 0 0 0 4px var(--bg-elev), 0 14px 30px -8px rgba(124, 199, 255, 0.6);
+}
+.dk .dk-rail-foot { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.dk .dk-rail-btn {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 18px;
+  color: var(--fg-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Hover changes colour only: transforms belong to the press squish (.ph-tap). */
+@media (hover: hover) {
+  .dk .dk-rail .ph-dock-item:not([data-active="true"]):hover { color: var(--fg); }
+  .dk .dk-rail-btn:hover { color: var(--fg); border-color: var(--fg-3); }
+}
+
+/* ------------------------------------------------------------------ chat */
+
+.dk .dk-chat-col {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: var(--gap) var(--gap) var(--gap) 0;
+}
+.dk .dk-chat {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 32px;
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift);
+}
+/* Docked: nothing to pull down or close. */
+.dk .dk-chat .ph-chat-grip,
+.dk .dk-chat [aria-label="Close chat"] { display: none; }
+.dk .dk-chat .ph-chat-inner { padding-top: 0; }
+.dk .dk-chat .ph-chat-head { touch-action: auto; padding-top: 16px; }
+.dk .dk-chat .ph-chat-scroll {
+  -webkit-user-select: text;
+  user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+/* --------------------------------------------------------------- runtime */
+
+.dk .dk-runtime {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 22px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--lift);
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+.dk .dk-runtime-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tone, var(--fg-3));
+  box-shadow: 0 0 12px var(--tone, transparent);
+}
+.dk .dk-runtime-text { display: flex; flex: 1; flex-direction: column; min-width: 0; line-height: 1.3; }
+.dk .dk-runtime-text b { color: var(--fg); font-weight: 700; font-size: 13px; }
+.dk .dk-runtime-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk .dk-runtime-btn {
+  flex: none;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--tone, var(--lime));
+  color: var(--ink-on-candy);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- sheets */
+
+/* Bottom sheets float over the centre column instead of spanning the window. */
+.dk .ph-sheet {
+  left: var(--rail-w);
+  right: var(--chat-w);
+  bottom: var(--gap);
+  width: min(640px, calc(100% - var(--rail-w) - var(--chat-w) - 2 * var(--gap)));
+  margin-inline: auto;
+  border-radius: 32px;
+  border: 1px solid var(--line-2);
+}
+
+/* ------------------------------------------------------------ pointer UX */
+
+@media (hover: hover) {
+  .dk .dk-center .ph-tap:hover { filter: brightness(1.06); }
+  .dk[data-theme="light"] .dk-center .ph-tap:hover { filter: brightness(0.97); }
+}

@@ -76,6 +76,26 @@ The `/mobile/` route is the phone app and the Android launch route. It lives in
 rules under `.ph`) and is a separate presentation, not a restyle of the desktop
 components. Details, design and verification: `docs/mobile-app.md`.
 
+Since 2026-09-28 the `/` route, which the Windows app loads, is the same design
+arranged for a wide window: `components/desktop/DesktopApp.tsx`.
+- **Reuse:** it mounts the phone's own providers, screens, sheets, chat and voice
+  screen unchanged. `PhoneApp.tsx` only exports those pieces.
+- **Layout:** a vertical rail (the dock on its side) sits on the left, the active
+  screen in a centred column, and chat stays docked on the right. Settings and
+  notebook pages open over the centre column.
+- **Styling:** `components/desktop/desktop.css` holds every desktop rule under
+  `.dk`, a class only this shell renders, so the phone app cannot be affected.
+  Phone files are not edited for desktop reasons.
+- **Desktop extras:**
+  - Ctrl+1 to Ctrl+4 switch screens.
+  - Ctrl+K puts the cursor in chat.
+  - Ctrl+, opens Settings.
+  - Esc closes the page on top.
+  - An agent-runtime card sits under the chat, using `lib/useAgentRuntime.ts`,
+    which it shares with the classic panel.
+- **Classic view:** the previous desktop interface remains at `/classic/`,
+  linked from the rail.
+
 - Data and lifecycle stay in `useCommandCenter`, shared with `/`: store
   ownership, startup retries, key handoff, agent seeding/draining, notification
   plans and mutations. The phone app mounts one controller and runs the one

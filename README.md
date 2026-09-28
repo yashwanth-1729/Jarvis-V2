@@ -518,6 +518,41 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-09-28 (second): Desktop app in the phone's design
+
+- **What changed:** the Windows app (the `/` route) now uses the phone app's
+  look and screens, arranged for a wide window.
+  - A rail on the left is the dock stood on its side, with HOLO's voice orb.
+  - The active screen sits in a readable centre column.
+  - Chat is always open on the right.
+  - Settings and notebook pages open over the centre, and voice fills the
+    window.
+- **Desktop extras:** Ctrl+1 to Ctrl+4, Ctrl+K (chat), Ctrl+, (Settings) and
+  Esc, plus an agent-runtime card under the chat.
+- **Classic view:** the previous desktop interface is at `/classic/`, linked
+  from the rail.
+- **Mobile is untouched, by construction:**
+  - `components/desktop/` reuses the phone's providers, screens, chat and voice
+    as they are.
+  - Every desktop style lives in `components/desktop/desktop.css` under `.dk`,
+    a class only the desktop renders.
+  - The only phone-file change is `export` added to eight existing functions in
+    `PhoneApp.tsx`. `phone.css`, every phone screen and `app/mobile/` are
+    byte-for-byte unchanged.
+- **Validation:**
+  - TypeScript and ESLint passed.
+  - `npm run desktop:build` produced `target/release/app.exe` and the 3.0.0 MSI
+    and NSIS installers. The installers have not been run, so the installed app
+    is unchanged.
+  - The real app, driven over WebView2 DevTools, at 1280x820:
+    - rail, a 771 px centre column and the docked chat;
+    - Ctrl+1 to Ctrl+4 switched screens;
+    - Ctrl+, opened Settings over the centre and Esc closed it;
+    - Ctrl+K focused the chat composer;
+    - the agent runtime paired;
+    - the console showed no errors.
+  - `git diff` of the phone files shows only the eight `export` keywords.
+
 ### 2026-09-28: GPT-6 Luna for every language, a near-invisible sync status
 
 - **GPT-6 Luna for every language.** The chat model is `openai/gpt-6-luna`,

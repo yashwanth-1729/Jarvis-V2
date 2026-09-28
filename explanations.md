@@ -128,6 +128,26 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-09-28 · Claude Code · Desktop app in the phone's design
+
+- **What:** the user asked for the desktop in the same UI style, with a hard rule:
+  "it should not disturb mobile design not even 1%".
+- **Code:**
+  - `/` is now `components/desktop/DesktopApp.tsx`. It reuses the phone
+    providers, screens, sheets, ChatScreen and VoiceScreen unchanged.
+  - The layout is a rail, a centre column and docked chat.
+  - `components/desktop/desktop.css` scopes every rule under `.dk`.
+  - The old desktop page moved to `app/classic/page.tsx` (`/classic/`).
+- **Phone files:** only `export` was added to 8 functions in `PhoneApp.tsx`.
+  Please keep it that way: any desktop tweak goes in `desktop.css` or
+  `components/desktop`, never in phone files.
+- **Agent runtime:** `AgentRunStatus` logic moved to `lib/useAgentRuntime.ts`.
+  The classic panel is unchanged, and the desktop shows `DesktopRuntime`.
+- **Verified:**
+  - `desktop:build` (app.exe and installers) succeeded.
+  - The real app was checked over WebView2 CDP: layout, shortcuts, runtime
+    pairing, no console errors.
+
 ### 2026-09-28 · Claude Code · GPT-6 Luna everywhere, minimal sync dot
 
 - **Model:** the user asked for GPT-6 Luna for all languages.
