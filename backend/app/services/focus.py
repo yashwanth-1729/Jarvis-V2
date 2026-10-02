@@ -258,6 +258,10 @@ async def stats(days: int = 30) -> dict[str, Any]:
         "perfect_days": sum(1 for day in ordered if day["done"] and not day["skipped"]),
         "today": {**{k: ordered[-1][k] for k in ("done", "skipped")}, "pending": pending_today},
         "series": ordered,
-        "items": sorted(per_item.values(), key=lambda s: (-s["done"], s["skipped"], s["title"]))[:12],
+        # Only items with a record yet: a freshly marked block is not a row of zeros.
+        "items": sorted(
+            (stat for stat in per_item.values() if stat["done"] or stat["skipped"]),
+            key=lambda s: (-s["done"], s["skipped"], s["title"]),
+        )[:12],
         "running": running,
     }

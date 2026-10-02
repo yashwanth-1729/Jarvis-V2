@@ -142,7 +142,12 @@ export function FocusScreen() {
           continue;
         }
         const event = events.find((e) => e.item_uid === item.uid && e.occurrence === today);
-        const state: State = event ? event.status : window.end && window.end.getTime() <= now.getTime() ? "skipped" : "pending";
+        const ended = Boolean(window.end && window.end.getTime() <= now.getTime());
+        // Same rule as the stats: an occurrence that began before it was
+        // marked serious was never committed to, so it cannot be skipped.
+        const committed = !window.start || window.start.getTime() >= (parseLocal(item.created_at)?.getTime() ?? 0);
+        if (!event && ended && !committed) continue;
+        const state: State = event ? event.status : ended ? "skipped" : "pending";
         out.push({ item, title: block?.event_name ?? item.title, occurrence: today, state, event, start: window.start, end: window.end });
       } else {
         const task = tasks.find((t) => t.uid === item.uid);
@@ -153,7 +158,8 @@ export function FocusScreen() {
           rest.push(item);
           continue;
         }
-        const state: State = event ? event.status : due && due.getTime() <= now.getTime() ? "skipped" : "pending";
+        const markedAt = parseLocal(item.created_at)?.getTime() ?? 0;
+        const state: State = event ? event.status : due && due.getTime() <= now.getTime() && due.getTime() >= markedAt ? "skipped" : "pending";
         if (event?.status === "done" && event.finished_at && !event.finished_at.startsWith(today)) continue;
         out.push({ item, title: task?.title ?? item.title, occurrence: "once", state, event, task, due });
       }

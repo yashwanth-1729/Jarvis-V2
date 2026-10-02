@@ -96,6 +96,9 @@ async def main() -> None:
         check("finishing late clears the skips", stats["skipped"] == 0, stats["skipped"])
         check("then today is a clean day: streak 1", stats["streak"] >= 1, stats["streak"])
         check("per-item results list the block", any(item["title"] == "DSA" and item["done"] == 1 for item in stats["items"]), stats["items"])
+        await focus.upsert_item("task-fresh", {"kind": "task", "mode": "quick", "title": "Fresh pick"})
+        check("an item with no record yet is not a scoreboard row", all(item["uid"] != "task-fresh" for item in (await focus.stats(14))["items"]))
+        await focus.remove_item("task-fresh")
 
         await focus.reset("task-q")
         check("reset takes a Done back", not any(e["item_uid"] == "task-q" for e in await focus.recent_events()))

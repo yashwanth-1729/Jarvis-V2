@@ -192,15 +192,22 @@ Medium, worth doing:
   - desktop and APK builds;
   - the installed desktop app over CDP: Lock-in and Stats render, the
     covered-layer fix works, no errors.
-  - Nothing was verified on the phone.
+  - On the phone:
+    - Lock-in, Stats, pings and the dock blur all work.
+    - The blur costs nothing measurable (120 Hz, same frame times with the
+      glass on and off).
+    - Test reminder and deadline cards rendered as custom cards with the
+      bubble icon, and Got it worked.
+    - The test alarms went in through `window.JarvisNotifications`; the
+      app's re-sync restored the plan, byte-identical.
+    - Fixed on the device: Lock-in vs Stats skip mismatch for blocks marked
+      after they began, and empty scoreboard rows.
 - **Left:**
-  - **Install the APK** (ColorOS shows a USB-install prompt), then check on
-    the phone:
-    - the notification cards (`adb logcat -s JarvisNotify`; watch for "card
-      failed" or "Bad notification posted");
-    - dock blur smoothness during flings;
-    - the touch and scroll background;
-    - the pings.
+  - **Still unchecked on the device:** Snooze re-ring, the Class and Routine
+    labels, and the touch and scroll background visually.
+  - **Alarm timing:** the phone's alarms show a 1-hour window in
+    `dumpsys alarm`, so a ping could be late by up to that window. The test
+    cards arrived 5-15 s late. Worth a look.
   - **Piper worktree:** `D:\Jarvis-2.0-piper-streaming` (a 3.4 GB worktree
     with untracked experiments) awaits the user's OK to delete.
   - **Public edition:** plan proposed in chat; waiting on the user's

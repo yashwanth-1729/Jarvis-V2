@@ -647,11 +647,28 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
     - the Lock-in tile, Lock-in and Stats render (21 bars, a 30-day grid);
     - Lock-in hides under Stats and returns on Back;
     - no console errors.
-  - **Not verified on the phone:** the APK is not installed yet. The phone
-    kept dropping off adb, and the OnePlus USB-install prompt timed out once.
-    So the notification cards, the dock blur's smoothness while scrolling,
-    the touch and scroll background and the ping list are unchecked on the
-    device.
+  - **On the phone** (OnePlus CPH2767, ColorOS; installed and checked over
+    WebView DevTools and adb):
+    - **Screens:** the Lock-in tile, Lock-in and Stats render; no saved-data
+      card; the reminders API lists only upcoming pings.
+    - **Dock glass:** both blurs are applied. Frame timing during swipes was
+      the same with the glass on and off: the phone runs at 120 Hz, median
+      8.3 ms, worst frames about 25 ms.
+    - **Notifications:** test alarms went in through the native bridge.
+      - The reminder and deadline cards posted with no crash: kind chip,
+        time chip, emoji line, and the bubble icon instead of the old logo.
+      - Expanded, the card shows Got it and Snooze 10 min; Got it cleared it.
+      - The app's own re-sync then restored the real alarm plan,
+        byte-identical to the saved copy.
+    - **Two fixes made on the device, then rebuilt:**
+      - Lock-in counted a block that ended before it was marked serious as
+        skipped, while Stats didn't. Both now ignore it.
+      - Items with no record yet no longer fill the scoreboard with zeros.
+    - **Not checked on the device:**
+      - a snoozed card ringing again;
+      - the Class and Routine labels (the class test alarm was replaced by
+        the app's re-sync before it fired);
+      - the touch and scroll background, visually.
 
 ### 2026-09-28 (second): Desktop app in the phone's design
 
