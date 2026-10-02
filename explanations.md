@@ -208,8 +208,9 @@ Medium, worth doing:
   - **Alarm timing:** the phone's alarms show a 1-hour window in
     `dumpsys alarm`, so a ping could be late by up to that window. The test
     cards arrived 5-15 s late. Worth a look.
-  - **Piper worktree:** `D:\Jarvis-2.0-piper-streaming` (a 3.4 GB worktree
-    with untracked experiments) awaits the user's OK to delete.
+  - **Piper worktree:** `D:\Jarvis-2.0-piper-streaming` was deleted on
+    2026-10-03 with the user's OK. Its untracked experiments are gone; the
+    branch `piper-streaming-experiment` is kept.
   - **Public edition:** plan proposed in chat; waiting on the user's
     decisions (name, plan names, 18+, Lock-in trial, Android first, Mumbai
     gateway host).
