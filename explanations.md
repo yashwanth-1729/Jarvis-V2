@@ -162,7 +162,9 @@ Medium, worth doing:
 - **Sync UI:** SyncBadge was removed from Today, and the fx "sync" activity is
   gone. `SyncDot` in PhoneApp is a 4 px corner dot shown only while syncing or
   retrying.
-- **APK:** pending. The build is waiting for memory and the phone.
+- **APK:** built and installed later that day. The phone health check reports
+  `openai/gpt-6-luna`; Today's top bar has only Settings; the dot is hidden when
+  idle.
 
 ### 2026-09-26 · Claude Code · set_routine, undo, conversation-only history
 

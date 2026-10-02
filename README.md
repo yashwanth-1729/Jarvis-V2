@@ -552,6 +552,9 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
     - the agent runtime paired;
     - the console showed no errors.
   - `git diff` of the phone files shows only the eight `export` keywords.
+  - The arm64 APK with this change was then built and installed on the
+    CPH2767. Over WebView DevTools the phone still renders the phone app (the
+    `.ph` root and the dock, no `.dk`), and Today looked as before.
 
 ### 2026-09-28: GPT-6 Luna for every language, a near-invisible sync status
 
@@ -573,12 +576,16 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
   the live background's reaction to syncs are gone. What remains is a 4 px dot
   in the top-right corner: a faint pulse while syncing, dim amber while waiting
   to retry, nothing otherwise. Settings → Sync & backup keeps the details.
-- **Validation (source only):**
+- **Validation:**
   - TypeScript and ESLint passed.
   - OpenRouter transport passed 41 checks, including two new reasoning checks.
   - Smoke, context budget and routine/undo passed.
-  - The APK is not built or installed yet. The laptop had 1.9 GB of free
-    commit memory, the build needs 3 GB, and the phone was not connected.
+  - The arm64 APK was built and installed on the CPH2767 later the same day.
+    - The phone backend's `/api/health` reports `openai/gpt-6-luna` through
+      OpenRouter.
+    - Today's top bar holds only the Settings button, the old sync badge is
+      gone, and the dot stays hidden while no sync runs.
+  - Not yet done on the phone: a real conversation with Luna.
 
 
 ### 2026-09-26 (second): One-call routine, undo, a history window that holds the conversation
