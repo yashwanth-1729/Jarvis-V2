@@ -4,21 +4,22 @@ import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
-  ArrowsClockwise,
   BellRinging,
   CaretDown,
+  Fire,
   GearSix,
   Lightning,
+  LockSimple,
   MapPin,
   Microphone,
   Sparkle,
-  WifiSlash,
 } from "@phosphor-icons/react";
 
+import { fetchFocusStats, type FocusStats } from "@/lib/focus";
 import type { Task } from "@/types";
 import { focusTasks, isOverdueTask, KIND_LABEL, KIND_TONE, nowAndNext, upcomingReminders, type Occurrence } from "../lib/derive";
 import { clock, duration, greeting, minutesUntil, relative } from "../lib/time";
-import { useAppData, useFinish, useNav, useNow, type PlanSection } from "../PhoneContext";
+import { useAppData, useFinish, useNav, useNavState, useNow, type PlanSection } from "../PhoneContext";
 import { TaskSheet, type TaskTarget } from "../sheets/TaskSheet";
 import { Chip, Empty, KineticText, SectionHead, Skeleton, stagger, Sticker } from "../ui/Bits";
 import { Screen } from "../ui/Screen";
@@ -74,8 +75,6 @@ export function TodayScreen() {
       }
     >
       <div className="ph-stack">
-        <ConnectionCard />
-
         <div className="ph-ask">
           <Tap className="ph-ask-main" onClick={openChat} squish={0.97}>
             <span className="ph-ask-spark" aria-hidden="true"><Sparkle size={20} weight="fill" /></span>
@@ -106,6 +105,7 @@ export function TodayScreen() {
                 </span>
                 <BellRinging className="ph-tile-icon" size={26} weight="fill" aria-hidden="true" />
               </Tap>
+              <LockinTile />
               <BriefTile />
             </div>
 
@@ -203,6 +203,44 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
   );
 }
 
+/** The door to serious mode, with today's tally. Refreshes on returning. */
+function LockinTile() {
+  const { push } = useNav();
+  const { layers } = useNavState();
+  const [stats, setStats] = React.useState<FocusStats | null>(null);
+  const covered = layers.length > 0;
+  React.useEffect(() => {
+    if (covered) return;
+    let alive = true;
+    fetchFocusStats(7)
+      .then((next) => alive && setStats(next))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [covered]);
+  const today = stats?.today;
+  const total = today ? today.done + today.skipped + today.pending : 0;
+  return (
+    <Tap className="ph-tile ph-tile-lockin" onClick={() => push({ kind: "focus" })} squish={0.96} feel="heavy">
+      <span className="ph-tile-label"><LockSimple size={13} weight="fill" /> Lock-in</span>
+      <span className="ph-lockin-main">
+        {total && today ? (
+          <>
+            <b><Num value={today.done} /></b>
+            <span>/{total} serious done today</span>
+          </>
+        ) : (
+          <span>Make your must-dos serious.</span>
+        )}
+      </span>
+      {stats && stats.streak >= 2 && (
+        <span className="ph-lockin-streak"><Fire size={16} weight="fill" /> {stats.streak}</span>
+      )}
+    </Tap>
+  );
+}
+
 function BriefTile() {
   const { app } = useAppData();
   const [open, setOpen] = React.useState(false);
@@ -265,35 +303,6 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
         );
       })}
     </ol>
-  );
-}
-
-/** Offline / saved-data state, with a retry that never touches records. */
-function ConnectionCard() {
-  const { app } = useAppData();
-  const show = Boolean(app.error || app.localOnly);
-  return (
-    <AnimatePresence initial={false}>
-      {show && (
-        <motion.div
-          className="ph-offline"
-          role="alert"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.26, ease: [0.2, 0, 0, 1] }}
-        >
-          <WifiSlash size={22} weight="bold" />
-          <div>
-            <strong>{app.localOnly ? "Running on saved data" : "JARVIS is offline"}</strong>
-            <p>Your stuff is safe. Voice and chat come back when the connection does.</p>
-          </div>
-          <Tap className="ph-btn ph-btn-small" onClick={() => void app.refresh()} disabled={app.refreshing}>
-            {app.refreshing ? <ArrowsClockwise size={16} className="ph-spin" /> : "Retry"}
-          </Tap>
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }
 

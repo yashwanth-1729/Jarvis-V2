@@ -128,6 +128,85 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-02 · Claude Code · Lock-in, pings, glass dock, notification cards, old versions gone
+
+- **Asked:**
+  - delete old versions everywhere;
+  - special notifications without the old logo;
+  - delete finished pings;
+  - a serious mode (Start → Done) with a loud stats screen;
+  - a background that reacts to touch and scroll;
+  - glass blur under the dock;
+  - drop the "Running on saved data" card;
+  - try Kokoro on the user's VPS;
+  - research on-device streaming STT.
+- **Removed:**
+  - `/classic/` and the 38 components and helpers only it used (git rm).
+  - The 2.1.5 installers.
+  - Tool-driven voice surfaces were drawn only by the classic view.
+    `lib/surfaces.ts` and `setSurface` remain, so they can be redrawn in the
+    new design.
+- **Backend:**
+  - Schema v9: `focus_items`, `focus_events`.
+  - `services/focus.py` and `api/focus.py`. The router is mounted from
+    `api/records.py`, so it shares `/api`.
+  - `crud.purge_finished_reminders` runs on every list read.
+  - **Decision:** unfired reminders survive a day, because
+    `scheduler._collect_reminders` announces missed ones late. A 5-minute
+    purge failed `reminder_lead_test` (an early notice clamped to "now") and
+    would have raced that catch-up. The app hides past pings itself
+    (`upcomingReminders`).
+- **Frontend:**
+  - Screens and tile: `FocusScreen`, `FocusStatsScreen`, Today's
+    `LockinTile`, `lib/focus.ts`, plus `apiGet`/`apiPut` in `lib/api.ts`.
+  - Removed: the ConnectionCard.
+  - Live background:
+    - `fxBus` has a raw input state, `fxInput()`, and a "touch" event;
+    - the `LiveBackground` shader gains `uTouch` and `uScroll`.
+  - Dock glass: `.ph-dock` blur plus `.ph-dock-glass`.
+  - `nativeNotifications.ts` now sends `kind` with each schedule alarm.
+- **Lock-in Done on a task:** it also finishes the task on the board.
+  Completing removes a task, so the board's Undo toast is the undo for both:
+  it now calls `noteTaskUndone`, which resets the focus event. Lock-in shows
+  its own Undo only on blocks.
+- **Android, written by a subagent and reviewed by me:**
+  `JarvisNotificationCard.kt`, the layouts, chips, `ic_stat_jarvis_*`, the
+  action receiver, channel `jarvis_reminders_v2`, and the manifest app icon
+  set to the bubble. I relabelled its "Done" button "Got it", since it only
+  clears the notification.
+- **Kokoro VPS:**
+  - Not adopted. First audio was 1.4/4.6/9 s slower than OpenRouter on
+    short/medium/long text, because the 2-vCPU VPS synthesises at about
+    real-time speed.
+  - The container and image were removed. The SSH key line
+    `jarvis-kokoro-laptop` remains in `~/.ssh/authorized_keys` on the VPS.
+    The password was never written anywhere.
+- **Desktop install:** the user's Start-menu shortcut "JARVIS V4 DESKTOP"
+  points into Claude's package-virtualized
+  `...\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\JARVIS\app.exe`. A
+  silent NSIS install run from a Claude shell updates that copy.
+  `C:\Users\ASUS\AppData\Local\JARVIS` doesn't exist outside the container.
+- **Verified:**
+  - all 7 related backend test files pass;
+  - tsc and ESLint;
+  - desktop and APK builds;
+  - the installed desktop app over CDP: Lock-in and Stats render, the
+    covered-layer fix works, no errors.
+  - Nothing was verified on the phone.
+- **Left:**
+  - **Install the APK** (ColorOS shows a USB-install prompt), then check on
+    the phone:
+    - the notification cards (`adb logcat -s JarvisNotify`; watch for "card
+      failed" or "Bad notification posted");
+    - dock blur smoothness during flings;
+    - the touch and scroll background;
+    - the pings.
+  - **Piper worktree:** `D:\Jarvis-2.0-piper-streaming` (a 3.4 GB worktree
+    with untracked experiments) awaits the user's OK to delete.
+  - **Public edition:** plan proposed in chat; waiting on the user's
+    decisions (name, plan names, 18+, Lock-in trial, Android first, Mumbai
+    gateway host).
+
 ### 2026-09-28 · Claude Code · Desktop app in the phone's design
 
 - **What:** the user asked for the desktop in the same UI style, with a hard rule:

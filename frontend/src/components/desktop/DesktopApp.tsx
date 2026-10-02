@@ -4,7 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { Toaster } from "sonner";
-import { Brain, CalendarDots, CheckSquare, GearSix, House, SquaresFour } from "@phosphor-icons/react";
+import { Brain, CalendarDots, CheckSquare, GearSix, House } from "@phosphor-icons/react";
 
 import { LiveBackground } from "../phone/fx/LiveBackground";
 import { useBackStackInstall } from "../phone/lib/backStack";
@@ -150,7 +150,7 @@ function DesktopShell() {
                 </motion.main>
                 <AnimatePresence>
                   {layers.map((layer, index) => (
-                    <LayerView key={`${layer.kind}-${index}`} layer={layer} />
+                    <LayerView key={`${layer.kind}-${index}`} layer={layer} covered={index < layers.length - 1} />
                   ))}
                 </AnimatePresence>
               </div>
@@ -273,9 +273,6 @@ function DesktopRail({ onSelect }: { onSelect: (id: TabId) => void }) {
         <Tap className="dk-rail-btn" aria-label="Settings" title="Settings  (Ctrl+,)" onClick={() => push({ kind: "settings" })} feel="select">
           <GearSix size={22} weight="bold" />
         </Tap>
-        <a className="dk-rail-btn" href="/classic/" aria-label="Classic desktop view" title="Classic desktop view">
-          <SquaresFour size={20} weight="bold" />
-        </a>
       </div>
     </nav>
   );

@@ -234,3 +234,9 @@ async def save_note_page(payload: NotePageSave) -> dict:
 async def delete_note_page(page_uid: str) -> None:
     if not await crud.delete_note_page(page_uid):
         raise HTTPException(404, "Only custom Notes pages can be deleted.")
+
+
+# Serious mode lives in its own module; mounted here so it shares /api.
+from app.api import focus as _focus  # noqa: E402
+
+router.include_router(_focus.router)

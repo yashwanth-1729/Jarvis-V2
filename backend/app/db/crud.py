@@ -1413,7 +1413,37 @@ async def get_reminder(reminder_id: int) -> dict[str, Any] | None:
     return await db.fetch_one("SELECT * FROM reminders WHERE id = ?", (reminder_id,))
 
 
+#: How long a reminder that never fired may stay after its moment. The
+#: scheduler still announces a missed one late (the laptop slept through it),
+#: so only a day-old one is dead; it exists at all only while the scheduler
+#: is switched off.
+REMINDER_STALE_HOURS = 24
+
+
+async def purge_finished_reminders() -> int:
+    """Delete reminders that are over: fired ones, and unfired ones a day late.
+
+    The ping list holds only what is still coming (the user asked, 2026-10-02:
+    finished pings were piling up, Android-delivered ones especially, since
+    those are only marked fired when the app next opens). What was said
+    stays in the announcements table. The app hides a ping whose moment has
+    passed on its own clock, so a late one waiting for the scheduler never
+    shows.
+    """
+    cutoff = (now() - timedelta(hours=REMINDER_STALE_HOURS)).isoformat(timespec="seconds")
+    return await db.execute_count(
+        "DELETE FROM reminders WHERE fired_at IS NOT NULL OR due_at <= ?", (cutoff,)
+    )
+
+
 async def list_reminders(include_fired: bool = False, limit: int = 50) -> list[dict[str, Any]]:
+    """Pending reminders, soonest first. Finished ones are purged first.
+
+    One whose moment has only just passed stays until it fires or its grace
+    runs out (an early notice clamped to "now" is still owed); the ping list
+    hides it on the app's own clock.
+    """
+    await purge_finished_reminders()
     where = "" if include_fired else "WHERE fired_at IS NULL"
     return await db.fetch_all(
         f"SELECT * FROM reminders {where} ORDER BY due_at LIMIT ?", (limit,)

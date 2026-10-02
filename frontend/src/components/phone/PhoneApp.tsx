@@ -59,6 +59,8 @@ if (process.env.NODE_ENV === "development" && typeof window !== "undefined" && n
 // Heavy and rarely opened: loaded on first use.
 const SettingsScreen = dynamic(() => import("./screens/SettingsScreen").then((m) => m.SettingsScreen), { ssr: false });
 const VoiceScreen = dynamic(() => import("./voice/VoiceScreen").then((m) => m.VoiceScreen), { ssr: false });
+const FocusScreen = dynamic(() => import("./screens/FocusScreen").then((m) => m.FocusScreen), { ssr: false });
+const FocusStatsScreen = dynamic(() => import("./screens/FocusStatsScreen").then((m) => m.FocusStatsScreen), { ssr: false });
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
   { id: "today", label: "Today", icon: House },
@@ -276,10 +278,13 @@ function Shell() {
               {visited.has("plan") && <Pane active={tab === "plan" && !covered}><Plan /></Pane>}
               {visited.has("memory") && <Pane active={tab === "memory" && !covered}><Memory /></Pane>}
             </motion.main>
+            {/* Frosted glass behind the dock: pages scrolling under the
+                navigation bar blur instead of showing through sharp. */}
+            <div className="ph-dock-glass" aria-hidden="true" />
             <Dock hidden={covered} />
             <AnimatePresence>
               {layers.map((layer, index) => (
-                <LayerView key={`${layer.kind}-${index}`} layer={layer} />
+                <LayerView key={`${layer.kind}-${index}`} layer={layer} covered={index < layers.length - 1} />
               ))}
             </AnimatePresence>
             <AnimatePresence>{chatOpen && <ChatScreen key="chat" />}</AnimatePresence>
@@ -368,18 +373,23 @@ export function Pane({ active, children }: { active: boolean; children: React.Re
   );
 }
 
-export function LayerView({ layer }: { layer: Layer }) {
+export function LayerView({ layer, covered = false }: { layer: Layer; covered?: boolean }) {
   const { pop } = useNav();
   useBackLayer(useIsPresent(), pop);
   return (
     <motion.div
       className="ph-layer"
+      // Layers are see-through, so one under another (Lock-in under its
+      // Stats) fades out instead of showing through.
+      data-covered={covered || undefined}
       initial={{ transform: "translateX(100%)" }}
       animate={{ transform: "translateX(0%)" }}
       exit={{ transform: "translateX(100%)" }}
       transition={{ type: "spring", stiffness: 380, damping: 42 }}
     >
       {layer.kind === "settings" && <SettingsScreen />}
+      {layer.kind === "focus" && <FocusScreen />}
+      {layer.kind === "focusStats" && <FocusStatsScreen />}
       {layer.kind === "notebook" && <NotebookScreen uid={layer.uid} initialView={layer.view} fallback={layer.page} />}
     </motion.div>
   );

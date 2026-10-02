@@ -7,6 +7,8 @@ interface NativeAlarm {
   body: string;
   triggerAt: number;
   weekly: boolean;
+  /** Schedule kind (COLLEGE, ROUTINE, SESSION) so the card is labelled exactly. */
+  kind?: string;
 }
 
 interface NativeNotificationBridge {
@@ -161,6 +163,7 @@ function scheduleAlarm(row: SyncRow, now: Date): NativeAlarm | null {
     body: details || (weekly ? "Scheduled now · repeats weekly" : "Scheduled now"),
     triggerAt,
     weekly,
+    kind: String(row.kind ?? ""),
   };
 }
 

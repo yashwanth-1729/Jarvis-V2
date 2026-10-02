@@ -6,7 +6,7 @@ import { BellRinging, MapPin, NotePencil, Plus, Warning } from "@phosphor-icons/
 
 import { parseLocal } from "@/lib/utils";
 import type { Reminder, ScheduleEvent } from "@/types";
-import { KIND_TONE } from "../lib/derive";
+import { KIND_TONE, upcomingReminders } from "../lib/derive";
 import { haptic } from "../lib/haptics";
 import { useSlidingPill } from "../lib/motion";
 import { clock, dayDelta, mondayIndex, relative, when, WEEKDAYS } from "../lib/time";
@@ -33,6 +33,9 @@ export function PlanScreen() {
   const [editing, setEditing] = React.useState<EventTarget>(null);
   const [reminding, setReminding] = React.useState<ReminderTarget>(null);
   const schedule = app.state?.schedule;
+  // Pings are for what is still coming: finished ones are purged by the
+  // backend and drop out here the moment they pass, even with the app open.
+  const upcoming = React.useMemo(() => upcomingReminders(reminders, now.getTime()), [reminders, now]);
 
   const add = () => {
     if (planSection === "reminders") setReminding("new");
@@ -59,7 +62,7 @@ export function PlanScreen() {
             { value: "routine", label: "Routine", count: schedule?.routine.length },
             { value: "college", label: "College", count: schedule?.college.length },
             { value: "session", label: "Blocks", count: schedule?.session.length },
-            { value: "reminders", label: "Pings", count: reminders.length },
+            { value: "reminders", label: "Pings", count: upcoming.length },
           ]}
         />
       }
@@ -107,7 +110,7 @@ export function PlanScreen() {
               {planSection === "session" && <Blocks blocks={schedule.session} now={now} onEdit={setEditing} onAdd={() => setEditing({ kind: "SESSION" })} />}
               {planSection === "reminders" &&
                 (remindersLoaded ? (
-                  <Reminders reminders={reminders} now={now} onEdit={setReminding} onAdd={() => setReminding("new")} />
+                  <Reminders reminders={upcoming} now={now} onEdit={setReminding} onAdd={() => setReminding("new")} />
                 ) : (
                   <Skeleton rows={3} />
                 ))}

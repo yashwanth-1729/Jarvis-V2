@@ -11,4 +11,24 @@
     <color name="launcher_holo_background">#FF030407</color>
     <color name="launcher_orb_background">#FF040406</color>
     <color name="launcher_bubble_background">#FF060507</color>
+
+    <!-- Notification card (layout/jarvis_notification_*.xml): the Neon Candy
+         tones from app/mobile/phone.css. Candy chips keep their fill in both
+         system themes with dark ink on top; the chip edge, the soft chip and
+         the copy-line colours switch in values-night/colors.xml. -->
+    <color name="jarvis_n_lime">#FFD4FF3A</color>
+    <color name="jarvis_n_sky">#FF7CC7FF</color>
+    <color name="jarvis_n_lilac">#FFB69CFF</color>
+    <color name="jarvis_n_pink">#FFFF7AC6</color>
+    <color name="jarvis_n_orange">#FFFF9A3D</color>
+    <color name="jarvis_n_amber">#FFFFC53D</color>
+    <color name="jarvis_n_ink">#FF0B0B0E</color>
+    <color name="jarvis_n_chip_edge">#290B0B0E</color>
+    <color name="jarvis_n_chip_soft">#140B0B0E</color>
+    <color name="jarvis_n_lime_text">#FF4F6B00</color>
+    <color name="jarvis_n_sky_text">#FF0F5F9E</color>
+    <color name="jarvis_n_lilac_text">#FF5B3FC4</color>
+    <color name="jarvis_n_pink_text">#FFB3186E</color>
+    <color name="jarvis_n_orange_text">#FFA64B00</color>
+    <color name="jarvis_n_amber_text">#FF8A5D00</color>
 </resources>

@@ -84,15 +84,30 @@ hologram robot that is JARVIS's face — on the dock's voice button. Four tabs s
 around it:
 
 - **Today**: greeting, Ask bar (chat) and mic (voice), now/next block with live
-  progress, task and reminder tiles, the JARVIS brief with a scrolling ticker,
-  up-next tasks and today's timeline.
+  progress, task and reminder tiles, a black Lock-in tile (serious items done
+  today and the streak), the JARVIS brief with a scrolling ticker, up-next
+  tasks and today's timeline.
 - **Tasks**: All/Doing/Late filters, Due/Priority/New sort, search, buckets from
   Overdue to Whenever. Tap the circle or swipe right to finish (confetti, 4.2 s
   Undo); swipe left to start or pause.
 - **Plan**: My routine, College and Blocks (the three schedule sections) plus
-  Reminders, with a swipeable weekday strip and clash markers.
+  Reminders, with a swipeable weekday strip and clash markers. Only upcoming
+  reminders are listed; fired and passed ones disappear.
 - **Memory**: notebook cards, a review callout for candidate memories, and
   notebook pages with role filters, search and add/rename/delete.
+
+**Lock-in (serious mode)** opens from Today's tile. Pick which tasks and
+schedule blocks are serious. Each one is either **Start → Done** (press Start
+when you begin and Done when you finish; the minutes are recorded) or **One
+tap** (Done directly). A serious block whose time ends without Done, or a
+serious task whose due time passes, counts as skipped. The screen is sober on
+purpose. **How am I doing?** opens the loud part, Stats, over 7, 30 or 90
+days, with animations throughout:
+- a filling no-skip ring;
+- tiles for streak, best streak, focused time and perfect days;
+- daily done and skipped bars;
+- a heat grid;
+- a per-item scoreboard.
 
 Chat is a full-screen sheet with streaming replies, dictation, read-aloud, copy
 and clear-with-confirmation; drafts survive closing it. Voice blooms out of the
@@ -102,7 +117,8 @@ speaking to JARVIS's playback level, muted), with language/voice pickers, Mute &
 send, Stop reply, Type instead and the voice-interruption switch (half-duplex
 stays the default). The live background ripples, blooms and sweeps in
 proportion to each event (a tap, a finished task, a delete, a tab switch, a reply
-streaming in); Settings → Live background picks Vivid, Wild, Calm or Off.
+streaming in), stirs under your finger and drifts as you scroll. The dock is
+frosted glass over a frosted strip, so what scrolls under it is blurred. Settings → Live background picks Vivid, Wild, Calm or Off.
 Settings → Design lab tries the open design choices on the phone: it switches
 the real launcher icon between the current one and three Higgsfield concepts,
 previews name candidates on a mock home screen and store card, fires every
@@ -111,8 +127,8 @@ Settings also covers theme (saved under the same key as before), keys, connected
 apps, sync, location, runtime address and local erase. Every editor is a drag-to-dismiss sheet and
 every delete still asks first. Android's back button closes the top sheet or
 screen instead of leaving the app, and the Android build now plays system
-haptics through `window.JarvisHaptics`. Data ownership, sync, notifications,
-voice transport and providers are unchanged (`useCommandCenter` plus the new
+haptics through `window.JarvisHaptics`. Data ownership, sync, voice transport
+and providers are unchanged (`useCommandCenter` plus the new
 shared `useChatSession`, `useVoiceSession` and `useSettingsModel` hooks).
 See `docs/mobile-app.md` for design, motion, bridges and verification.
 
@@ -392,6 +408,16 @@ restored after reboot, clock or timezone changes. Android 13+ notification
 permission must remain enabled. A remote change must first reach this phone by
 manual sync before Android can schedule it.
 
+Each alarm posts a JARVIS card on channel `jarvis_reminders_v2`:
+- **Collapsed:** a coloured chip for the kind (Reminder, Deadline, Block,
+  Class, Routine or Weekly, each with an emoji), the item's own title, a time
+  chip and a short rotating line.
+- **Expanded:** adds the details, plus **Got it** and **Snooze 10 min**
+  buttons. Snooze stores a one-off copy in the alarm plan, so it survives a
+  reboot.
+- **Icons:** the status-bar icon is a white silhouette of the launcher icon
+  you picked, and the large icon is its colour art.
+
 The persisted notification policy filters that plan before it reaches Android
 and also gates the desktop scheduler. Its default is **deadline tasks only**.
 JARVIS can independently enable COLLEGE, ROUTINE, one-off Blocks, all reminders
@@ -517,6 +543,115 @@ not a percentile benchmark, a comparison against the old implementation, or a
 microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
+
+### 2026-10-02: Lock-in (serious mode), upcoming-only pings, glass dock, notification cards
+
+- **Old versions removed:**
+  - The classic desktop page (`/classic/`) is deleted, along with the 38
+    components and helpers only it used (old Dashboard, Chat, Rail, voice
+    surfaces and so on). The desktop rail no longer links to it.
+  - Tool-driven voice surfaces were drawn only by that classic view.
+    `lib/surfaces.ts` and the `setSurface` plumbing remain, so they can be
+    redrawn in the new design.
+  - The 2.1.5 MSI and NSIS installers were deleted from
+    `src-tauri/target/release/bundle/`.
+  - The installed desktop app was replaced by today's 3.0.0 build. The old
+    one was the 9/21 build that the "JARVIS V4 DESKTOP" Start-menu shortcut
+    opens.
+- **Today:** the "Running on saved data" card is gone. A black Lock-in tile
+  shows how many serious items are done today, and the streak.
+- **Pings:** only upcoming reminders are listed.
+  - Reading the list deletes fired reminders, and unfired ones more than a day
+    late (`crud.purge_finished_reminders`).
+  - A missed reminder younger than that stays, because the scheduler still
+    announces it late.
+  - The app hides a ping as soon as its moment passes.
+- **Serious mode (Lock-in):**
+  - **Choosing:** "Make something serious" marks tasks and schedule blocks.
+    Each is either Start → Done (Start when you begin, Done when you finish;
+    the minutes are recorded) or One tap.
+  - **Skipping:** a serious block whose window ends without Done, or a serious
+    task whose due time passes, counts as skipped. Finishing a serious task
+    anywhere in the app records its Done.
+  - **Stats:** "How am I doing?" opens Stats, animated throughout, over 7, 30
+    or 90 days:
+    - a filling no-skip ring;
+    - streak, best streak, focused time and perfect days;
+    - daily done and skipped bars;
+    - a heat grid;
+    - a per-item scoreboard.
+  - **Backend:** schema v9 (`focus_items`, `focus_events`),
+    `services/focus.py` and `/api/focus`. Device-local; never synced.
+  - **Undo:** Done on a serious task also finishes it on the board, so the
+    board's Undo toast takes back both. Lock-in has its own Undo only for
+    blocks.
+  - **Stacked layers:** Stats is the first layer that opens over another
+    layer. A covered layer now fades out and stops painting, because layers
+    are see-through and Lock-in showed through Stats.
+- **Live background:**
+  - **Touch:** a press anywhere that isn't a control stirs it at the finger,
+    and it follows a held finger.
+  - **Scroll:** the flow drifts with the content and speeds up on fast
+    scrolls.
+- **Glass under the dock:** the dock is frosted glass, and a frosted strip
+  fades up from the bottom edge behind it, so content under the navigation bar
+  is blurred. These are the phone's only two `backdrop-filter`s.
+- **Notifications (Android):**
+  - **Cards:** each alarm is a card with:
+    - a coloured kind chip with an emoji (🔔 Reminder, ⏰ Deadline, 🎯 Block,
+      📚 Class, 🔁 Routine, 📅 Weekly);
+    - the item's own title;
+    - a time chip;
+    - a rotating short line in a casual tone.
+
+    Expanded, it adds the details and **Got it** and **Snooze 10 min**
+    buttons.
+  - **Icons:**
+    - The status-bar icon now follows the chosen launcher icon. The files are
+      `ic_stat_jarvis_{bubble,holo,orb,classic}`, white silhouettes cut from
+      the existing art.
+    - The large icon is that launcher icon's colour art.
+    - The manifest's app icon is now the bubble, because ColorOS and OxygenOS
+      draw the app icon in notifications. It does not follow later Design lab
+      switches.
+  - **Channel:** new channel `jarvis_reminders_v2` with a tap-tap-buzz
+    vibration. The old channel is deleted; if it was off, the new one starts
+    off.
+  - **Snooze:** stores a one-off `snooze:<id>` alarm, which survives syncs and
+    reboots. A task finished after snoozing still rings once.
+  - **Kind labels:** weekly schedule alarms now carry their schedule kind, so
+    classes and routines are labelled exactly.
+  - **Fallback:** if a card fails to build, the old plain notification is
+    posted with the new icon.
+- **Kokoro on the VPS: tested, not adopted.**
+  - Self-hosted Kokoro-FastAPI (CPU, a 2-vCPU VPS in Sydney) was slower to
+    first audio than the current API by 1.4 s, 4.6 s and 9 s on short, medium
+    and long text.
+  - It was removed from the VPS. No repo change.
+- **Validation:**
+  - **Backend tests passed:**
+    - `serious_mode_test` (19);
+    - `smoke_test`;
+    - `routine_undo_test` (30);
+    - `reminder_lead_test` (22);
+    - `reminder_time_test` (5);
+    - `scheduler_test` (37);
+    - `schedule_update_test`.
+  - **Frontend:** TypeScript and ESLint passed on the changed files.
+  - **Builds:**
+    - `npm run desktop:build` produced the 3.0.0 MSI and NSIS installers.
+    - The Android debug APK built, so Gradle compiled the new Kotlin and
+      resources.
+  - **Installed desktop app, driven over WebView2 DevTools:**
+    - no classic link and no saved-data card;
+    - the Lock-in tile, Lock-in and Stats render (21 bars, a 30-day grid);
+    - Lock-in hides under Stats and returns on Back;
+    - no console errors.
+  - **Not verified on the phone:** the APK is not installed yet. The phone
+    kept dropping off adb, and the OnePlus USB-install prompt timed out once.
+    So the notification cards, the dock blur's smoothness while scrolling,
+    the touch and scroll background and the ping list are unchecked on the
+    device.
 
 ### 2026-09-28 (second): Desktop app in the phone's design
 

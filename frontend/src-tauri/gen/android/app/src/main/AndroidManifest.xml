@@ -39,8 +39,15 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- The application icon is what system surfaces draw outside the launcher:
+         Settings, permission prompts, toasts and, reportedly on ColorOS /
+         OxygenOS 15+, notifications (the skin swaps setSmallIcon for the app
+         icon). It cannot follow the Design lab switch at runtime, so it is the
+         user's pick (bubble, 2026-10-02) instead of the old classic art; the
+         launcher entries below still carry their own icons. -->
     <application
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/ic_launcher_bubble"
+        android:roundIcon="@mipmap/ic_launcher_bubble_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.app"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
@@ -112,6 +119,12 @@
 
         <receiver
             android:name=".JarvisAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Done / Snooze buttons on a JARVIS notification (JarvisNotifications.kt).
+             Only our own PendingIntents reach it. -->
+        <receiver
+            android:name=".JarvisNotificationActionReceiver"
             android:exported="false" />
 
         <receiver

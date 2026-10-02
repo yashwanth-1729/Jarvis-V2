@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Collapsed and heads-up body of a JARVIS notification. The system draws the
+     icon, app name, expander and buttons around it (DecoratedCustomViewStyle).
+     Android 12+ leaves custom content as little as 48dp here, so this is two
+     short lines (about 40dp). RemoteViews only inflates whitelisted classes:
+     LinearLayout and TextView only, no plain View or Space.
+
+     [ Data Structures                        ]
+     [ (9:30 AM)  📚 Class is on. Lock in.    ]  chip = candy tone of the kind -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/jarvis_n_title"
+        style="@style/JarvisNotificationTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/jarvis_n_time"
+            style="@style/JarvisNotificationChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/jarvis_n_line"
+            style="@style/JarvisNotificationLine"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

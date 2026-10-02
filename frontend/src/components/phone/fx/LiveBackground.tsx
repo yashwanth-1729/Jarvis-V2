@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { fxActivity, fxScene, onFx, onFxScene, type FxEvent, type FxKind, type FxScene } from "./fxBus";
+import { fxActivity, fxInput, fxScene, onFx, onFxScene, type FxEvent, type FxKind, type FxScene } from "./fxBus";
 
 export type FxMode = "vivid" | "wild" | "calm" | "off";
 
@@ -37,6 +37,7 @@ const REACTION: Record<FxKind, { strength: number; energy: number; color: string
   open: { strength: 0.55, energy: 0.18, color: 1 },
   close: { strength: 0.3, energy: 0.06, color: 2 },
   tab: { strength: 0, energy: 0.28, color: 0 },
+  touch: { strength: 0.32, energy: 0.08, color: 1 },
 };
 
 const MODE_VALUE: Record<Exclude<FxMode, "off">, number> = { calm: 0, vivid: 1, wild: 2 };
@@ -70,6 +71,8 @@ uniform vec3 uC3;
 uniform vec4 uRip[${RIPPLES}];
 uniform vec3 uRipC[${RIPPLES}];
 uniform vec4 uSweep;
+uniform vec3 uTouch;
+uniform float uScroll;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float noise(vec2 p) {
@@ -113,7 +116,15 @@ void main() {
     glow += uRipC[i] * (ring * life * 0.9 + core * 0.75);
   }
 
-  vec2 q = p + disp;
+  // A finger on the screen (or a mouse over it) pushes the flow aside and
+  // lights it a little; scrolling slides the whole field with the page.
+  if (uTouch.z > 0.001) {
+    vec2 d = p - vec2(uTouch.x * aspect, uTouch.y);
+    float near = dot(d, d);
+    disp += d * exp(-near * 10.0) * uTouch.z * (0.22 + 0.16 * wild);
+    glow += mix(uC1, vec3(1.0), 0.3) * exp(-near * 16.0) * uTouch.z * (0.2 + 0.16 * wild);
+  }
+  vec2 q = p + disp - vec2(0.0, uScroll);
   vec2 w = vec2(fbm(q * 1.35 + vec2(t, -t * 0.7)), fbm(q * 1.35 + vec2(-t * 0.8, t) + 5.2));
   float f = fbm(q * 1.15 + w * 1.7 + t * 0.5);
   float g = fbm(q * 2.0 - w * 1.2 - t * 0.35 + 3.0);
@@ -212,7 +223,7 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
     const at = (name: string) => gl.getUniformLocation(program, name);
     type Uniform = WebGLUniformLocation | null;
-    let u: { res: Uniform; time: Uniform; energy: Uniform; mode: Uniform; light: Uniform; c: Uniform[]; rip: Uniform; ripC: Uniform; sweep: Uniform } | null = null;
+    let u: { res: Uniform; time: Uniform; energy: Uniform; mode: Uniform; light: Uniform; c: Uniform[]; rip: Uniform; ripC: Uniform; sweep: Uniform; touch: Uniform; scroll: Uniform } | null = null;
 
     // State the frame loop animates.
     const palette = PALETTES[fxScene()].map(rgb);
@@ -227,6 +238,8 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
     let lastDraw = 0;
     let frame = 0;
     let modeValue = 1;
+    let touchLevel = 0;
+    let scrollShown = 0;
 
     const resize = () => {
       const scale = settings.current.mode === "wild" ? 0.62 : 0.5;
@@ -279,6 +292,16 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
       modeValue += ((currentMode === "off" ? 1 : MODE_VALUE[currentMode]) - modeValue) * Math.min(1, dt * 3);
       time += dt;
       energy = Math.max(fxActivity() * 0.6, energy * Math.exp(-dt * 1.1));
+      // Touch eases in fast and out slowly; moving the finger brightens it.
+      const pointer = fxInput();
+      const want = pointer.down ? 0.55 + 0.45 * pointer.moved : pointer.hover ? 0.1 + 0.25 * pointer.moved : 0;
+      touchLevel += (want - touchLevel) * Math.min(1, dt * (want > touchLevel ? 10 : 2.5));
+      pointer.moved *= Math.exp(-dt * 4);
+      // Scroll: the field follows the page at a third of its speed (depth),
+      // and a fast fling revs the flow up.
+      scrollShown += (pointer.scroll * 0.33 - scrollShown) * Math.min(1, dt * 8);
+      pointer.scrollSpeed *= Math.exp(-dt * 3);
+      energy = Math.max(energy, Math.min(0.75, pointer.scrollSpeed * 0.2), touchLevel * 0.3);
       const blend = 1 - Math.exp(-dt * 3.5);
       for (let i = 0; i < 4; i += 1) for (let c = 0; c < 3; c += 1) palette[i][c] += (target[i][c] - palette[i][c]) * blend;
       let live = 0;
@@ -305,8 +328,10 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
       gl.uniform4fv(uniforms.rip, ripData);
       gl.uniform3fv(uniforms.ripC, ripColors);
       gl.uniform4f(uniforms.sweep, sweep.direction, sweep.progress, sweep.strength, 0);
+      gl.uniform3f(uniforms.touch, pointer.x, 1 - pointer.y, touchLevel);
+      gl.uniform1f(uniforms.scroll, scrollShown);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      return live > 0 || sweep.strength > 0 || energy > 0.04;
+      return live > 0 || sweep.strength > 0 || energy > 0.04 || touchLevel > 0.01;
     };
 
     const loop = (now: number) => {
@@ -317,7 +342,7 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
       }
       // Busy (reacting): every frame. Calm: about 60 fps, which is plenty for
       // a slow drift and halves the work on a 120 Hz screen.
-      const busy = energy > 0.04 || sweep.strength > 0 || ripples.some((ripple) => ripple.strength > 0);
+      const busy = energy > 0.04 || sweep.strength > 0 || touchLevel > 0.01 || fxInput().down || ripples.some((ripple) => ripple.strength > 0);
       if (busy || now - lastDraw > 15.5) {
         lastDraw = now;
         draw(now);
@@ -369,7 +394,7 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
       gl.useProgram(program);
       u = {
         res: at("uRes"), time: at("uTime"), energy: at("uEnergy"), mode: at("uMode"), light: at("uLight"),
-        c: [at("uC0"), at("uC1"), at("uC2"), at("uC3")], rip: at("uRip"), ripC: at("uRipC"), sweep: at("uSweep"),
+        c: [at("uC0"), at("uC1"), at("uC2"), at("uC3")], rip: at("uRip"), ripC: at("uRipC"), sweep: at("uSweep"), touch: at("uTouch"), scroll: at("uScroll"),
       };
       canvas.dataset.ready = "true";
       wake.current();

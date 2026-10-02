@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { fetchReminders } from "@/lib/api";
+import { noteTaskDone, noteTaskUndone } from "@/lib/focus";
 import type { CommandCenter } from "@/lib/useCommandCenter";
 import type { ChatSessionModel } from "@/lib/useChatSession";
 import type { RecordsMode } from "@/lib/records";
@@ -20,6 +21,8 @@ export type MemoryView = "ALL" | "SEMANTIC" | "PROCEDURAL" | "EPISODIC" | "PROSP
 
 export type Layer =
   | { kind: "settings" }
+  | { kind: "focus" }
+  | { kind: "focusStats" }
   | { kind: "notebook"; uid: string; view?: MemoryView; page?: NotePage };
 
 /*
@@ -191,6 +194,7 @@ export function useFinishing(toggle: CommandCenter["handleToggleTask"]): FinishS
       waiting.current.delete(task.id);
       setFinishing((current) => new Set(current).add(task.id));
       void Promise.resolve(toggleRef.current(task.id, "COMPLETED")).finally(() => drop(task.id));
+      noteTaskDone(task);
     };
     const timer = window.setTimeout(commit, UNDO_MS);
     waiting.current.set(task.id, { timer, hide, commit });
@@ -208,6 +212,7 @@ export function useFinishing(toggle: CommandCenter["handleToggleTask"]): FinishS
           waiting.current.delete(task.id);
           haptic("toggle-off");
           drop(task.id);
+          noteTaskUndone(task);
         },
       },
     });

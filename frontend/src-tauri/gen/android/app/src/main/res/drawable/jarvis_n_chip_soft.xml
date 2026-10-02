@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neutral time chip on the expanded JARVIS notification; its fill switches
+     with the system theme (values-night/colors.xml). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/jarvis_n_chip_soft" />
+    <corners android:radius="999dp" />
+</shape>

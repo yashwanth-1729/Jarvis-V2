@@ -91,10 +91,9 @@ arranged for a wide window: `components/desktop/DesktopApp.tsx`.
   - Ctrl+K puts the cursor in chat.
   - Ctrl+, opens Settings.
   - Esc closes the page on top.
-  - An agent-runtime card sits under the chat, using `lib/useAgentRuntime.ts`,
-    which it shares with the classic panel.
-- **Classic view:** the previous desktop interface remains at `/classic/`,
-  linked from the rail.
+  - An agent-runtime card sits under the chat, using `lib/useAgentRuntime.ts`.
+- **No classic view:** the previous desktop interface (`/classic/`) and the 38
+  components and helpers only it used were deleted on 2026-10-02.
 
 - Data and lifecycle stay in `useCommandCenter`, shared with `/`: store
   ownership, startup retries, key handoff, agent seeding/draining, notification
@@ -126,13 +125,20 @@ arranged for a wide window: `components/desktop/DesktopApp.tsx`.
 - A live WebGL background (`components/phone/fx/`) sits behind every phone
   screen. UI code never drives it directly: `fxBus.ts` carries events (every
   `haptic()` also emits one at the last touch point), activity levels (chat
-  streaming, sync) and the current tab's palette. Its mode (Vivid, Wild, Calm,
-  Off) is a per-device preference in localStorage (`jarvis.phone.fx`).
+  streaming, sync) and the current tab's palette. It also reads raw input
+  from `fxInput()`: capture-phase, passive pointer and scroll listeners on the
+  window, so a press anywhere that is not a control stirs the flow at the
+  finger and a held finger keeps it moving, and any scroll drifts the flow and
+  speeds it up. Its mode (Vivid, Wild, Calm, Off) is a per-device preference
+  in localStorage (`jarvis.phone.fx`).
 - Phone motion runs on the compositor: CSS transitions/animations and Web
   Animations on `transform`/`opacity` only (springs sampled into CSS `linear()`
   in `components/phone/lib/motion.ts`), CSS scroll-driven animations for the
   title hand-over, and `content-visibility: hidden` for tabs that have finished
-  leaving. No `backdrop-filter` on the phone route.
+  leaving. The phone route has only two `backdrop-filter`s, both added on
+  2026-10-02 at the user's request: the dock, and the frosted strip
+  (`.ph-dock-glass`) that fades up from the screen's bottom edge behind it.
+  The strip fades out while a layer covers the tabs.
 - Android `MainActivity` attaches `JarvisHapticsBridge` (`window.JarvisHaptics`),
   which maps UI feedback kinds to `performHapticFeedback`, and
   `JarvisAppIconBridge` (`window.JarvisAppIcon`), which switches the launcher
@@ -341,6 +347,37 @@ after reboot; stale ones remain quiet. Native-fired reminder IDs contain no text
 and are reconciled into SQLite on the next launch, preventing a second in-app
 announcement. Remote edits become native alarms only after the phone pulls them.
 
+Reading the reminder list (`crud.list_reminders`, used by the API and the
+agent's tool) first deletes fired reminder rows, and unfired ones more than a
+day past their moment (`purge_finished_reminders`). An unfired one younger
+than that stays, because the scheduler still announces a missed reminder late,
+for example after the laptop slept through it. The announcement keeps what was
+said. The app's ping list shows only reminders whose moment is still ahead,
+on its own clock.
+
+Since 2026-10-02 each alarm posts a custom card built in
+`JarvisNotificationCard.kt`:
+- **Layout and channel:** RemoteViews layouts `jarvis_notification_collapsed`
+  and `jarvis_notification_expanded`, on channel `jarvis_reminders_v2`.
+  `MainActivity` deletes the old `jarvis_reminders` channel at startup; if the
+  user had switched it off, the new one starts off.
+- **Kind:** read from the alarm's optional `kind` field first (the WebView
+  sends the schedule kind), then from the id prefix (`task:`, `reminder:`),
+  then guessed from words in the title.
+- **Buttons:** `JarvisNotificationActionReceiver`, which is not exported,
+  handles both.
+  - Got it clears the notification.
+  - Snooze clears it and stores a one-off `snooze:<id>` alarm, with
+    `originalAt`, in the plan. Plan syncs keep it and it survives a reboot.
+    A task finished in the app after snoozing still rings once.
+- **Small icon:** `ic_stat_jarvis_<pick>` for whichever launcher alias is
+  enabled.
+- **App icon:** the manifest's application icon is the bubble, because some
+  skins (ColorOS, OxygenOS) draw the app icon in notifications. It does not
+  follow later Design lab switches.
+- **Fallback:** if building the card throws, the previous plain notification
+  is posted instead.
+
 Before projection, a persisted notification policy selects alarms by category and
 stable record identity. The default enables deadline tasks only. COLLEGE, ROUTINE,
 one-off Blocks and generic reminders have independent switches; a master switch
@@ -410,6 +447,41 @@ do not enter clock parsing.
 Android's `MainActivity` explicitly selects dark system-bar styling (light icons)
 for the permanently dark canvas, independently of the OS theme. It retains
 edge-to-edge insets and the embedded backend lifecycle.
+
+## Serious mode (Lock-in)
+
+Serious mode is a device-local accountability layer over existing tasks and
+schedule blocks: schema v9 tables `focus_items` and `focus_events`,
+`services/focus.py`, and `api/focus.py` mounted at `/api/focus`.
+
+- **`focus_items`** marks one task or block as serious. It is keyed by the
+  record's `uid` and keeps a snapshot of the title and timing, so the stats
+  survive edits and deletions. Its mode is either:
+  - `session`: Start, then Done; the minutes in between are recorded;
+  - `quick`: Done in one tap.
+- **`focus_events`** holds one row per occurrence. A block's occurrence is its
+  date; a task's is `once`.
+  - Start is idempotent.
+  - Done closes a running event, or inserts a finished one.
+  - Reset takes an occurrence back.
+- **Skips are derived, not stored.** An occurrence counts as skipped when it
+  has no Done and either:
+  - it belongs to a weekly or dated block whose window ended after the block
+    was marked; or
+  - it belongs to a task whose due time passed.
+
+  Unmarking keeps the history.
+- **`GET /api/focus/stats?days=`** returns:
+  - the daily series;
+  - the no-skip rate;
+  - the streak (clean days in a row; days with nothing serious are neutral)
+    and the best streak;
+  - perfect days and focused minutes;
+  - today's done, skipped and pending;
+  - the top items and the running event.
+- **Never synced:** like reminders and the change journal, these tables are
+  never synced or seeded over. Finishing a serious task anywhere in the app
+  also records its Done.
 
 ## Voice session protocol
 

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Text and chips of the notification card (layout/jarvis_notification_*.xml).
+         Title, copy and details take their colour from the platform notification
+         text styles, so they follow the system's light or dark shade (and OEM
+         tints); the chip colours live in colors.xml with values-night overrides. -->
+    <style name="JarvisNotificationTitle" parent="@android:style/TextAppearance.Material.Notification.Title">
+        <item name="android:fontFamily">sans-serif-black</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="JarvisNotificationLine" parent="@android:style/TextAppearance.Material.Notification.Title">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <style name="JarvisNotificationBody" parent="@android:style/TextAppearance.Material.Notification">
+        <item name="android:ellipsize">end</item>
+    </style>
+
+    <!-- Candy chip: dark ink on a solid tone in both themes. The tone (the
+         background) is set per kind from JarvisNotificationCard.kt. -->
+    <style name="JarvisNotificationChip">
+        <item name="android:background">@drawable/jarvis_n_chip_lime</item>
+        <item name="android:textColor">@color/jarvis_n_ink</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:paddingTop">1dp</item>
+        <item name="android:paddingBottom">1dp</item>
+    </style>
+
+    <!-- Neutral chip (the time on the expanded card): notification text colour
+         on a translucent fill. -->
+    <style name="JarvisNotificationSoftChip" parent="@android:style/TextAppearance.Material.Notification.Title">
+        <item name="android:background">@drawable/jarvis_n_chip_soft</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:paddingTop">1dp</item>
+        <item name="android:paddingBottom">1dp</item>
+    </style>
+</resources>

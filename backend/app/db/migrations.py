@@ -17,7 +17,7 @@ import aiosqlite
 logger = logging.getLogger("jarvis.db.migrations")
 
 #: Bump when adding a migration below.
-TARGET_VERSION = 8
+TARGET_VERSION = 9
 
 
 async def _columns(conn: aiosqlite.Connection, table: str) -> set[str]:
@@ -445,6 +445,52 @@ async def _v8_change_journal(conn: aiosqlite.Connection) -> None:
     )
 
 
+async def _v9_serious_mode(conn: aiosqlite.Connection) -> None:
+    """Serious mode (services/focus.py): which tasks and blocks are serious,
+    and the start/finish log their stats come from.
+
+    Local to the device, like reminders: never synced, never seeded over.
+    Items carry a snapshot of their timing because on Android the record
+    tables here are only a working copy refreshed around agent turns.
+    """
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS focus_items (
+            uid          TEXT PRIMARY KEY,
+            kind         TEXT NOT NULL,
+            mode         TEXT NOT NULL DEFAULT 'session',
+            title        TEXT NOT NULL,
+            block_kind   TEXT,
+            day_of_week  INTEGER,
+            start_time   TEXT,
+            end_time     TEXT,
+            time_start   DATETIME,
+            time_end     DATETIME,
+            due_date     DATETIME,
+            created_at   DATETIME NOT NULL,
+            updated_at   DATETIME NOT NULL
+        )
+        """
+    )
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS focus_events (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_uid     TEXT NOT NULL,
+            title        TEXT NOT NULL,
+            occurrence   TEXT NOT NULL,
+            status       TEXT NOT NULL,
+            started_at   DATETIME,
+            finished_at  DATETIME,
+            minutes      REAL
+        )
+        """
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_focus_events_item ON focus_events (item_uid, occurrence)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[aiosqlite.Connection], Awaitable[None]]] = {
     1: _v1_schedule_kinds,
     2: _v2_sync_identity,
@@ -454,6 +500,7 @@ MIGRATIONS: dict[int, Callable[[aiosqlite.Connection], Awaitable[None]]] = {
     6: _v6_systematic_memory,
     7: _v7_reminder_lead,
     8: _v8_change_journal,
+    9: _v9_serious_mode,
 }
 
 

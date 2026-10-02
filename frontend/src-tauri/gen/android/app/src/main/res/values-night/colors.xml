@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notification card on a dark system theme (see values/colors.xml):
+         no chip edge, a lighter soft chip and the bright tone text from
+         phone.css's dark palette. -->
+    <color name="jarvis_n_chip_edge">#00000000</color>
+    <color name="jarvis_n_chip_soft">#29FFFFFF</color>
+    <color name="jarvis_n_lime_text">#FFD4FF3A</color>
+    <color name="jarvis_n_sky_text">#FF8FD0FF</color>
+    <color name="jarvis_n_lilac_text">#FFC3ADFF</color>
+    <color name="jarvis_n_pink_text">#FFFF8FCF</color>
+    <color name="jarvis_n_orange_text">#FFFFAB5E</color>
+    <color name="jarvis_n_amber_text">#FFFFD166</color>
+</resources>

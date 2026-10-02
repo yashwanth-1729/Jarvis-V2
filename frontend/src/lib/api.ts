@@ -129,8 +129,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 /* Thin verbs over `request`, so callers editing records do not each rebuild the
  * same fetch options and forget one. Exported for `lib/records.ts`. */
 
+export async function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path);
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, { method: "PUT", body: JSON.stringify(body) });
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {

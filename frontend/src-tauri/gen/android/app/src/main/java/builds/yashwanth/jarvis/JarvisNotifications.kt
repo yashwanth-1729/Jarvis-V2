@@ -2,8 +2,6 @@ package builds.yashwanth.jarvis
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -12,18 +10,29 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.text.format.DateFormat
 import android.util.Log
 import android.webkit.JavascriptInterface
+import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Date
 
 private const val PREFS = "jarvis_native_notifications"
 private const val PLAN = "alarm_plan"
 private const val FIRED_REMINDERS = "fired_reminders"
-private const val CHANNEL_ID = "jarvis_reminders"
 private const val ALARM_ACTION = "builds.yashwanth.jarvis.NOTIFY"
 private const val WEEK_MS = 7L * 24L * 60L * 60L * 1000L
+private const val DAY_MS = 24L * 60L * 60L * 1000L
 private const val TAG = "JarvisNotify"
+
+/**
+ * Plan entries under this prefix are one-off copies booked by a notification's
+ * Snooze button. The WebView's syncs only replace their own prefixes
+ * (schedule:, task:, reminder:), so a pending snooze survives them.
+ */
+internal const val SNOOZE_PREFIX = "snooze:"
+internal const val SNOOZE_MINUTES = 10
 
 data class JarvisAlarm(
   val id: String,
@@ -31,6 +40,14 @@ data class JarvisAlarm(
   val body: String,
   val triggerAt: Long,
   val weekly: Boolean,
+  /**
+   * Optional hint for the notification card. The WebView may send the
+   * schedule kind (COLLEGE, ROUTINE, SESSION); a snoozed copy keeps the kind it
+   * was first shown as. Empty when unknown, see [JarvisNotificationCard.kindOf].
+   */
+  val kind: String = "",
+  /** When a snoozed or late-restored copy was originally due; 0 otherwise. */
+  val originalAt: Long = 0L,
 ) {
   fun json() = JSONObject().apply {
     put("id", id)
@@ -38,6 +55,8 @@ data class JarvisAlarm(
     put("body", body)
     put("triggerAt", triggerAt)
     put("weekly", weekly)
+    if (kind.isNotEmpty()) put("kind", kind)
+    if (originalAt > 0L) put("originalAt", originalAt)
   }
 
   companion object {
@@ -52,6 +71,8 @@ data class JarvisAlarm(
         body = json.optString("body").trim(),
         triggerAt = triggerAt,
         weekly = json.optBoolean("weekly", false),
+        kind = if (json.isNull("kind")) "" else json.optString("kind").trim(),
+        originalAt = json.optLong("originalAt", 0L),
       )
     }
   }
@@ -137,6 +158,30 @@ object JarvisAlarmScheduler {
     }
   }
 
+  /**
+   * The Snooze button: ring [alarm] again in [minutes] as a one-off copy under
+   * `snooze:<id>`, through the same exact-alarm path as every other alarm. It
+   * replaces an earlier snooze of the same alarm and leaves the original entry
+   * alone, so a weekly alarm keeps its slot next week.
+   */
+  fun snooze(context: Context, alarm: JarvisAlarm, minutes: Int): JarvisAlarm {
+    val now = System.currentTimeMillis()
+    val again = alarm.copy(
+      id = SNOOZE_PREFIX + alarm.id.removePrefix(SNOOZE_PREFIX),
+      triggerAt = now + minutes * 60_000L,
+      weekly = false,
+      originalAt = if (alarm.originalAt > 0L) alarm.originalAt else alarm.triggerAt,
+    )
+    val plan = JarvisAlarmStore.read(context)
+    // Also drop snoozes that can no longer ring (the phone was off for a day).
+    plan.removeAll { it.id == again.id || (it.id.startsWith(SNOOZE_PREFIX) && it.triggerAt < now - DAY_MS) }
+    plan += again
+    JarvisAlarmStore.write(context, plan)
+    schedule(context, again)
+    Log.i(TAG, "snoozed ${again.id} for $minutes min")
+    return again
+  }
+
   private fun parse(raw: String): List<JarvisAlarm> = try {
     val array = JSONArray(raw)
     List(array.length()) { index -> JarvisAlarm.from(array.getJSONObject(index)) }
@@ -152,7 +197,11 @@ object JarvisAlarmScheduler {
       // A phone that was powered off at the requested time should still show a
       // recent one-off reminder after boot. Old forgotten entries stay quiet.
       return if (alarm.triggerAt <= now && now - alarm.triggerAt <= 24L * 60L * 60L * 1000L) {
-        alarm.copy(triggerAt = now + 1_500L)
+        // The card still shows when it was due, not this catch-up moment.
+        alarm.copy(
+          triggerAt = now + 1_500L,
+          originalAt = if (alarm.originalAt > 0L) alarm.originalAt else alarm.triggerAt,
+        )
       } else alarm
     }
     var trigger = alarm.triggerAt
@@ -232,46 +281,42 @@ class JarvisAlarmReceiver : BroadcastReceiver() {
       context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) return
 
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      manager.createNotificationChannel(
-        NotificationChannel(CHANNEL_ID, "JARVIS reminders", NotificationManager.IMPORTANCE_HIGH).apply {
-          description = "Scheduled blocks and reminders from JARVIS"
-          enableVibration(true)
-        },
-      )
-    }
-
-    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-    }
-    val open = launch?.let {
-      PendingIntent.getActivity(
-        context,
-        id.hashCode() and 0x7fffffff,
-        it,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
-    }
-    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      Notification.Builder(context, CHANNEL_ID)
-    } else {
-      Notification.Builder(context)
-    }
-    builder
-      .setSmallIcon(R.mipmap.ic_launcher)
-      .setContentTitle(alarm.title)
-      .setContentText(alarm.body.ifBlank { "Scheduled now" })
-      .setStyle(Notification.BigTextStyle().bigText(alarm.body.ifBlank { "Scheduled now" }))
-      .setAutoCancel(true)
-      .setCategory(Notification.CATEGORY_REMINDER)
-      .setVisibility(Notification.VISIBILITY_PRIVATE)
-      .setPriority(Notification.PRIORITY_HIGH)
-    if (open != null) builder.setContentIntent(open)
-    manager.notify(id.hashCode() and 0x7fffffff, builder.build())
+    // The card, channel, icons and buttons live in JarvisNotificationCard.kt.
+    // post() never throws, so the bookkeeping below always runs.
+    JarvisNotificationCard.post(context, alarm)
     if (id.startsWith("reminder:")) JarvisAlarmStore.rememberFiredReminder(context, id)
     JarvisAlarmScheduler.afterFiring(context, alarm)
     Log.i(TAG, "delivered alarm: $id")
+  }
+}
+
+/**
+ * The Got it and Snooze buttons on a JARVIS notification. Both clear it; Snooze
+ * also books the same alarm again [SNOOZE_MINUTES] from now. Like
+ * [JarvisAlarmReceiver], it needs neither the WebView nor Python.
+ */
+class JarvisNotificationActionReceiver : BroadcastReceiver() {
+  override fun onReceive(context: Context, intent: Intent) {
+    if (intent.hasExtra(EXTRA_NOTIFICATION_ID)) {
+      context.getSystemService(NotificationManager::class.java)
+        ?.cancel(intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0))
+    }
+    if (intent.action != ACTION_SNOOZE) {
+      Log.i(TAG, "notification done")
+      return
+    }
+    // The alarm rides in the button itself: a one-off has already left the
+    // plan by the time Snooze is pressed.
+    val alarm = intent.getStringExtra(EXTRA_ALARM)?.let { raw ->
+      try {
+        JarvisAlarm.from(JSONObject(raw))
+      } catch (_: Throwable) {
+        null
+      }
+    } ?: return
+    val again = JarvisAlarmScheduler.snooze(context, alarm, SNOOZE_MINUTES)
+    val at = DateFormat.getTimeFormat(context).format(Date(again.triggerAt))
+    Toast.makeText(context, "Snoozed till $at. Back in $SNOOZE_MINUTES.", Toast.LENGTH_SHORT).show()
   }
 }
 

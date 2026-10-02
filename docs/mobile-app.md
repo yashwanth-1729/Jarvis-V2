@@ -29,9 +29,11 @@ youthful look. Nothing of the old layout was kept; every feature was.
 
 | Area | What it has |
 | --- | --- |
-| Today | Greeting, live counts, Ask bar (opens chat) with a mic (opens voice), bento tiles: now/next block with live progress, open tasks (+ late sticker), reminders, JARVIS brief with a scrolling ticker (tap to expand). Up next tasks, today's timeline. Offline/saved-data card with Retry. Sync status is only a 4 px dot in the top-right corner of the app, shown while a sync runs (faint pulse) or waits to retry (dim amber); Settings → Sync & backup has the details. |
+| Today | Greeting, live counts, Ask bar (opens chat) with a mic (opens voice), bento tiles: now/next block with live progress, open tasks (+ late sticker), reminders, a full-width black Lock-in tile (serious items done today and the streak; opens serious mode), JARVIS brief with a scrolling ticker (tap to expand). Up next tasks, today's timeline. Sync status is only a 4 px dot in the top-right corner of the app, shown while a sync runs (faint pulse) or waits to retry (dim amber); Settings → Sync & backup has the details. |
 | Tasks | Filters All / Doing / Late with counts, sort Due / Priority / New, search, grouped buckets (Overdue, Today, Tomorrow, This week, Later, Whenever). |
-| Plan | The three schedule sections (My routine, College, Blocks) plus Reminders. Weekday strip (tap or swipe the list) for weekly sections, clash banner and stickers, blocks grouped by date, reminders with relative time and "spoken" state. |
+| Plan | The three schedule sections (My routine, College, Blocks) plus Reminders. Weekday strip (tap or swipe the list) for weekly sections, clash banner and stickers, blocks grouped by date, reminders with relative time. Only upcoming reminders are listed: fired and passed ones disappear (fired rows are deleted by the backend). |
+| Lock-in | Serious mode, opened from Today's Lock-in tile. Sober on purpose: black and red, flat rows. Today's serious tasks and blocks with Start then Done (the elapsed time runs while it is going) or a one-tap Did it, Undo, missed ones flagged Skipped, then Coming up. Make something serious opens a sheet where each open task and block gets Off, Start → Done or One tap. How am I doing? opens Stats. |
+| Stats | The loud payoff for Lock-in: a no-skip-rate ring that fills with a gradient over a spinning glow, a headline that matches the rate, a streak sticker, tiles (streak with a flickering flame, best streak, focused time, perfect days), daily done/skipped bars that spring up one after another, a heat grid of every day, and a per-item scoreboard. Ranges 7, 30 or 90 days; a success burst and haptic on a streak. |
 | Memory | Notebook cards with counts, a review callout for candidate memories, recent memories, new page. Each page opens a notebook screen: role filters with counts (Active, Knowledge, Rules, Episodes, Goals, Patterns, Review), search, memory/idea cards, floating add, rename/delete page. |
 | Chat | Full-screen sheet (drag the header down to close). Intro with prompt cards, streaming replies (word cascade, then markdown), read aloud, copy, dictation, stop, clear with confirmation, jump-to-latest. The session lives at app level, so drafts and streams survive closing it. |
 | Voice | Blooms out of the dock button and HOLO beams in at the centre (tap it to interrupt a reply; it reacts to the tap). Scrambled status label, hint, live captions, Stop reply, Mute & send, Type instead, voice-interruption switch, reply language and speaking voice pickers. |
@@ -79,11 +81,16 @@ runs on the browser's compositor thread wherever possible.
   navigation state, finishing, chat, sync, look) and the screens are memoised,
   so a streamed chat word or a tab switch no longer re-renders every screen.
   Task rows are memoised and receive `done` as a prop.
-- No `backdrop-filter`: at the phone's density a blur over moving content is
-  recomputed every frame over millions of pixels. The dock and the scrolled top
-  bar are solid; layers, settings pages and chat are see-through so the live
-  background shows behind them (chat uses a translucent scrim). vaul no longer
-  scales the app behind a sheet (that re-rasterised the whole screen).
+- Blur only around the dock: the dock is frosted glass, and a frosted strip
+  (`.ph-dock-glass`) fades up from the bottom edge behind it, so whatever
+  scrolls under the navigation bar is blurred (asked for on 2026-10-02).
+  Nowhere else: at the phone's density a blur over moving content is
+  recomputed every frame. The scrolled top bar is solid; layers, settings
+  pages and chat are see-through so the live background shows behind them
+  (chat uses a translucent scrim). A layer opened over another layer (Stats
+  over Lock-in) hides the one beneath (`data-covered`) so they never show
+  through each other. vaul no longer scales the app behind a sheet (that
+  re-rasterised the whole screen).
 - Tasks: tap the circle or swipe right to finish (check pops, confetti burst,
   row collapses, Undo toast for 4.2 s; leaving the app commits immediately).
   Swipe left to start or pause. A haptic tick marks the swipe threshold.
@@ -165,6 +172,10 @@ dithering so gradients never band. It reacts to the app through `fx/fxBus.ts`:
   barely stirs, a heavy press or a finished task blooms (lime), a delete or a
   warning sends a red shockwave, toggles pulse, a tab switch sweeps the colour
   flow in the direction you moved and cross-fades to the new tab's palette.
+- Touch and scroll, straight from the input (`fxInput()` in `fx/fxBus.ts`):
+  a press anywhere that is not a control stirs the flow at the finger and a
+  held finger keeps it moving, and scrolling drifts the flow with the content
+  and speeds it up while the scroll is fast.
 - Continuous activity raises the flow's energy: a chat reply streaming in. A
   finished reply settles with a small ripple. Syncing no longer stirs it.
 - Modes (Settings → Live background, stored as `jarvis.phone.fx` on the

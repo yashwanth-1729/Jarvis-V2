@@ -26,6 +26,13 @@ class MainActivity : TauriActivity() {
       navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
     )
     attachNotificationBridge()
+    // Create the current notification channel (and retire the old one) now,
+    // so it shows in system Settings before the first alarm rings.
+    try {
+      JarvisNotificationCard.ensureChannel(applicationContext)
+    } catch (error: Throwable) {
+      Log.w(TAG, "notification channel: ${error.javaClass.simpleName}: ${error.message}")
+    }
     requestNotificationPermission()
     startBackend()
   }

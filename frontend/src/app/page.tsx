@@ -12,7 +12,7 @@ const pixel = Silkscreen({ subsets: ["latin"], weight: ["400", "700"], variable:
 
 /**
  * The desktop app: the phone's design arranged for a wide window
- * (components/desktop). The previous desktop interface lives at /classic/.
+ * (components/desktop).
  */
 export default function DesktopPage() {
   return (
