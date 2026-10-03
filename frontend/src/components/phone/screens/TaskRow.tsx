@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, useMotionValue, useTransform, type PanInfo } from "framer-motion";
-import { Check, Clock, Pause, Play, Tag } from "@phosphor-icons/react";
+import { Check, Clock, Fire, Pause, Play, Tag } from "@phosphor-icons/react";
 
 import { parseLocal } from "@/lib/utils";
 import type { Task } from "@/types";
@@ -11,6 +11,7 @@ import { haptic } from "../lib/haptics";
 import { dayDelta, when } from "../lib/time";
 import { useAppData, useFinishAction } from "../PhoneContext";
 import { Chip, Sticker, stagger } from "../ui/Bits";
+import { SeriousControl, useSeriousState } from "../serious/SeriousControl";
 
 const THRESHOLD = 92;
 
@@ -41,6 +42,8 @@ export const TaskRow = React.memo(function TaskRow({ task, done, onEdit, index =
   const doing = task.status === "IN_PROGRESS";
   const due = parseLocal(task.due_date);
   const overdue = isOverdueTask(task);
+  // Serious tasks wear Lock-in's ember and get Start/Stop (or Done) right here.
+  const serious = useSeriousState(task.uid, "once", overdue);
   const today = due !== null && !overdue && dayDelta(due) === 0;
 
   const complete = () => {
@@ -70,6 +73,7 @@ export const TaskRow = React.memo(function TaskRow({ task, done, onEdit, index =
       className="ph-task ph-rise"
       style={stagger(index)}
       data-done={done}
+      data-serious={serious ?? undefined}
       exit={{ opacity: 0, height: 0, marginBottom: 0, transform: "scale(0.96)", transition: { duration: 0.26, ease: [0.4, 0, 0.2, 1] } }}
     >
       <div className="ph-task-under" aria-hidden="true">
@@ -108,6 +112,7 @@ export const TaskRow = React.memo(function TaskRow({ task, done, onEdit, index =
         <button type="button" className="ph-task-body" onClick={() => onEdit(task)} aria-label={`Edit: ${task.title}`}>
           <strong className="ph-task-title">{task.title}</strong>
           <span className="ph-task-meta">
+            {serious && <span className="ph-serious-tag"><Fire size={11} weight="fill" /> Serious</span>}
             {doing && <Chip tone="sky" icon={<Play size={11} weight="fill" />}>Doing</Chip>}
             {due && (
               <Chip tone={overdue ? "red" : today ? "lime" : null} icon={<Clock size={12} weight="bold" />}>
@@ -119,7 +124,11 @@ export const TaskRow = React.memo(function TaskRow({ task, done, onEdit, index =
             )}
           </span>
         </button>
-        {task.priority === "HIGH" && <Sticker tone="pink" tilt={4}>HIGH</Sticker>}
+        {serious && task.uid ? (
+          <SeriousControl uid={task.uid} occurrence="once" task={task} ended={overdue} />
+        ) : (
+          task.priority === "HIGH" && <Sticker tone="pink" tilt={4}>HIGH</Sticker>
+        )}
       </motion.div>
     </motion.li>
   );

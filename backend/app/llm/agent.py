@@ -45,6 +45,7 @@ from app.providers import get_chat_provider, get_english_chat_provider
 from app.providers.base import ProviderError
 from app.services.context import build_context_snapshot
 from app.services import identity
+from app.services import profile as user_profile
 from app.services import memory as memory_service
 from app.services import surfaces
 
@@ -505,6 +506,11 @@ def _build_persona_message(
     if settings.system_tools_enabled:
         parts.append(SYSTEM_TOOLS_GUIDANCE)
         parts.append(environment_note())
+    # Who they said they are and the vibe they picked (public onboarding).
+    # It changes only when they edit it, so the prefix cache still holds.
+    note = user_profile.persona_note()
+    if note:
+        parts.append(note)
     return {"role": "system", "content": "\n\n".join(parts)}
 
 

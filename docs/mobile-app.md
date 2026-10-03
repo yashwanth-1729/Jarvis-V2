@@ -39,6 +39,14 @@ youthful look. Nothing of the old layout was kept; every feature was.
 | Voice | Blooms out of the dock button and HOLO beams in at the centre (tap it to interrupt a reply; it reacts to the tap). Scrambled status label, hint, live captions, Stop reply, Mute & send, Type instead, voice-interruption switch, reply language and speaking voice pickers. |
 | Settings | Design lab (below), status strip (assistant, voice, sync), instant theme tiles (System/Light/Dark), live background (Vivid, Wild, Calm or Off; remembered on the device), AI & voice keys, Connected apps (the shared connectors form), Sync & backup (Supabase or SLDT), Location, Assistant connection with Test, Local storage erase (confirm step). "Save & restart" appears only when connection settings change. |
 
+Serious items are a different theme wherever they appear. Serious task rows
+and serious timeline blocks are ember cards with a rotating fire ring, and
+the controls sit on the row: Start, then a live timer and Stop; Done; Did it
+when missed; Locked when finished. While a session runs, the app turns orange
+and red: a breathing vignette, a Lock-in bar above the dock, and an ember
+background with a heartbeat. Start ignites sparks and finishing forges gold
+ones (`components/phone/serious/`).
+
 Every record editor is a bottom sheet: title as a big headline, chips for choices,
 quick date picks (In 1 hour, Tonight, Tomorrow, Next week) plus the native picker,
 weekday dots, time pills, switches. Delete always asks first ("Delete this for

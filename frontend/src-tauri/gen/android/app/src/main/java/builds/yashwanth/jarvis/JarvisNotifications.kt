@@ -242,7 +242,26 @@ object JarvisAlarmScheduler {
   }
 }
 
-class JarvisNotificationBridge(private val context: Context) {
+class JarvisNotificationBridge(
+  private val context: Context,
+  activity: android.app.Activity? = null,
+) {
+  private val activityRef = java.lang.ref.WeakReference(activity)
+
+  /**
+   * Ask for notification permission from the web side (the public app's
+   * onboarding explains first, then asks). True when already granted.
+   */
+  @JavascriptInterface
+  fun requestPermission(): Boolean {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return true
+    val permission = android.Manifest.permission.POST_NOTIFICATIONS
+    if (context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return true
+    val activity = activityRef.get() ?: return false
+    activity.runOnUiThread { activity.requestPermissions(arrayOf(permission), 4101) }
+    return false
+  }
+
   @JavascriptInterface
   fun syncSchedules(json: String): Int = JarvisAlarmScheduler.replace(context, "schedule:", json)
 

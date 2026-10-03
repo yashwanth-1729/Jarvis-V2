@@ -11,6 +11,7 @@ import { useBackStackInstall } from "../phone/lib/backStack";
 import { haptic } from "../phone/lib/haptics";
 import { reducedMotion, spring } from "../phone/lib/motion";
 import { ChatProvider, DataProvider, LayerView, LookProvider, NavProvider, Pane, SyncDot, SyncProvider } from "../phone/PhoneApp";
+import { SeriousProvider, useSerious } from "../phone/serious/SeriousContext";
 import { PhoneRootContext, useAppData, useLook, useNav, useNavState, type TabId } from "../phone/PhoneContext";
 import { ChatScreen } from "../phone/screens/ChatScreen";
 import { MemoryScreen } from "../phone/screens/MemoryScreen";
@@ -51,7 +52,9 @@ export function DesktopApp() {
         <SyncProvider>
           <ChatProvider>
             <NavProvider>
-              <DesktopShell />
+              <SeriousProvider>
+                <DesktopShell />
+              </SeriousProvider>
             </NavProvider>
           </ChatProvider>
         </SyncProvider>
@@ -65,6 +68,8 @@ function focusComposer(root: HTMLElement | null) {
 }
 
 function DesktopShell() {
+  // Lock-in's ember theme while a serious session runs, same as the phone.
+  const lockin = Boolean(useSerious()?.running);
   const { app } = useAppData();
   const { tab, visited, layers, chatOpen } = useNavState();
   const { go, pop, push, closeChat } = useNav();
@@ -130,7 +135,7 @@ function DesktopShell() {
   return (
     <PhoneRootContext.Provider value={root}>
       <MotionConfig reducedMotion="user">
-        <div ref={setRoot} className="ph dk" data-theme={look.dark ? "dark" : "light"} data-tab={tab} data-covered={covered}>
+        <div ref={setRoot} className="ph dk" data-theme={look.dark ? "dark" : "light"} data-tab={tab} data-covered={covered} data-lockin={lockin || undefined}>
           <div className="ph-app">
             <LiveBackground mode={look.fx} light={!look.dark} paused={app.voiceOpen} />
             <span className="ph-grain" aria-hidden="true" />

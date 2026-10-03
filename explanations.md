@@ -128,6 +128,34 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-03 (later) · Claude Code · Serious mode everywhere, JARVIS Public first run, VPS gateway
+
+- **Serious mode across the app:** `components/phone/serious/`
+  (`SeriousProvider`, `SeriousControl`, `LockinBar`, `embers.ts`).
+  - Every `lib/focus.ts` mutation now dispatches `FOCUS_CHANGED`.
+  - The fx bus gained `ignite`, `forge` and `beat`, plus `setFxTheme("lockin")`.
+  - CSS is in `phone.css`: "Serious mode, everywhere" and the missed state.
+- **JARVIS Public:**
+  - `components/public/` (built by me) and `components/public/onboarding/`
+    (built by a subagent, reviewed by me).
+  - Backend: `services/profile.py` and `api/profile.py` (the persona block),
+    `PATCH /api/notifications/policy`.
+  - Android: the `requestPermission` bridge; the public build skips the
+    launch prompt.
+  - Gateway: `compliance.py` (report, delete), the `reports` table.
+- **Gateway on the VPS:**
+  - systemd `jarvis-public-gateway` and `jarvis-public-tunnel`, in
+    `~/jarvis-public-gateway`.
+  - Secrets live only on the VPS (`.env`, mode 600) and in the session
+    scratchpad.
+  - The VPS was updated with the compliance endpoints after deploy.
+- **Left:**
+  - a Supabase project (the owner must free a slot);
+  - a stable tunnel or domain;
+  - Play Console billing;
+  - an on-device check of the running theme;
+  - a public-APK rebuild to pick up the "missed" state.
+
 ### 2026-10-03 · Claude Code · Public edition phase 0 + 1 (HOLO, gateway)
 
 - **Decisions:** locked in `docs/public-edition.md`. Read it before touching

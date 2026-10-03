@@ -33,7 +33,9 @@ class MainActivity : TauriActivity() {
     } catch (error: Throwable) {
       Log.w(TAG, "notification channel: ${error.javaClass.simpleName}: ${error.message}")
     }
-    requestNotificationPermission()
+    // The public app asks during onboarding, after explaining why
+    // (window.JarvisNotifications.requestPermission()); JARVIS asks at launch.
+    if (BuildConfig.JARVIS_EDITION != "public") requestNotificationPermission()
     startBackend()
   }
 
@@ -54,7 +56,7 @@ class MainActivity : TauriActivity() {
       return
     }
     webView.addJavascriptInterface(
-      JarvisNotificationBridge(applicationContext),
+      JarvisNotificationBridge(applicationContext, this),
       "JarvisNotifications",
     )
     webView.addJavascriptInterface(JarvisHapticsBridge(webView), "JarvisHaptics")

@@ -518,6 +518,37 @@ schedule blocks: schema v9 tables `focus_items` and `focus_events`,
   never synced or seeded over. Finishing a serious task anywhere in the app
   also records its Done.
 
+### Serious mode across the app (2026-10-03)
+
+The user asked for serious items to feel like "a whole different theme"
+(orange and red), with Start/Stop or a single tap right on the dashboard.
+
+- **Shared state:** `components/phone/serious/SeriousContext.tsx`
+  (`SeriousProvider`, mounted in both the phone and desktop shells) holds the
+  serious items, their events and the running session.
+  - It reloads on `FOCUS_CHANGED`. Every `lib/focus.ts` mutation now announces
+    one.
+  - While a session runs it sets the fx theme to `"lockin"`.
+- **Rows:** serious task rows (`TaskRow`) and serious timeline blocks (Today)
+  render as ember cards with a rotating conic fire ring and `SeriousControl`:
+  - Start, then a live timer and Stop, for session items;
+  - one-tap Done for quick items;
+  - "Locked" once finished.
+
+  Finishing a serious task also finishes it on the board, with the board's
+  Undo.
+- **While running:**
+  - `.ph[data-lockin]` swaps the accent to orange and adds a breathing red
+    vignette;
+  - `LockinBar` sits above the dock with the timer and Stop, its heartbeat
+    rippling through the background every 2.4 s;
+  - `LiveBackground` blends to the ember palette.
+- **Effects:**
+  - Start emits `ignite` (an orange shockwave) and throws DOM sparks with a
+    screen-edge flash (`serious/embers.ts`);
+  - finishing emits `forge` (a gold bloom and gold sparks).
+  - Reduced motion turns all of it off.
+
 ## Voice session protocol
 
 A new client connects to `WS /api/voice/session?audio=pcm16`. Omitting the query

@@ -21,6 +21,7 @@ import {
 import { ConnectorsSection } from "@/components/ConnectorsSection";
 import { API_BASE, isNativeShell } from "@/lib/api";
 import { IS_PUBLIC } from "@/lib/edition";
+import { AccountPage } from "@/components/public/AccountPage";
 import { useSettingsModel, type SettingsModel } from "@/lib/useSettingsModel";
 import { useBackLayer } from "../lib/backStack";
 import type { Tone } from "../lib/derive";
@@ -33,9 +34,10 @@ import { Tap } from "../ui/Tap";
 import { Icon3D, type Icon3DName } from "../ui/Icon3D";
 import { DesignLab } from "./DesignLab";
 
-type Page = "lab" | "keys" | "apps" | "sync" | "location" | "runtime" | "storage";
+type Page = "account" | "lab" | "keys" | "apps" | "sync" | "location" | "runtime" | "storage";
 
 const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: Icon3DName; group: string }> = [
+  { id: "account", title: "Account", hint: "Sign-in, plan and Aura", tone: "lime", icon: "key", group: "Make it yours" },
   { id: "lab", title: "Design lab", hint: "Try the icons, names, backgrounds and HOLO", tone: "lime", icon: "flask", group: "Make it yours" },
   { id: "keys", title: "AI & voice keys", hint: "Sarvam, Gemini and OpenRouter", tone: "amber", icon: "key", group: "Connections" },
   { id: "apps", title: "Connected apps", hint: "Google services and MCP tools", tone: "sky", icon: "plug", group: "Connections" },
@@ -49,7 +51,9 @@ const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: Ic
  *  project, the runtime address and the Design lab never reach a public
  *  user, whose AI goes through the HOLO gateway (docs/public-edition.md). */
 const PERSONAL_ONLY: ReadonlySet<Page> = new Set(["lab", "keys", "apps", "sync", "runtime"]);
-const VISIBLE_PAGES = IS_PUBLIC ? PAGES.filter((item) => !PERSONAL_ONLY.has(item.id)) : PAGES;
+const VISIBLE_PAGES = IS_PUBLIC
+  ? PAGES.filter((item) => !PERSONAL_ONLY.has(item.id))
+  : PAGES.filter((item) => item.id !== "account");
 
 export function SettingsScreen() {
   const { pop } = useNav();
@@ -88,6 +92,7 @@ export function SettingsScreen() {
               eyebrow={current.hint}
             >
               <div className="ph-stack ph-settings-body">
+                {current.id === "account" && <AccountPage />}
                 {current.id === "lab" && <DesignLab />}
                 {current.id === "keys" && <KeysPage model={model} />}
                 {current.id === "apps" && <div className="ph-legacy"><ConnectorsSection /></div>}

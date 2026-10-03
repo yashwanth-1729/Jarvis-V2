@@ -215,17 +215,52 @@ to measure: the timetable photo and an autonomous job.
     (0.07 Aura per clip).
   - Telugu stayed locked below Main Character.
 
-### Phase 1: still open
+### Phase 2 (first run): built
 
-- **Gateway host:** create the public Supabase project, then deploy the gateway
-  on the Mumbai host. Both need the owner.
-- **Sign-in in the app:** Supabase Auth, handing the token to
-  `/api/local/credentials` and refreshing it. This lands with onboarding in
-  phase 2.
-- **Play:** the real Play purchase verifier and Pub/Sub OIDC auth for the
-  billing push.
-- **Untested:** nothing has run on Postgres, in Docker or against real
-  Supabase tokens yet.
+- **Gateway on the owner's VPS.** The owner chose this ("use my vps").
+  - It runs as systemd `jarvis-public-gateway` on 127.0.0.1:8090: SQLite,
+    Python 3.14 in a venv, `MemoryMax=300M`.
+  - It's published through a Cloudflare quick tunnel (`jarvis-public-tunnel`),
+    with no firewall or Caddy change.
+  - The URL changes when the tunnel restarts; `tunnel-url.sh` prints it. A
+    named tunnel with a domain is the stable fix.
+- **Onboarding:** `components/public/onboarding/`, the 13 steps in the spec. It
+  saves `lib/profile.ts` locally and to `/api/profile`.
+- **Profile into the persona.** `app/services/profile.py` adds a short "about
+  them + your vibe" block to the persona message. It's stable between turns,
+  so the prefix cache still hits.
+- **Sign-in:** a 6-digit email code against Supabase Auth's REST API
+  (`lib/publicAuth.ts`). That works inside the WebView, where Google blocks
+  OAuth.
+  - The session is handed to the on-device backend whenever it changes or the
+    app comes back, and refreshed 2 minutes before it expires.
+  - "Not now. Just the planner" keeps the app usable without AI.
+- **Plans and Aura:**
+  - `GET /v1/me` drives an Aura chip on Today, a Plans layer, and a soft
+    paywall shown once after sign-in.
+  - Voice is locked below Side Quest (opening voice shows the plans).
+  - Lock-in is locked too, with the 3-day trial offered; it starts
+    automatically if they picked must-dos in onboarding.
+- **Play requirements:**
+  - "Report this reply" on every JARVIS reply (`POST /v1/report`, a new
+    `reports` table).
+  - Account deletion in Settings → Account (`DELETE /v1/me`). It removes the
+    account rows, anonymises usage, and also removes the Supabase login when
+    `SUPABASE_SERVICE_ROLE_KEY` is set.
+
+### Still open (needs the owner)
+
+- **Supabase project.** The free tier allows 2 active projects, and both slots
+  are taken (`stitch-witch`, `jarvis-sync`). Pause one or upgrade, then:
+  1. set `NEXT_PUBLIC_HOLO_SUPABASE_URL/KEY` for the app build;
+  2. set `SUPABASE_URL` (plus the service key, for account deletion) on the
+     gateway.
+- **Stable gateway URL:** a domain on Cloudflare and a named tunnel.
+- **Play Console:**
+  - subscription products with obfuscated account id = Supabase user id;
+  - the real purchase verifier;
+  - Pub/Sub OIDC on the billing push;
+  - a closed test with 12 testers for 14 days.
 
 ## Build order
 

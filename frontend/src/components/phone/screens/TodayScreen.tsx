@@ -15,6 +15,8 @@ import {
   Sparkle,
 } from "@phosphor-icons/react";
 
+import { AuraChip } from "@/components/public/AuraChip";
+import { IS_PUBLIC } from "@/lib/edition";
 import { fetchFocusStats, type FocusStats } from "@/lib/focus";
 import type { Task } from "@/types";
 import { focusTasks, isOverdueTask, KIND_LABEL, KIND_TONE, nowAndNext, upcomingReminders, type Occurrence } from "../lib/derive";
@@ -27,6 +29,8 @@ import { Tap } from "../ui/Tap";
 import { Icon3D } from "../ui/Icon3D";
 import { Ticker } from "../ui/Ticker";
 import { TaskRow } from "./TaskRow";
+import { SeriousControl } from "../serious/SeriousControl";
+import { dayKey, useSerious } from "../serious/SeriousContext";
 import { Num } from "../ui/Num";
 
 const SECTION_FOR: Record<Occurrence["event"]["kind"], PlanSection> = { COLLEGE: "college", ROUTINE: "routine", SESSION: "session" };
@@ -55,9 +59,12 @@ export function TodayScreen() {
       tone="lime"
       leading={<span className="ph-date-tag">{date}</span>}
       actions={
-        <Tap className="ph-icon-btn" aria-label="Settings" onClick={() => push({ kind: "settings" })}>
-          <GearSix size={22} weight="bold" />
-        </Tap>
+        <>
+          {IS_PUBLIC && <AuraChip />}
+          <Tap className="ph-icon-btn" aria-label="Settings" onClick={() => push({ kind: "settings" })}>
+            <GearSix size={22} weight="bold" />
+          </Tap>
+        </>
       }
       hero={
         <div className="ph-greet-wrap">
@@ -270,12 +277,20 @@ function BriefTile() {
 }
 
 function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; onOpen: (kind: Occurrence["event"]["kind"]) => void }) {
+  // Serious blocks wear Lock-in's ember and carry Start/Stop on the timeline.
+  const serious = useSerious();
+  const seriousState = (uid: string, occurrence: string, ended: boolean) => {
+    if (!serious?.items.has(uid)) return undefined;
+    const status = serious.eventFor(uid, occurrence)?.status;
+    return status === "done" ? "done" : status === "running" ? "running" : ended ? "missed" : "pending";
+  };
   return (
     <ol className="ph-timeline">
       {items.map((item, index) => {
         const state = item.end <= now ? "past" : item.start <= now ? "now" : "next";
         const event = item.event;
         const progress = state === "now" ? (now - item.start) / (item.end - item.start) : 0;
+        const occurrence = dayKey(new Date(item.start));
         return (
           <li
             key={`${event.uid ?? event.id}-${item.start}`}
@@ -283,6 +298,7 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
             style={stagger(index)}
             data-state={state}
             data-tone={KIND_TONE[event.kind]}
+            data-serious={event.uid ? seriousState(event.uid, occurrence, item.end <= now) : undefined}
           >
             <time className="ph-tl-time">{clock(new Date(item.start))}</time>
             <span className="ph-tl-rail" aria-hidden="true"><span className="ph-tl-dot" /></span>
@@ -299,6 +315,9 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
                 </span>
               )}
             </Tap>
+            {event.uid && seriousState(event.uid, occurrence, item.end <= now) && (
+              <span className="ph-tl-serious"><SeriousControl uid={event.uid} occurrence={occurrence} ended={item.end <= now} /></span>
+            )}
           </li>
         );
       })}

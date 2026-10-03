@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import account_routes, billing, proxy
+from app import account_routes, billing, compliance, proxy
 from app.accounts import AuraBank, Clock
 from app.auth import TokenVerifier
 from app.config import Settings
@@ -135,4 +135,5 @@ def create_app(
     app.include_router(proxy.router)
     app.include_router(account_routes.router)
     app.include_router(billing.router)
+    app.include_router(compliance.router)
     return app

@@ -88,23 +88,29 @@ export function snapshotOf(record: { task: Task } | { block: ScheduleEvent }, mo
 }
 
 export function markSerious(uid: string, snapshot: ReturnType<typeof snapshotOf>): Promise<FocusItem> {
-  return apiPut(`/api/focus/items/${encodeURIComponent(uid)}`, snapshot);
+  return apiPut<FocusItem>(`/api/focus/items/${encodeURIComponent(uid)}`, snapshot).then(announce);
 }
 
 export function unmarkSerious(uid: string): Promise<void> {
-  return apiDelete(`/api/focus/items/${encodeURIComponent(uid)}`);
+  return apiDelete(`/api/focus/items/${encodeURIComponent(uid)}`).then(announce);
 }
 
 export function startFocus(uid: string, occurrence?: string): Promise<FocusEvent> {
-  return apiPost(`/api/focus/items/${encodeURIComponent(uid)}/start`, { occurrence: occurrence ?? null });
+  return apiPost<FocusEvent>(`/api/focus/items/${encodeURIComponent(uid)}/start`, { occurrence: occurrence ?? null }).then(announce);
 }
 
 export function finishFocus(uid: string, occurrence?: string): Promise<FocusEvent> {
-  return apiPost(`/api/focus/items/${encodeURIComponent(uid)}/done`, { occurrence: occurrence ?? null });
+  return apiPost<FocusEvent>(`/api/focus/items/${encodeURIComponent(uid)}/done`, { occurrence: occurrence ?? null }).then(announce);
 }
 
 export function resetFocus(uid: string, occurrence?: string): Promise<{ removed: number }> {
-  return apiPost(`/api/focus/items/${encodeURIComponent(uid)}/reset`, { occurrence: occurrence ?? null });
+  return apiPost<{ removed: number }>(`/api/focus/items/${encodeURIComponent(uid)}/reset`, { occurrence: occurrence ?? null }).then(announce);
+}
+
+/** Every change tells the whole app (Today, Tasks, Lock-in, the Lock-in bar). */
+function announce<T>(value: T): T {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(FOCUS_CHANGED));
+  return value;
 }
 
 /**

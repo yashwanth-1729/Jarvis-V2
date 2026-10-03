@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { fxActivity, fxInput, fxScene, onFx, onFxScene, type FxEvent, type FxKind, type FxScene } from "./fxBus";
+import { fxActivity, fxInput, fxScene, fxTheme, onFx, onFxScene, onFxTheme, type FxEvent, type FxKind, type FxScene } from "./fxBus";
 
 export type FxMode = "vivid" | "wild" | "calm" | "off";
 
@@ -24,6 +24,13 @@ const PALETTES: Record<FxScene, string[]> = {
   memory: ["#B69CFF", "#FF7AC6", "#7CC7FF", "#FFB23D"],
 };
 
+/** Lock-in: the whole flow turns to embers while a serious session runs. */
+const EMBER = ["#FF4D1F", "#FF8A1F", "#C8102E", "#FFB21F"];
+
+function paletteNow(): string[] {
+  return fxTheme() === "lockin" ? EMBER : PALETTES[fxScene()];
+}
+
 /** How loud each kind of event is, and in which colour it answers. */
 const REACTION: Record<FxKind, { strength: number; energy: number; color: string | number }> = {
   tap: { strength: 0.45, energy: 0.1, color: 0 },
@@ -38,6 +45,9 @@ const REACTION: Record<FxKind, { strength: number; energy: number; color: string
   close: { strength: 0.3, energy: 0.06, color: 2 },
   tab: { strength: 0, energy: 0.28, color: 0 },
   touch: { strength: 0.32, energy: 0.08, color: 1 },
+  ignite: { strength: 1, energy: 0.75, color: "#FF5A1F" },
+  forge: { strength: 1, energy: 0.85, color: "#FFB21F" },
+  beat: { strength: 0.24, energy: 0.07, color: "#FF3B30" },
 };
 
 const MODE_VALUE: Record<Exclude<FxMode, "off">, number> = { calm: 0, vivid: 1, wild: 2 };
@@ -226,8 +236,8 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
     let u: { res: Uniform; time: Uniform; energy: Uniform; mode: Uniform; light: Uniform; c: Uniform[]; rip: Uniform; ripC: Uniform; sweep: Uniform; touch: Uniform; scroll: Uniform } | null = null;
 
     // State the frame loop animates.
-    const palette = PALETTES[fxScene()].map(rgb);
-    let target = PALETTES[fxScene()].map(rgb);
+    const palette = paletteNow().map(rgb);
+    let target = paletteNow().map(rgb);
     const ripples = Array.from({ length: RIPPLES }, () => ({ x: 0, y: 0, age: 0, strength: 0, color: [0, 0, 0] as number[] }));
     const ripData = new Float32Array(RIPPLES * 4);
     const ripColors = new Float32Array(RIPPLES * 3);
@@ -376,13 +386,16 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
     const offFx = onFx((event) => {
       if (!reduced.matches) react(event);
     });
-    const offScene = onFxScene((next) => {
-      target = PALETTES[next].map(rgb);
+    const repaint = () => {
+      target = paletteNow().map(rgb);
       if (reduced.matches) {
         for (let i = 0; i < 4; i += 1) palette[i] = [...target[i]];
         still();
       } else start();
-    });
+    };
+    const offScene = onFxScene(repaint);
+    // Lock-in's ember takes over (and hands back) the same way a tab does.
+    const offTheme = onFxTheme(repaint);
     const onVisibility = () => (document.hidden ? stop() : wake.current());
     const onResize = () => (reduced.matches ? still() : start());
     document.addEventListener("visibilitychange", onVisibility);
@@ -405,6 +418,7 @@ export function LiveBackground({ mode, light, paused }: { mode: FxMode; light: b
       stop();
       offFx();
       offScene();
+      offTheme();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("resize", onResize);
       reduced.removeEventListener("change", onReducedChange);

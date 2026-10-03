@@ -1,0 +1,246 @@
+"use client";
+
+/**
+ * The public edition's account layer (docs/public-edition.md): onboarding,
+ * sign-in, the session handed to the on-device backend, and the plan, Aura and
+ * features from the HOLO gateway. Mounted only in the public build
+ * (lib/edition.ts); the personal app never renders it.
+ */
+import * as React from "react";
+
+import "./public.css";
+import { API_BASE } from "@/lib/api";
+import { deleteAccount as removeAccount, fetchMe, startLockinTrial, type Feature, type Me } from "@/lib/gateway";
+import { loadProfile, type OnboardingProfile } from "@/lib/profile";
+import { AUTH_CONFIGURED, loadSession, refreshSession, signOut as endSession, storeSession, type Session } from "@/lib/publicAuth";
+
+export type PublicStage = "onboarding" | "signin" | "intro" | "app";
+
+export interface PublicState {
+  stage: PublicStage;
+  session: Session | null;
+  me: Me | null;
+  profile: OnboardingProfile | null;
+  /** Signed out on purpose ("continue without an account"). */
+  offline: boolean;
+  has: (feature: Feature) => boolean;
+  refreshMe: () => Promise<void>;
+  startTrial: () => Promise<boolean>;
+  completeOnboarding: (profile: OnboardingProfile) => void;
+  completeSignIn: (session: Session) => void;
+  continueOffline: () => void;
+  /** Back to the sign-in step after "Not now". */
+  requestSignIn: () => void;
+  completeIntro: () => void;
+  signOut: () => Promise<void>;
+  /** Delete the account on the server, then start over on this phone. */
+  deleteAccount: () => Promise<void>;
+}
+
+const PublicContext = React.createContext<PublicState | null>(null);
+
+const OFFLINE_KEY = "jarvis.public.offline";
+const INTRO_KEY = "jarvis.public.introSeen";
+
+function flag(key: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setFlag(key: string, on: boolean): void {
+  try {
+    if (on) window.localStorage.setItem(key, "1");
+    else window.localStorage.removeItem(key);
+  } catch {
+    // Only costs showing that step again.
+  }
+}
+
+/** Hand the session to the on-device backend, which may still be booting. */
+async function handToBackend(token: string, alive: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20 && alive(); attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE}/api/local/credentials`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ holo_session_token: token }),
+      });
+      if (response.ok) return;
+    } catch {
+      // Not up yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+}
+
+export function PublicProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = React.useState<Session | null>(null);
+  const [profile, setProfile] = React.useState<OnboardingProfile | null>(null);
+  const [offline, setOffline] = React.useState(false);
+  const [introSeen, setIntroSeen] = React.useState(false);
+  const [me, setMe] = React.useState<Me | null>(null);
+  const [ready, setReady] = React.useState(false);
+  const sessionRef = React.useRef<Session | null>(null);
+  sessionRef.current = session;
+
+  React.useEffect(() => {
+    setSession(loadSession());
+    setProfile(loadProfile());
+    setOffline(flag(OFFLINE_KEY));
+    setIntroSeen(flag(INTRO_KEY));
+    setReady(true);
+  }, []);
+
+  const refreshMe = React.useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) return;
+    try {
+      setMe(await fetchMe(current.accessToken));
+    } catch {
+      // Keep the last known plan; the next refresh retries.
+    }
+  }, []);
+
+  // Keep the token fresh, hand it to the backend, and keep plan/Aura current.
+  React.useEffect(() => {
+    if (!session) {
+      setMe(null);
+      return;
+    }
+    let alive = true;
+    void handToBackend(session.accessToken, () => alive);
+    void refreshMe();
+    const refreshIn = Math.max(session.expiresAt - Date.now() - 120_000, 5_000);
+    const refreshTimer = window.setTimeout(() => {
+      refreshSession(session)
+        .then((next) => alive && setSession(next))
+        .catch(() => {
+          // A dead refresh token means signing in again.
+          if (alive && Date.now() > session.expiresAt) {
+            storeSession(null);
+            setSession(null);
+          }
+        });
+    }, refreshIn);
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshMe();
+    }, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      // The backend may have restarted while the app was away; it keeps the
+      // token in memory only.
+      void handToBackend(session.accessToken, () => alive);
+      void refreshMe();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      alive = false;
+      window.clearTimeout(refreshTimer);
+      window.clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [session, refreshMe]);
+
+  const startTrial = React.useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) return false;
+    try {
+      setMe(await startLockinTrial(current.accessToken));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // A user who picked must-dos during onboarding gets the trial on sign-in.
+  React.useEffect(() => {
+    if (me && profile?.wantsLockinTrial && me.trial.lockin.available && !me.features.lockin) void startTrial();
+  }, [me, profile, startTrial]);
+
+  const value = React.useMemo<PublicState>(() => {
+    const stage: PublicStage = !ready
+      ? "app"
+      : !profile
+        ? "onboarding"
+        : !session && !offline
+          ? "signin"
+          : !introSeen
+            ? "intro"
+            : "app";
+    return {
+      stage,
+      session,
+      me,
+      profile,
+      offline,
+      has: (feature) => (feature === "chat" ? true : Boolean(me?.features[feature])),
+      refreshMe,
+      startTrial,
+      completeOnboarding: (next) => setProfile(next),
+      completeSignIn: (next) => {
+        storeSession(next);
+        setFlag(OFFLINE_KEY, false);
+        setOffline(false);
+        setSession(next);
+      },
+      continueOffline: () => {
+        setFlag(OFFLINE_KEY, true);
+        setOffline(true);
+      },
+      requestSignIn: () => {
+        setFlag(OFFLINE_KEY, false);
+        setOffline(false);
+      },
+      completeIntro: () => {
+        setFlag(INTRO_KEY, true);
+        setIntroSeen(true);
+      },
+      signOut: async () => {
+        await endSession(sessionRef.current);
+        setSession(null);
+        setMe(null);
+        void handToBackend("", () => true);
+      },
+      deleteAccount: async () => {
+        const current = sessionRef.current;
+        if (current) await removeAccount(current.accessToken);
+        await endSession(current);
+        try {
+          window.localStorage.removeItem("jarvis.public.profile");
+        } catch {
+          // Nothing else to clear.
+        }
+        setFlag(OFFLINE_KEY, false);
+        setFlag(INTRO_KEY, false);
+        setOffline(false);
+        setIntroSeen(false);
+        setSession(null);
+        setMe(null);
+        setProfile(null);
+        void handToBackend("", () => true);
+        void fetch(`${API_BASE}/api/profile`, { method: "DELETE" }).catch(() => undefined);
+      },
+    };
+  }, [ready, profile, session, offline, introSeen, me, refreshMe, startTrial]);
+
+  // Until the stored state is read, render nothing new: avoids flashing
+  // onboarding at a returning user.
+  if (!ready) return null;
+  return <PublicContext.Provider value={value}>{children}</PublicContext.Provider>;
+}
+
+/** The public state, or null in the personal edition. */
+export function usePublicOptional(): PublicState | null {
+  return React.useContext(PublicContext);
+}
+
+export function usePublic(): PublicState {
+  const value = React.useContext(PublicContext);
+  if (!value) throw new Error("usePublic outside PublicProvider");
+  return value;
+}
+
+export { AUTH_CONFIGURED };

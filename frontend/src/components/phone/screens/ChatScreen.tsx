@@ -20,6 +20,8 @@ import {
 } from "@phosphor-icons/react";
 
 import { StreamedProse } from "@/components/StreamedProse";
+import { ReportButton } from "@/components/public/ReportButton";
+import { IS_PUBLIC } from "@/lib/edition";
 import { playAudio, stopAudio, synthesize } from "@/lib/voice";
 import type { ChatMessage } from "@/types";
 import { useBackLayer } from "../lib/backStack";
@@ -331,6 +333,7 @@ function Message({ message, canSpeak }: { message: ChatMessage; canSpeak: boolea
           >
             <Copy size={16} weight="bold" />
           </Tap>
+          {IS_PUBLIC && <ReportButton text={message.text} />}
         </div>
       )}
     </li>

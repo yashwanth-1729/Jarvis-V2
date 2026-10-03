@@ -48,6 +48,18 @@ async def get_notification_policy() -> dict:
     return await notification_policy.load()
 
 
+@router.patch("/api/notifications/policy")
+async def patch_notification_policy(payload: dict) -> dict:
+    """Switch whole categories on or off, e.g. onboarding's "ping me for my
+    blocks". Only the on/off switches are accepted here; named allows and
+    mutes stay with the assistant's configure_notifications tool."""
+    policy = await notification_policy.load()
+    for key in ("enabled", "deadline_tasks", "college", "routine", "blocks", "reminders"):
+        if isinstance(payload.get(key), bool):
+            policy[key] = payload[key]
+    return await notification_policy.save(policy)
+
+
 @router.get("/api/announcements", response_model=AnnouncementsResponse)
 async def list_announcements(limit: int = 20) -> AnnouncementsResponse:
     rows = await crud.pending_announcements(limit=max(1, min(limit, 100)))

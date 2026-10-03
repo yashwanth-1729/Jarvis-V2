@@ -137,6 +137,9 @@ class Settings(BaseSettings):
     #: many people sign up. When it runs out, free AI waits for midnight (paid
     #: plans are unaffected). 0 turns the pool off.
     free_pool_daily_aura: int = 500
+    #: Optional: lets DELETE /v1/me also remove the Supabase login, not just
+    #: the gateway's account rows. Server-side only, never in the app.
+    supabase_service_role_key: str = ""
     charge_upstream_cost_if_higher: bool = True
 
     # --- Abuse limits -------------------------------------------------------------

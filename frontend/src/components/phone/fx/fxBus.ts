@@ -19,7 +19,13 @@ export type FxKind =
   | "open"
   | "close"
   | "tab"
-  | "touch";
+  | "touch"
+  /** Serious mode: a session starting (an orange shockwave). */
+  | "ignite"
+  /** Serious mode: a session finished (a gold bloom). */
+  | "forge"
+  /** Serious mode: the slow heartbeat while a session runs. */
+  | "beat";
 
 export type FxScene = "today" | "tasks" | "plan" | "memory";
 
@@ -164,6 +170,26 @@ export function fxActivity(): number {
   let strongest = 0;
   for (const level of activity.values()) strongest = Math.max(strongest, level);
   return strongest;
+}
+
+/** The whole background's mood: normal, or Lock-in's ember while a serious session runs. */
+export type FxTheme = "normal" | "lockin";
+let theme: FxTheme = "normal";
+const themeListeners = new Set<(theme: FxTheme) => void>();
+
+export function setFxTheme(next: FxTheme): void {
+  if (next === theme) return;
+  theme = next;
+  for (const listener of themeListeners) listener(next);
+}
+
+export function fxTheme(): FxTheme {
+  return theme;
+}
+
+export function onFxTheme(listener: (theme: FxTheme) => void): () => void {
+  themeListeners.add(listener);
+  return () => themeListeners.delete(listener);
 }
 
 export function setFxScene(next: FxScene): void {

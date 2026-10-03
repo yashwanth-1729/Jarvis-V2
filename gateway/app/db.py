@@ -152,6 +152,18 @@ reservations = Table(
 )
 Index("ix_reservations_user", reservations.c.user_id)
 
+#: "Report this reply" (Google Play's rule for generative-AI apps): what the
+#: user flagged and why, for review. The excerpt is the reply itself, capped.
+reports = Table(
+    "reports", metadata,
+    Column("id", _BigId, primary_key=True, autoincrement=True),
+    Column("user_id", String(64), nullable=False),
+    Column("reason", String(32), nullable=False),
+    Column("excerpt", Text, nullable=False),
+    Column("note", Text),
+    _ts("created_at"),
+)
+
 #: Every Play notification received, keyed by Pub/Sub messageId: dedupes
 #: redeliveries and doubles as the billing audit log.
 play_events = Table(

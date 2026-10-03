@@ -17,6 +17,8 @@ import {
   type FocusItem,
   type FocusMode,
 } from "@/lib/focus";
+import { LockedFeature } from "@/components/public/LockedFeature";
+import { usePublicOptional } from "@/components/public/PublicContext";
 import { parseLocal } from "@/lib/utils";
 import type { ScheduleEvent, Task } from "@/types";
 import { emitFx } from "../fx/fxBus";
@@ -77,6 +79,33 @@ function todayWindow(block: Pick<ScheduleEvent, "kind" | "day_of_week" | "start_
  * Deliberately sober next to the rest of the app; the stats are the loud part.
  */
 export function FocusScreen() {
+  // JARVIS Public: Lock-in starts at Side Quest (or the 3-day trial).
+  const pub = usePublicOptional();
+  if (pub && !pub.has("lockin")) return <FocusLocked />;
+  return <FocusBody />;
+}
+
+function FocusLocked() {
+  const { pop } = useNav();
+  return (
+    <Screen
+      title="Lock in."
+      tone="red"
+      bottomPad={false}
+      className="ph-focus"
+      eyebrow={<span className="ph-focus-eyebrow"><LockSimple size={14} weight="fill" /> Serious mode</span>}
+      leading={
+        <Tap className="ph-icon-btn" aria-label="Back" onClick={pop} feel="select">
+          <CaretLeft size={22} weight="bold" />
+        </Tap>
+      }
+    >
+      <LockedFeature feature="lockin" />
+    </Screen>
+  );
+}
+
+function FocusBody() {
   const { app } = useAppData();
   const { pop, push } = useNav();
   const finishTask = useFinishAction();

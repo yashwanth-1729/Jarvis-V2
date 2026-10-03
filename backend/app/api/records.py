@@ -240,3 +240,8 @@ async def delete_note_page(page_uid: str) -> None:
 from app.api import focus as _focus  # noqa: E402
 
 router.include_router(_focus.router)
+
+# The public edition's onboarding profile (app/services/profile.py).
+from app.api import profile as _profile  # noqa: E402
+
+router.include_router(_profile.router)

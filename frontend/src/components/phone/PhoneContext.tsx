@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { fetchReminders } from "@/lib/api";
 import { noteTaskDone, noteTaskUndone } from "@/lib/focus";
+import type { PlanId } from "@/lib/gateway";
 import type { CommandCenter } from "@/lib/useCommandCenter";
 import type { ChatSessionModel } from "@/lib/useChatSession";
 import type { RecordsMode } from "@/lib/records";
@@ -23,7 +24,9 @@ export type Layer =
   | { kind: "settings" }
   | { kind: "focus" }
   | { kind: "focusStats" }
-  | { kind: "notebook"; uid: string; view?: MemoryView; page?: NotePage };
+  | { kind: "notebook"; uid: string; view?: MemoryView; page?: NotePage }
+  /** JARVIS Public's plans (components/public/PlansScreen.tsx). */
+  | { kind: "plans"; highlight?: PlanId };
 
 /*
  * The phone app's state is split by how often it changes, so an update only

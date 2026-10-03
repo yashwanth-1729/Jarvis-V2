@@ -49,6 +49,12 @@ import { TasksScreen } from "./screens/TasksScreen";
 import { TodayScreen } from "./screens/TodayScreen";
 import { Tap } from "./ui/Tap";
 import { HoloFace } from "./voice/HoloFace";
+import { IS_PUBLIC } from "@/lib/edition";
+import { PlansScreen } from "@/components/public/PlansScreen";
+import { PublicProvider, usePublicOptional } from "@/components/public/PublicContext";
+import { PublicStage } from "@/components/public/PublicStage";
+import { LockinBar } from "./serious/LockinBar";
+import { SeriousProvider, useSerious } from "./serious/SeriousContext";
 
 // Development only: `?instant` skips JS animations, for checking layouts in
 // a preview that is not being painted (where frames barely advance).
@@ -90,9 +96,23 @@ export function PhoneApp() {
       <DataProvider>
         <SyncProvider>
           <ChatProvider>
-            <NavProvider>
-              <Shell />
-            </NavProvider>
+            {/* JARVIS Public adds its account layer (onboarding, sign-in,
+                plan and Aura) around navigation; the personal app has none. */}
+            {IS_PUBLIC ? (
+              <PublicProvider>
+                <NavProvider>
+                  <SeriousProvider>
+                    <Shell />
+                  </SeriousProvider>
+                </NavProvider>
+              </PublicProvider>
+            ) : (
+              <NavProvider>
+                <SeriousProvider>
+                  <Shell />
+                </SeriousProvider>
+              </NavProvider>
+            )}
           </ChatProvider>
         </SyncProvider>
       </DataProvider>
@@ -210,7 +230,15 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
   const openChat = React.useCallback(() => setChatOpen(true), []);
   const closeChat = React.useCallback(() => setChatOpen(false), []);
   const { voiceAvailable, setVoiceOpen } = app;
+  const pub = usePublicOptional();
+  const voiceLocked = pub ? !pub.has("voice_en") : false;
   const openVoice = React.useCallback(() => {
+    if (voiceLocked) {
+      // JARVIS Public: voice starts at Side Quest.
+      haptic("warning");
+      setLayers((current) => [...current, { kind: "plans", highlight: "side_quest" }]);
+      return;
+    }
     if (voiceAvailable) {
       setVoiceOpen(true);
       return;
@@ -220,7 +248,7 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
       description: "Check the connection and keys in Settings, then allow the microphone.",
       action: { label: "Settings", onClick: () => setLayers((current) => [...current, { kind: "settings" }]) },
     });
-  }, [voiceAvailable, setVoiceOpen]);
+  }, [voiceAvailable, setVoiceOpen, voiceLocked]);
 
   const actions = React.useMemo<NavActions>(
     () => ({ go, openPlan, push, pop, openChat, closeChat, openVoice }),
@@ -259,14 +287,22 @@ function Shell() {
   useBackStackInstall();
   useKeyboardInset(root);
   const covered = layers.length > 0 || chatOpen;
+  const pub = usePublicOptional();
+  // JARVIS Public: onboarding, sign-in and the first plans view come first.
+  const gated = pub !== null && pub.stage !== "app";
+  // A serious session running turns the whole app to Lock-in's ember theme.
+  const serious = useSerious();
+  const lockin = !gated && Boolean(serious?.running);
 
   return (
     <PhoneRootContext.Provider value={root}>
       <MotionConfig reducedMotion="user">
-        <div ref={setRoot} className="ph" data-theme={look.dark ? "dark" : "light"} data-tab={tab} data-covered={covered}>
+        <div ref={setRoot} className="ph" data-theme={look.dark ? "dark" : "light"} data-tab={tab} data-covered={covered} data-lockin={lockin || undefined}>
           <div className="ph-app">
             <LiveBackground mode={look.fx} light={!look.dark} paused={app.voiceOpen} />
             <span className="ph-grain" aria-hidden="true" />
+            {lockin && <span className="ph-lockin-vignette" aria-hidden="true" />}
+            {gated ? <PublicStage /> : (<>
             <motion.main
               className="ph-panes"
               initial={false}
@@ -281,6 +317,7 @@ function Shell() {
             {/* Frosted glass behind the dock: pages scrolling under the
                 navigation bar blur instead of showing through sharp. */}
             <div className="ph-dock-glass" aria-hidden="true" />
+            <LockinBar hidden={covered} />
             <Dock hidden={covered} />
             <AnimatePresence>
               {layers.map((layer, index) => (
@@ -288,8 +325,9 @@ function Shell() {
               ))}
             </AnimatePresence>
             <AnimatePresence>{chatOpen && <ChatScreen key="chat" />}</AnimatePresence>
+            </>)}
           </div>
-          <AnimatePresence>{app.voiceOpen && <VoiceScreen key="voice" />}</AnimatePresence>
+          <AnimatePresence>{!gated && app.voiceOpen && <VoiceScreen key="voice" />}</AnimatePresence>
           <SyncDot />
           <Toaster
             theme={look.dark ? "dark" : "light"}
@@ -390,6 +428,7 @@ export function LayerView({ layer, covered = false }: { layer: Layer; covered?: 
       {layer.kind === "settings" && <SettingsScreen />}
       {layer.kind === "focus" && <FocusScreen />}
       {layer.kind === "focusStats" && <FocusStatsScreen />}
+      {layer.kind === "plans" && <PlansScreen mode="layer" highlight={layer.highlight} />}
       {layer.kind === "notebook" && <NotebookScreen uid={layer.uid} initialView={layer.view} fallback={layer.page} />}
     </motion.div>
   );

@@ -544,6 +544,41 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-03 (second): Serious mode everywhere (ember theme), JARVIS Public first run, gateway on the VPS
+
+- **Serious mode on the dashboard.** The user asked for start/stop on the task rows themselves, and for serious items to feel like a different theme, in red and orange.
+  - **Rows:** serious tasks (Today, Tasks) and serious timeline blocks (Today) are dark ember cards with a rotating fire ring.
+    - Session items get **Start**, then a live timer and **Stop**; one-tap items get **Done**.
+    - Finished ones show **Locked**. A missed one (its time is over, or an overdue task) goes dim with a still red ring, and gets **Did it**.
+  - **While a session runs, the whole app turns:**
+    - orange accents and a breathing red vignette;
+    - a **Lock-in bar** above the dock with the timer and Stop, its heartbeat rippling through the background;
+    - the live background goes to an ember palette.
+  - **Effects:** Start "ignites" (orange shockwave, sparks, a screen-edge flash); finishing "forges" (gold bloom and sparks).
+  - **Where:** `components/phone/serious/`. The desktop shell gets it too.
+- **JARVIS Public, first run.**
+  - **Onboarding** (`components/public/onboarding/`): 13 screens, with a 2D HOLO that reacts to every answer.
+    - Each step stores its answer in the profile. The week screen creates real schedule entries, the "can't skip" screen marks them serious and requests the Lock-in trial, and the pings screen asks for permission and switches on block and routine pings (new `PATCH /api/notifications/policy`).
+    - It ends on a shareable character card.
+  - **Profile into the persona:** `app/services/profile.py` and `/api/profile`. The profile shapes the assistant's persona (nickname, exam, goals, vibe, Hinglish or Telugu flavour).
+  - **Sign-in** by email code against Supabase Auth (`lib/publicAuth.ts`). Not active yet: no Supabase project, because the free tier allows two and both slots are used.
+  - **Plans and Aura:**
+    - an Aura chip on Today;
+    - Plans as a layer, plus a soft paywall once;
+    - voice locked below Side Quest;
+    - a Lock-in lock with the 3-day trial.
+  - **Account page** in Settings.
+  - **Play requirements:** report a reply (`POST /v1/report`) and in-app account deletion (`DELETE /v1/me`).
+  - The public app no longer asks for notification permission at launch; onboarding asks through `JarvisNotifications.requestPermission()`.
+- **Gateway on the owner's VPS,** the owner's choice. It's a systemd service on 127.0.0.1:8090 behind a Cloudflare quick tunnel: no firewall or Caddy change, about 145 MB of RAM. The tunnel URL changes when the tunnel restarts; `~/jarvis-public-gateway/tunnel-url.sh` prints it.
+- **Validation:**
+  - **Type and lint:** tsc and ESLint are clean.
+  - **Backend tests:** `profile_test` (14), `public_edition_test`, smoke.
+  - **Gateway:** 7 of 7 suites, including the new compliance test (11 checks).
+  - **VPS:** health, `/v1/me`, a chat and a streamed chat through the tunnel.
+  - **On the phone, read-only, on real data:** the serious blocks render as ember cards (Java "Locked", three with Done) with the ring animating. JARVIS Public installed and onboarding rendered while the owner was using it.
+  - **Not checked on the device:** the running theme and the Lock-in bar (that would mean starting a real session), sign-in (no Supabase project yet), and a full onboarding run-through.
+
 ### 2026-10-03: Public edition foundation (HOLO), gateway, cost measurements
 
 - **What:** the user accepted the recommended plan: working title HOLO, 18+,

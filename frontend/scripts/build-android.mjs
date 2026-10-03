@@ -142,7 +142,7 @@ const env = {
   NEXT_PUBLIC_JARVIS_EDITION: publicEdition ? "public" : "personal",
   // Its own backend port, so JARVIS and JARVIS Public never share one
   // (jarvis_server.PUBLIC_PORT).
-  ...(publicEdition ? { NEXT_PUBLIC_API_PORT: "8100" } : {}),
+  ...(publicEdition ? { NEXT_PUBLIC_API_PORT: "8100", NEXT_PUBLIC_HOLO_GATEWAY_URL: gatewayUrl } : {}),
   PATH: [
     join(javaHome, "bin"),
     join(androidHome, "platform-tools"),
