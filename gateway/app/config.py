@@ -140,6 +140,9 @@ class Settings(BaseSettings):
     #: Optional: lets DELETE /v1/me also remove the Supabase login, not just
     #: the gateway's account rows. Server-side only, never in the app.
     supabase_service_role_key: str = ""
+    #: Onboarding's AI timetable works before sign-in; this many tries per IP
+    #: per day (each also comes out of the free pool).
+    plan_anon_daily_per_ip: int = 8
     charge_upstream_cost_if_higher: bool = True
 
     # --- Abuse limits -------------------------------------------------------------

@@ -504,6 +504,24 @@ class AuraBank:
         )).scalar_one()
         return int(total)
 
+    async def free_pool_allows(self, amount_milli: int) -> bool:
+        """Whether the shared free pool has room for one more call (used by
+        the anonymous onboarding planner)."""
+        async with self.db.tx() as conn:
+            return not await self._free_pool_exhausted(conn, amount_milli, self.clock())
+
+    async def record_anonymous(
+        self, user_id: str, endpoint: str, model: str, milli: int, record: dict[str, Any],
+    ) -> None:
+        """Usage with no account behind it (onboarding, before sign-in). It is
+        written as Spawn usage, so it counts against the free pool."""
+        async with self.db.tx() as conn:
+            await conn.execute(insert(usage).values(
+                user_id=user_id, endpoint=endpoint, model=model, milli_aura=milli,
+                reserve_milli=0, created_at=self.clock(), plan=FREE_PLAN,
+                **{"streamed": False, **record},
+            ))
+
     async def _free_pool_exhausted(self, conn: AsyncConnection, amount_milli: int, now: datetime) -> bool:
         """Whether this would take today's free spend past the shared pool.
 
