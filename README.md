@@ -544,6 +544,35 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-04: AI week planner in the JARVIS Public onboarding
+
+- **What the user asked for:** one timetable instead of entering blocks one by one. People list what they want in their week, say how much each thing matters and, optionally, how often. The AI works out the rest, and they then say what's too much or too little. The analysis runs on GPT-6 Luna through OpenRouter.
+- **Gateway:** `POST /v1/plan/week` (`gateway/app/planner.py`).
+  - Luna answers in a strict JSON schema, and the gateway then checks every block:
+    - inside the waking day and out of fixed hours;
+    - overlaps go to the more important activity;
+    - only the person's own activities;
+    - times rounded to 5 minutes and tagged morning, afternoon, evening or night.
+    - It also reports per-activity counts.
+  - A tweak sends the previous plan, a "less" or "more" per activity and a comment of up to 300 characters.
+  - It works before sign-in, with a daily limit per IP (`PLAN_ANON_DAILY_PER_IP`, 8), paid from the free pool and recorded as Spawn usage. Signed-in calls cost Aura.
+- **Onboarding** (`components/public/onboarding/`): the week step is now two screens plus a manual fallback.
+  1. **"Your week, your rules":**
+     - the fixed hours: school, college or work days and times, or none;
+     - activities as chips, with the ones their goals point to first;
+     - 1–5 flames for each, and Auto, Daily, 5×, 3×, 2× or 1×;
+     - then "Build my week ⚡".
+  2. **"Here's your week":**
+     - one tab per day, grouped by part of the day, with the fixed hours greyed out;
+     - − or + per activity and a comment, then "Tweak it" (5 at most);
+     - "Lock it in 🔒" saves the fixed hours as `COLLEGE` or `ROUTINE` entries and each planned group as `ROUTINE` entries, then lists them for Lock-in.
+  - "I'll set it up myself" opens the old template builder, and planner errors offer it too.
+  - The draft keeps the planner state, so a half-finished onboarding resumes where it was.
+- **Validation:**
+  - **Gateway:** `planner_test` (25 checks); 8 of 8 suites pass. Live on the VPS, a plan took 11.8 s, and a tweak took 8 s and honoured "Gym less" and "no DSA on Saturday".
+  - **Frontend:** tsc and ESLint are clean. A subagent exercised the new screens in an isolated harness against a stubbed gateway (dark theme, 360 px), never the real endpoint, and deleted the harness data afterwards.
+  - **Built:** the JARVIS Public APK, with the VPS tunnel as its gateway. Not installed, because the phone wasn't connected, and not run on the device.
+
 ### 2026-10-03 (second): Serious mode everywhere (ember theme), JARVIS Public first run, gateway on the VPS
 
 - **Serious mode on the dashboard.** The user asked for start/stop on the task rows themselves, and for serious items to feel like a different theme, in red and orange.

@@ -8,6 +8,7 @@
  * removed when onboarding finishes.
  */
 import type { Chronotype, LanguagePref, LifeStage, OnboardingProfile, Vibe } from "@/lib/profile";
+import { EMPTY_WEEK, type WeekState } from "./planWeek";
 import type { AddedBlock } from "./weekPlan";
 
 export interface Answers {
@@ -46,7 +47,7 @@ export const EMPTY: Answers = {
   language: null,
 };
 
-export const STEPS = ["boot", "name", "vibe", "stage", "interests", "goals", "enemy", "rhythm", "language", "week", "lockin", "notify", "reveal"] as const;
+export const STEPS = ["boot", "name", "vibe", "stage", "interests", "goals", "enemy", "rhythm", "language", "week", "weekplan", "lockin", "notify", "reveal"] as const;
 export type StepId = (typeof STEPS)[number];
 
 export interface Draft {
@@ -58,6 +59,8 @@ export interface Draft {
   mustDo: string[];
   /** Schedule uids currently marked serious by this onboarding. */
   marked: string[];
+  /** HOLO-built week: what they asked for, the plan, tweaks. */
+  week: WeekState;
 }
 
 const KEY = "jarvis.public.onboarding.draft";
@@ -75,6 +78,7 @@ export function loadDraft(): Draft | null {
       blocks: Array.isArray(draft.blocks) ? draft.blocks : [],
       mustDo: Array.isArray(draft.mustDo) ? draft.mustDo : [],
       marked: Array.isArray(draft.marked) ? draft.marked : [],
+      week: draft.week && typeof draft.week === "object" ? { ...EMPTY_WEEK, ...draft.week } : EMPTY_WEEK,
     };
   } catch {
     return null;

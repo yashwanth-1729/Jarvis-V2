@@ -18,7 +18,9 @@ import {
   DAY_LETTERS,
   DAY_NAMES,
   daysLabel,
+  friendlySaveError as friendly,
   minutesOf,
+  newId,
   templatesFor,
   weekBars,
   type AddedBlock,
@@ -34,6 +36,7 @@ const ADDED_LINES: Record<TemplateId, (block: BlockSpec) => string> = {
   work: (block) => `${block.name} hours set. I'll guard the evenings.`,
   sleep: () => "Sleep, scheduled. Revolutionary.",
   custom: (block) => `${block.name}, added. Your week, your rules.`,
+  planned: (block) => `${block.name}, added.`,
 };
 
 const PRESETS: Array<{ label: string; days: number[] }> = [
@@ -42,22 +45,14 @@ const PRESETS: Array<{ label: string; days: number[] }> = [
   { label: "Weekends", days: [5, 6] },
 ];
 
-function newId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function friendly(error: string): string {
-  return /fetch|network|load failed|backend|timeout/i.test(error)
-    ? "Couldn't reach your JARVIS yet. It may still be starting up."
-    : error;
-}
-
-export function WeekStep({ answers, blocks, onAdded, react, next }: {
+export function WeekStep({ answers, blocks, onAdded, react, next, onAuto }: {
   answers: Answers;
   blocks: AddedBlock[];
   onAdded: (block: AddedBlock) => void;
   react: (mood: Mood, line: string) => void;
   next: () => void;
+  /** Back to letting HOLO build the week (offered until something is added). */
+  onAuto?: () => void;
 }) {
   const { app, mode } = useAppData();
   const templates = React.useMemo(
@@ -129,7 +124,7 @@ export function WeekStep({ answers, blocks, onAdded, react, next }: {
   return (
     <StepFrame
       eyebrow="09 · Your week"
-      title="Build your week."
+      title={onAuto ? "Set it up yourself." : "Build your week."}
       sub="Tap a template, set days and times. Each one goes straight into your Plan."
       footer={
         <>
@@ -139,6 +134,7 @@ export function WeekStep({ answers, blocks, onAdded, react, next }: {
             !editing && <Cta onClick={() => open(templates[0])} feel="tap">Add your first block</Cta>
           )}
           {blocks.length === 0 && !busy && <Quiet onClick={next}>Skip for now</Quiet>}
+          {blocks.length === 0 && !busy && !editing && onAuto && <Quiet onClick={onAuto}>Let HOLO build it instead ⚡</Quiet>}
         </>
       }
     >

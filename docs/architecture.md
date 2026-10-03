@@ -482,6 +482,12 @@ working title) is built with `scripts/build-android.mjs --public
 - **Gateway** (`gateway/`): a separate service that verifies the Supabase
   JWT, checks the plan, reserves Aura, forwards to OpenRouter with the server
   key, then settles the real cost.
+  - It also serves `POST /v1/plan/week`, the onboarding's timetable. The
+    onboarding calls it directly, not through the on-device backend.
+  - The session goes as the bearer token when there is one. Before sign-in
+    the call is paid from the free pool, with a daily limit per IP.
+  - The model's plan is checked on the gateway: waking hours, fixed hours,
+    overlaps, and only the person's own activities.
 
 ## Serious mode (Lock-in)
 

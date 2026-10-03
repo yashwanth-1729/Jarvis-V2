@@ -128,6 +128,40 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-04 · Claude Code · AI week planner (gateway and onboarding)
+
+- **Gateway:** `gateway/app/planner.py` serves `POST /v1/plan/week` (commit
+  `1213850`); it's deployed to the VPS.
+  - `accounts.py` gained `free_pool_allows` and `record_anonymous`.
+  - Config gained `plan_anon_daily_per_ip`.
+- **Onboarding:**
+  - `planWeek.ts` (the contract, the call, suggestions and grouping) and
+    `PlanSteps.tsx` (the ask and review screens) were built by a subagent and
+    reviewed by me.
+  - Also changed: `Onboarding.tsx`, `state.ts` (the new `weekplan` step;
+    `week` is kept in the draft, and old drafts get the default), `weekPlan.ts`,
+    `WeekStep.tsx` (now the manual fallback) and `onboarding.css`.
+  - Days are 0 = Monday on both sides, so nothing is converted.
+- **Verified:**
+  - gateway: 8 of 8 suites, plus a live plan and tweak on the VPS;
+  - frontend: tsc and lint are clean;
+  - the public APK is built.
+
+  It is not installed (the phone wasn't connected) and hasn't been run on the
+  device.
+- **Left:**
+  - install it and do an on-device run-through;
+  - for the owner: the Supabase project, a stable tunnel and Play billing.
+- **Product direction:** under discussion with the owner. My proposal is:
+  - replan the rest of the week after misses;
+  - nudges at block start, with one-tap Start;
+  - one honest weekly number;
+  - one paid plan instead of five.
+
+  Nothing is decided yet.
+- Codex's uncommitted files were left untouched: `tools.py`,
+  `tools_os_control.py`, `main.py`, `smoke_test.py` and `install_app_test.py`.
+
 ### 2026-10-03 (later) · Claude Code · Serious mode everywhere, JARVIS Public first run, VPS gateway
 
 - **Serious mode across the app:** `components/phone/serious/`

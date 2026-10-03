@@ -35,6 +35,9 @@ and sends the user's token instead of an API key:
 - `POST /v1/audio/transcriptions` and `POST /v1/audio/speech`: speech, metered
   per call.
 - `GET /v1/me`: plan, Aura balance, unlocked features, renewal date.
+- `POST /v1/plan/week`: the onboarding's timetable, from GPT-6 Luna with a
+  strict JSON schema and checked on the server. It works before sign-in, paid
+  from the free pool with a daily limit per IP.
 - `POST /v1/billing/play`: Google Play real-time developer notifications, which
   set the user's entitlements.
 - **Every request:**
@@ -142,9 +145,16 @@ reads "Building your HOLO… 40%".
 8. Rhythm: wake and sleep sliders, night owl or early bird.
 9. Language: English, Telugu or Hinglish. Telugu shows a lock for Main
    Character.
-10. Build your week: snap the timetable, or add blocks one at a time from
-    templates (College, Gym, Study, Coaching, Work). A live week preview fills
-    as they go.
+10. Build your week (owner's change, 2026-10-04: one AI-built timetable, not
+    block-by-block entry).
+    - They set their fixed hours, list what they want in their week, rate
+      each 1–5 flames and, optionally, say how often.
+    - HOLO (GPT-6 Luna through `/v1/plan/week`) builds one week around the
+      fixed hours, grouped morning, afternoon, evening and night.
+    - They can mark activities less or more, or leave a comment, and tweak up
+      to 5 times. Then "Lock it in" saves it.
+    - "I'll set it up myself" keeps the template builder. Snapping a timetable
+      photo is still to come.
 11. "Which of these can you NOT skip?" This previews Lock-in and starts the
     3-day trial.
 12. Notification permission, explained before asking.
@@ -241,6 +251,12 @@ to measure: the timetable photo and an autonomous job.
   - Voice is locked below Side Quest (opening voice shows the plans).
   - Lock-in is locked too, with the 3-day trial offered; it starts
     automatically if they picked must-dos in onboarding.
+- **AI week planner (2026-10-04):**
+  - the gateway's `POST /v1/plan/week`, with 25 offline checks and a live
+    plan and tweak on the VPS;
+  - the onboarding's two week screens (`PlanSteps.tsx`, `planWeek.ts`).
+
+  The APK is built but not yet run on the device.
 - **Play requirements:**
   - "Report this reply" on every JARVIS reply (`POST /v1/report`, a new
     `reports` table).

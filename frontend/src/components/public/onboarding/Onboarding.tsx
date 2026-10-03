@@ -38,6 +38,8 @@ import type { Mood } from "./content";
 import { Bubble, Holo } from "./Holo";
 import { LockinStep } from "./LockinStep";
 import { NotifyStep } from "./NotifyStep";
+import { EMPTY_WEEK, goalActivities, type WeekState } from "./planWeek";
+import { PlanAskStep, PlanReviewStep } from "./PlanSteps";
 import { RevealStep } from "./RevealStep";
 import { buildProfile, clearDraft, EMPTY, loadDraft, saveDraft, STEPS, type Answers, type StepId } from "./state";
 import { WeekStep } from "./WeekStep";
@@ -58,13 +60,14 @@ const SCENES: Record<StepId, FxScene> = {
   rhythm: "plan",
   language: "plan",
   week: "plan",
+  weekplan: "plan",
   lockin: "tasks",
   notify: "today",
   reveal: "memory",
 };
 
 /** What HOLO says when a screen opens. */
-function opener(step: StepId, answers: Answers): { mood: Mood; line: string } {
+function opener(step: StepId, answers: Answers, week: WeekState): { mood: Mood; line: string } {
   const call = answers.callMe.trim() || firstName(answers.name) || "friend";
   switch (step) {
     case "boot":
@@ -86,7 +89,12 @@ function opener(step: StepId, answers: Answers): { mood: Mood; line: string } {
     case "language":
       return { mood: "happy", line: "Pick the one that feels like home." };
     case "week":
-      return { mood: "excited", line: "Add your regulars. Real entries, straight into your Plan." };
+      if (week.mode === "manual") return { mood: "excited", line: "Add your regulars. Real entries, straight into your Plan." };
+      if (week.saved) return { mood: "happy", line: "Already in your Plan. Nice." };
+      if (!week.seeded && goalActivities(answers.goals).length) return { mood: "happy", line: "I added a few from your goals. Add, drop, tweak." };
+      return { mood: "excited", line: "Tell me what matters. I'll do the maths." };
+    case "weekplan":
+      return { mood: "excited", line: week.plan?.summary ? week.plan.summary.slice(0, 160) : "Fresh out the oven. Tap a day to peek." };
     case "lockin":
       return { mood: "fierce", line: "The ones you'd hate to miss. Be real." };
     case "notify":
@@ -113,6 +121,7 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   const [blocks, setBlocks] = React.useState<AddedBlock[]>([]);
   const [mustDo, setMustDo] = React.useState<string[]>([]);
   const [marked, setMarked] = React.useState<string[]>([]);
+  const [week, setWeekState] = React.useState<WeekState>(EMPTY_WEEK);
   const [holo, setHolo] = React.useState<{ mood: Mood; line: string; kick: number }>({ mood: "idle", line: "", kick: 0 });
   const [hydrated, setHydrated] = React.useState(false);
   const [armed, setArmed] = React.useState(0);
@@ -121,29 +130,34 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   const finished = React.useRef(false);
   const resumed = React.useRef(false);
 
-  const flow = React.useMemo(() => STEPS.filter((id) => id !== "lockin" || blocks.length > 0), [blocks.length]);
+  const flow = React.useMemo(
+    () => STEPS.filter((id) => (id !== "lockin" || blocks.length > 0) && (id !== "weekplan" || week.mode === "auto")),
+    [blocks.length, week.mode],
+  );
   const index = Math.max(0, flow.indexOf(step));
-  const latest = React.useRef({ flow, step, answers, mustDo });
-  latest.current = { flow, step, answers, mustDo };
+  const latest = React.useRef({ flow, step, answers, mustDo, week });
+  latest.current = { flow, step, answers, mustDo, week };
 
   // Pick up a half-finished onboarding where it was left.
   useClientLayoutEffect(() => {
     const draft = loadDraft();
     if (draft) {
-      const step = draft.step === "lockin" && draft.blocks.length === 0 ? "week" : draft.step;
+      const step =
+        (draft.step === "lockin" && draft.blocks.length === 0) || (draft.step === "weekplan" && (draft.week.mode !== "auto" || !draft.week.plan)) ? "week" : draft.step;
       resumed.current = step !== "boot";
       setStep(step);
       setAnswers(draft.answers);
       setBlocks(draft.blocks);
       setMustDo(draft.mustDo);
       setMarked(draft.marked);
+      setWeekState(draft.week);
     }
     setHydrated(true);
   }, []);
 
   React.useEffect(() => {
-    if (hydrated && !finished.current) saveDraft({ v: 1, step, answers, blocks, mustDo, marked });
-  }, [hydrated, step, answers, blocks, mustDo, marked]);
+    if (hydrated && !finished.current) saveDraft({ v: 1, step, answers, blocks, mustDo, marked, week });
+  }, [hydrated, step, answers, blocks, mustDo, marked, week]);
 
   // Hand the background back the way it was found.
   React.useEffect(() => {
@@ -158,7 +172,7 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
     // scheduled, so the welcome waits for the restored screen.
     const welcome = resumed.current && step !== "boot";
     if (welcome) resumed.current = false;
-    const { mood, line } = welcome ? { mood: "happy" as Mood, line: "Welcome back! Picking up where we left off." } : opener(step, latest.current.answers);
+    const { mood, line } = welcome ? { mood: "happy" as Mood, line: "Welcome back! Picking up where we left off." } : opener(step, latest.current.answers, latest.current.week);
     setHolo((current) => ({ mood, line, kick: current.kick + 1 }));
     setFxScene(SCENES[step]);
     const frame = window.requestAnimationFrame(() => {
@@ -176,6 +190,12 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
     emitFx("tab", undefined, by);
   }, []);
   const next = React.useCallback(() => go(1), [go]);
+  /** Jump to a screen that may not be next to this one (the week fallback). */
+  const jump = React.useCallback((target: StepId, by: 1 | -1) => {
+    setDirection(by);
+    setStep(target);
+    emitFx("tab", undefined, by);
+  }, []);
   const back = React.useCallback(() => go(-1), [go]);
 
   // Android's back button steps back through the questions.
@@ -192,6 +212,14 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
       if (!used) releaseLayer(id);
     };
   }, [canBack, armed, back]);
+
+  const setWeek = React.useCallback((update: (week: WeekState) => WeekState) => setWeekState(update), []);
+  const addBlock = React.useCallback((block: AddedBlock) => setBlocks((list) => [...list, block]), []);
+  const manualWeek = React.useCallback(() => {
+    setWeekState((current) => ({ ...current, mode: "manual" }));
+    if (latest.current.step !== "week") jump("week", -1);
+  }, [jump]);
+  const autoWeek = React.useCallback(() => setWeekState((current) => ({ ...current, mode: "auto" })), []);
 
   const patch = React.useCallback((change: Partial<Answers>) => setAnswers((current) => ({ ...current, ...change })), []);
 
@@ -235,7 +263,13 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
       case "language":
         return <LanguageStep {...props} />;
       case "week":
-        return <WeekStep answers={answers} blocks={blocks} onAdded={(block) => setBlocks((list) => [...list, block])} react={react} next={next} />;
+        return week.mode === "manual" ? (
+          <WeekStep answers={answers} blocks={blocks} onAdded={addBlock} react={react} next={next} onAuto={blocks.length === 0 ? autoWeek : undefined} />
+        ) : (
+          <PlanAskStep answers={answers} week={week} setWeek={setWeek} react={react} next={next} onManual={manualWeek} />
+        );
+      case "weekplan":
+        return <PlanReviewStep answers={answers} week={week} setWeek={setWeek} blocks={blocks} onAdded={addBlock} react={react} next={next} onManual={manualWeek} />;
       case "lockin":
         return <LockinStep blocks={blocks} mustDo={mustDo} setMustDo={setMustDo} marked={marked} setMarked={setMarked} onResolved={setBlocks} react={react} next={next} />;
       case "notify":
