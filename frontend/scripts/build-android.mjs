@@ -29,7 +29,9 @@ const FRONTEND = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ANDROID = join(FRONTEND, "src-tauri", "gen", "android");
 const ABI = "arm64-v8a";
 const TARGET = "aarch64-linux-android";
-const PACKAGE = "builds.yashwanth.jarvis.debug";
+// Filled in once the arguments are read: the public edition installs as its
+// own app (builds.yashwanth.holo) beside the personal one.
+let PACKAGE = "builds.yashwanth.jarvis.debug";
 
 /** Newest mtime anywhere under `dir`, so "was this rebuilt?" can be answered. */
 function newestMtime(dir) {
@@ -45,6 +47,16 @@ function newestMtime(dir) {
 const args = new Set(process.argv.slice(2));
 const wantInstall = args.has("--install") || args.has("--run");
 const wantRun = args.has("--run");
+// --public builds the public HOLO edition (docs/public-edition.md): its own
+// application id and name, a web build with NEXT_PUBLIC_JARVIS_EDITION=public,
+// and a backend that talks only to the metering gateway, given as
+// --gateway=https://... (or HOLO_GATEWAY_URL). The personal build is unchanged.
+const publicEdition = args.has("--public");
+const gatewayUrl =
+  process.argv.slice(2).find((a) => a.startsWith("--gateway="))?.slice("--gateway=".length) ??
+  process.env.HOLO_GATEWAY_URL ??
+  "";
+if (publicEdition) PACKAGE = "builds.yashwanth.holo.debug";
 
 // ---------------------------------------------------------------------------
 
@@ -126,6 +138,8 @@ const env = {
   // on-device data survives, unlike switching to a release build.
   CARGO_PROFILE_DEV_DEBUG: "false",
   CARGO_PROFILE_DEV_STRIP: "true",
+  // Read by the Next.js build that `tauri android build` runs first.
+  NEXT_PUBLIC_JARVIS_EDITION: publicEdition ? "public" : "personal",
   PATH: [
     join(javaHome, "bin"),
     join(androidHome, "platform-tools"),
@@ -209,7 +223,13 @@ const gradlew = join(ANDROID, process.platform === "win32" ? "gradlew.bat" : "gr
 // 162 MB on disk with only 44 MB of actual content. A fresh file is ~44 MB.
 const previousApk = join(ANDROID, "app", "build", "outputs", "apk", "arm64", "debug", "app-arm64-debug.apk");
 rmSync(previousApk, { force: true });
-run(gradlew, ["assembleArm64Debug", "-x", "rustBuildArm64Debug", "--console=plain"], {
+if (publicEdition && !gatewayUrl) {
+  console.warn("  public edition without --gateway: the app will ask to sign in but cannot reach a gateway");
+}
+const editionArgs = publicEdition
+  ? ["-PjarvisEdition=public", `-PholoGatewayUrl=${gatewayUrl}`]
+  : [];
+run(gradlew, ["assembleArm64Debug", "-x", "rustBuildArm64Debug", "--console=plain", ...editionArgs], {
   cwd: ANDROID,
   env,
 });

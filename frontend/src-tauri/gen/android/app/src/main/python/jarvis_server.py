@@ -34,7 +34,7 @@ _thread: threading.Thread | None = None
 _lock = threading.Lock()
 
 
-def _configure(files_dir: str) -> None:
+def _configure(files_dir: str, edition: str = "personal", gateway_url: str = "") -> None:
     """Point the backend at writable storage before anything imports settings.
 
     Order matters: ``app.core.config`` reads the environment once at import
@@ -54,6 +54,13 @@ def _configure(files_dir: str) -> None:
     # stays off until the user enters credentials in the app's settings; the
     # board works locally without it.
     os.environ.setdefault("JARVIS_SYNC_ENABLED", "false")
+
+    # Personal JARVIS or the public HOLO edition, decided at build time
+    # (Gradle -PjarvisEdition). Public ships no provider key: every model call
+    # goes to the metering gateway with the signed-in user's session.
+    os.environ.setdefault("JARVIS_EDITION", edition if edition in ("personal", "public") else "personal")
+    if gateway_url:
+        os.environ.setdefault("HOLO_GATEWAY_URL", gateway_url)
 
     # IndexedDB in the WebView is the authoritative store here; this database is
     # a working copy the agent reads and writes, seeded and drained through
@@ -132,7 +139,7 @@ def _wire_logging(files_dir: str) -> None:
         pass
 
 
-def start(files_dir: str) -> str:
+def start(files_dir: str, edition: str = "personal", gateway_url: str = "") -> str:
     """Start the backend if it is not already running. Returns a JSON report.
 
     Never raises: a backend that fails to come up should leave the app working
@@ -146,7 +153,7 @@ def start(files_dir: str) -> str:
             return json.dumps({"ok": True, "already_running": True, "port": PORT})
 
         try:
-            _configure(files_dir)
+            _configure(files_dir, edition, gateway_url)
             _wire_logging(files_dir)
 
             import uvicorn

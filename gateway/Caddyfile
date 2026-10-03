@@ -1,0 +1,10 @@
+# TLS in front of the gateway. Caddy gets and renews the certificate for
+# GATEWAY_DOMAIN by itself (point the domain's A record at the VM first).
+# No `encode` on purpose: compressing the chat SSE stream or the TTS audio
+# would hold chunks back.
+{$GATEWAY_DOMAIN} {
+	reverse_proxy gateway:8080 {
+		# Flush every chunk immediately (SSE and streamed TTS audio).
+		flush_interval -1
+	}
+}

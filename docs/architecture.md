@@ -448,6 +448,41 @@ Android's `MainActivity` explicitly selects dark system-bar styling (light icons
 for the permanently dark canvas, independently of the OS theme. It retains
 edge-to-edge insets and the embedded backend lifecycle.
 
+## Editions: personal JARVIS and public HOLO
+
+One codebase builds two apps (docs/public-edition.md). The **personal**
+edition is the default and is unchanged. The **public** edition ("HOLO", a
+working title) is built with `scripts/build-android.mjs --public
+--gateway=<origin>` and differs only in these places:
+
+- **Android** (`gen/android/app/build.gradle.kts`): `-PjarvisEdition=public`
+  sets:
+  - application id `builds.yashwanth.holo`, so it installs beside JARVIS with
+    its own data;
+  - `BuildConfig.JARVIS_EDITION` and `HOLO_GATEWAY_URL`;
+  - the app name from `src/publicEdition/res`, a build-type source set that
+    outranks `main`.
+
+  `MainActivity` passes the edition to `jarvis_server.start`, which sets
+  `JARVIS_EDITION` and `HOLO_GATEWAY_URL` before the backend imports.
+- **Backend** (`app/core/config.py`, `app/core/edition.py`):
+  - `jarvis_edition = "public"` forces the cloud voice stack. Every engine on
+    it is an OpenRouter model.
+  - `providers/openrouter.py` sends every chat, STT and TTS call to
+    `<gateway>/api/v1` with the user's session token (`holo_session_token`) as
+    the bearer token, never a provider key.
+  - TTS bodies carry `language`, so the gateway can gate Telugu.
+  - `/api/local/credentials` accepts only `holo_session_token`, and
+    `/sync-bootstrap` returns no service key.
+  - The agent offers and runs only `edition.PUBLIC_TOOLS`, an allow-list. No
+    OS control, files, browser, UI automation, clipboard or connectors.
+- **Frontend** (`lib/edition.ts`): `NEXT_PUBLIC_JARVIS_EDITION=public` sets
+  `IS_PUBLIC` and `BRAND`. Settings hides Design lab, AI keys, Connected apps,
+  sync setup and the runtime address.
+- **Gateway** (`gateway/`): a separate service that verifies the Supabase
+  JWT, checks the plan, reserves Aura, forwards to OpenRouter with the server
+  key, then settles the real cost.
+
 ## Serious mode (Lock-in)
 
 Serious mode is a device-local accountability layer over existing tasks and

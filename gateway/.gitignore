@@ -1,0 +1,13 @@
+# Secrets: only .env.example is committed.
+.env
+.env.*
+!.env.example
+
+.venv/
+__pycache__/
+*.py[cod]
+
+# Dev SQLite database (holds account and usage rows).
+*.db
+*.db-wal
+*.db-shm

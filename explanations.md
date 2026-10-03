@@ -128,6 +128,36 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-03 · Claude Code · Public edition phase 0 + 1 (HOLO, gateway)
+
+- **Decisions:** locked in `docs/public-edition.md`. Read it before touching
+  the editions.
+- **Edition:** one codebase, two apps.
+  - The personal build is the default and unchanged.
+  - `--public` changes Gradle (`-PjarvisEdition`, `src/publicEdition/res`),
+    `MainActivity` → `jarvis_server.start(edition, gateway)`, `config.py`
+    (`jarvis_edition`, `holo_gateway_url`, `holo_session_token`, a validator
+    forcing cloud, `system_tools_enabled` off), `app/core/edition.py` (the
+    tool allow-list, applied in `agent.py` both when offering and when
+    executing), `openrouter.py` (`_api_base`, the session as bearer,
+    `language` in TTS bodies, `_raise_gateway_error`), `localstore.py`
+    (session only, no service key) and the frontend (`lib/edition.ts`,
+    Settings gating).
+  - I stayed out of `tools.py`; Codex has uncommitted work there.
+- **Gateway** (`gateway/`): built by a subagent and reviewed by me. 200
+  offline checks; the local end to end passed.
+  - The desktop-only DeepSeek routing was the first e2e failure (the gateway
+    refused the model). Fixed by making `system_tools_enabled` false in the
+    public edition.
+- **Gotcha (Windows):** a venv's `python.exe` is a launcher, and the backend
+  also spawns a multiprocessing child. `Popen.terminate()` leaves the server
+  alive holding the port. Use `taskkill /T /F`.
+- **Left:**
+  - a Supabase project for the public app and the Mumbai deploy (owner);
+  - sign-in UI with onboarding (phase 2);
+  - the Play verifier;
+  - installing HOLO on the phone and a phone end to end via `adb reverse`.
+
 ### 2026-10-02 · Claude Code · Lock-in, pings, glass dock, notification cards, old versions gone
 
 - **Asked:**

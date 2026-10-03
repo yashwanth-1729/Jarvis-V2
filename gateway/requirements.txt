@@ -1,0 +1,10 @@
+# HOLO gateway -- its own venv (gateway/.venv), separate from backend/.venv.
+# Pinned to the versions the offline test suite was run against (2026-10-03).
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+httpx==0.28.1
+SQLAlchemy[asyncio]==2.1.2
+aiosqlite==0.22.1
+asyncpg==0.31.0
+PyJWT[crypto]==2.15.1
+pydantic-settings==2.15.0

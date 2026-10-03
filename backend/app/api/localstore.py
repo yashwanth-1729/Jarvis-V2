@@ -233,6 +233,9 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
     """
     _require_client_owned()
 
+    if settings.is_public_edition:
+        return _public_session(payload)
+
     changed = False
     configured: dict[str, bool] = {}
     for payload_key, attr, has_key_attr in (
@@ -271,6 +274,29 @@ async def credentials(payload: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _public_session(payload: dict[str, str]) -> dict[str, Any]:
+    """The public edition's only credential: the signed-in user's session.
+
+    No provider key is accepted here, whatever the client sends: the HOLO
+    gateway holds the keys and meters every call against the user's plan
+    (docs/public-edition.md). The app re-sends the token whenever Supabase
+    refreshes it. The OpenRouter client reads it per request, so nothing is
+    torn down and the warm connection survives a refresh.
+    """
+    if "holo_session_token" in payload:
+        settings.holo_session_token = (payload.get("holo_session_token") or "").strip()
+        logger.info("Session credential %s", "set" if settings.holo_session_token else "cleared")
+    ignored = sorted(k for k in payload if k != "holo_session_token")
+    if ignored:
+        logger.info("Public edition ignored credentials: %s", ", ".join(ignored))
+    return {
+        "configured": False,
+        "gemini_configured": False,
+        "openrouter_configured": settings.has_openrouter_key,
+        "session": bool(settings.holo_session_token),
+    }
+
+
 @router.get("/sync-bootstrap", summary="Hand a first-run client its Supabase credentials")
 async def sync_bootstrap() -> dict[str, str]:
     """Save a desktop user from retyping a key that is already on their disk.
@@ -293,6 +319,11 @@ async def sync_bootstrap() -> dict[str, str]:
     this endpoint on a subsequent launch.
     """
     _require_client_owned()
+    if settings.is_public_edition:
+        # A service key never belongs to a public user's client. Per-user
+        # backup in the public edition goes through Supabase Auth and RLS
+        # instead.
+        return {"supabase_url": "", "supabase_key": ""}
     return {
         "supabase_url": settings.supabase_url.strip(),
         "supabase_key": settings.supabase_service_key.strip(),

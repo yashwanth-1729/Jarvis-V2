@@ -20,6 +20,7 @@ import {
 
 import { ConnectorsSection } from "@/components/ConnectorsSection";
 import { API_BASE, isNativeShell } from "@/lib/api";
+import { IS_PUBLIC } from "@/lib/edition";
 import { useSettingsModel, type SettingsModel } from "@/lib/useSettingsModel";
 import { useBackLayer } from "../lib/backStack";
 import type { Tone } from "../lib/derive";
@@ -44,6 +45,12 @@ const PAGES: Array<{ id: Page; title: string; hint: string; tone: Tone; icon: Ic
   { id: "storage", title: "Local storage", hint: "Reset this device's copy", tone: "pink", icon: "broom", group: "This device" },
 ];
 
+/** Owner-only pages: provider keys, the owner's own connectors and sync
+ *  project, the runtime address and the Design lab never reach a public
+ *  user, whose AI goes through the HOLO gateway (docs/public-edition.md). */
+const PERSONAL_ONLY: ReadonlySet<Page> = new Set(["lab", "keys", "apps", "sync", "runtime"]);
+const VISIBLE_PAGES = IS_PUBLIC ? PAGES.filter((item) => !PERSONAL_ONLY.has(item.id)) : PAGES;
+
 export function SettingsScreen() {
   const { pop } = useNav();
   const model = useSettingsModel();
@@ -54,7 +61,7 @@ export function SettingsScreen() {
     setPage(null);
   }, []);
   useBackLayer(page !== null, closePage);
-  const current = PAGES.find((item) => item.id === page);
+  const current = VISIBLE_PAGES.find((item) => item.id === page);
 
   return (
     <div className="ph-settings">
@@ -115,11 +122,11 @@ export function SettingsScreen() {
                 <StatusStrip />
                 <Appearance />
                 <LiveBackdrop />
-                {["Make it yours", "Connections", "This device"].map((group) => (
+                {["Make it yours", "Connections", "This device"].filter((group) => VISIBLE_PAGES.some((item) => item.group === group)).map((group) => (
                   <section key={group} className="ph-section">
                     <span className="ph-eyebrow">{group}</span>
                     <div className="ph-rows">
-                      {PAGES.filter((item) => item.group === group).map(({ id, title, hint, tone, icon }) => (
+                      {VISIBLE_PAGES.filter((item) => item.group === group).map(({ id, title, hint, tone, icon }) => (
                         <Tap
                           key={id}
                           className="ph-row"

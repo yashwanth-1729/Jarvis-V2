@@ -104,7 +104,11 @@ class MainActivity : TauriActivity() {
 
         // filesDir is app-private and writable; the backend's own default
         // path would land in Chaquopy's read-only asset directory.
-        val report = server!!.callAttr("start", filesDir.absolutePath).toString()
+        // The edition comes from the build (Gradle -PjarvisEdition); see
+        // jarvis_server.start.
+        val report = server!!.callAttr(
+          "start", filesDir.absolutePath, BuildConfig.JARVIS_EDITION, BuildConfig.HOLO_GATEWAY_URL,
+        ).toString()
         Log.i(TAG, "backend: $report")
       } catch (error: Throwable) {
         // A missing backend costs the assistant and voice, not the board.

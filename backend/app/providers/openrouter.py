@@ -61,6 +61,7 @@ from app.providers.base import (
     ProviderAuthError,
     ProviderError,
     ProviderNotConfigured,
+    ProviderOutOfCredit,
     ProviderRateLimited,
     ProviderUnavailable,
     Speech,
@@ -73,7 +74,22 @@ logger = logging.getLogger("jarvis.providers.openrouter")
 API_BASE = "https://openrouter.ai/api/v1"
 
 
+def _api_base() -> str:
+    """OpenRouter itself, or in the public edition the HOLO gateway, which
+    mirrors OpenRouter's routes under ``/api/v1`` and meters each call."""
+    if settings.is_public_edition:
+        return settings.holo_gateway_url.strip().rstrip("/") + "/api/v1"
+    return API_BASE
+
+
 def _require_key() -> str:
+    if settings.is_public_edition:
+        # The public build has no provider key at all: the user's session is
+        # the credential, and the gateway holds the real key.
+        token = settings.holo_session_token.strip()
+        if not token or not settings.holo_gateway_url.strip():
+            raise ProviderNotConfigured("Sign in to talk to HOLO.")
+        return token
     key = settings.openrouter_api_key.strip()
     if not key:
         raise ProviderNotConfigured(
@@ -127,7 +143,7 @@ def _http() -> httpx.AsyncClient:
     loop = asyncio.get_running_loop()
     if _client is None or _client.is_closed or _client_loop is not loop:
         _client = httpx.AsyncClient(
-            base_url=API_BASE,
+            base_url=_api_base(),
             # Attribution only; the key goes on each request (`_headers`) so a
             # key change via the BYOK credentials endpoint needs no rebuild.
             headers={
@@ -350,6 +366,43 @@ def _extract_usage(raw: dict[str, Any] | None) -> dict[str, int]:
     return flat
 
 
+#: The public plans' names as users see them (docs/public-edition.md).
+_PLAN_NAMES = {
+    "side_quest": "Side Quest (₹99)",
+    "main_character": "Main Character (₹299)",
+    "final_boss": "Final Boss (₹599)",
+    "god_mode": "God Mode (₹1,999)",
+}
+
+
+def _raise_gateway_error(status: int, detail: dict[str, Any], message: str) -> None:
+    """Turn the HOLO gateway's refusals into errors a user can act on.
+
+    The gateway answers with ``{"error": {"code": ...}}`` (gateway/README.md).
+    Running out of Aura and a plan lock are "nothing the app can retry", the
+    same as an empty account, so both stop the voice loop the way
+    ProviderOutOfCredit already does. An expired session is a sign-in, not
+    a key problem.
+    """
+    code = str(detail.get("code") or "")
+    if status == 401 or code in {"missing_token", "token_expired", "invalid_token"}:
+        raise ProviderAuthError("Your session ended. Open the app and sign in again.")
+    if status == 402 or code == "insufficient_aura":
+        refill = str(detail.get("refills_at") or "")[:10]
+        when = f" It refills on {refill}," if refill else ""
+        raise ProviderOutOfCredit(f"You're out of Aura for now.{when} or top up to keep going.")
+    if code == "feature_locked":
+        plan = _PLAN_NAMES.get(str(detail.get("required_plan") or ""), "a paid plan")
+        raise ProviderOutOfCredit(f"That unlocks with {plan}.")
+    if status == 429:
+        if code == "daily_cap_reached":
+            raise ProviderRateLimited("That's today's limit. It resets at midnight.")
+        raise ProviderRateLimited("Too fast. Give it a second.")
+    if status >= 500:
+        raise ProviderUnavailable(f"The assistant service is having trouble ({status}). Try again in a moment.")
+    raise ProviderError(f"The assistant service refused that ({status}): {message}")
+
+
 def _raise_for_status(response: httpx.Response, body: bytes) -> None:
     if response.status_code < 400:
         return
@@ -358,6 +411,10 @@ def _raise_for_status(response: httpx.Response, body: bytes) -> None:
         message = detail.get("message", "") or body.decode(errors="replace")[:400]
     except (json.JSONDecodeError, UnicodeDecodeError):
         message = body.decode(errors="replace")[:400]
+        detail = {}
+
+    if settings.is_public_edition:
+        _raise_gateway_error(response.status_code, detail if isinstance(detail, dict) else {}, message)
 
     if response.status_code in (401, 403):
         raise ProviderAuthError(
@@ -841,7 +898,7 @@ class OpenRouterTTS:
         # a different namespace from these models' voices; passing it through
         # made OpenRouter 400 every request. Each model's own voice is used.
         try:
-            return await self._speak(self.model, self._default_voice, clean)
+            return await self._speak(self.model, self._default_voice, clean, language_code)
         except (ProviderUnavailable, ProviderRateLimited) as exc:
             if self._fallback is None:
                 raise
@@ -849,9 +906,11 @@ class OpenRouterTTS:
             logger.warning(
                 "TTS %s failed (%s); speaking with fallback %s/%s", self.model, exc, model, voice,
             )
-            return await self._speak(model, voice, clean)
+            return await self._speak(model, voice, clean, language_code)
 
-    async def _speak(self, model: str, voice: str, text: str) -> Speech:
+    async def _speak(
+        self, model: str, voice: str, text: str, language_code: str | None = None,
+    ) -> Speech:
         # Gemini TTS only returns raw PCM (it rejects mp3 with a 400) and is
         # not sent `speed`; everything else here takes mp3 at the tuned pace.
         gemini = model.startswith("google/gemini")
@@ -863,6 +922,11 @@ class OpenRouterTTS:
         }
         if not gemini:
             payload["speed"] = settings.openrouter_tts_speed
+        if settings.is_public_edition and language_code:
+            # For the gateway only: Telugu speech is a paid-plan feature and the
+            # model alone cannot tell Telugu from Hindi. It strips this before
+            # forwarding.
+            payload["language"] = language_code.split("-")[0]
         try:
             response = await _hedged(
                 "TTS",

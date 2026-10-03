@@ -27,6 +27,7 @@ import time
 import uuid
 from typing import Any, AsyncIterator
 
+from app.core import edition
 from app.core.config import settings
 from app.core.languages import reply_directive, reply_reminder
 from app.core.timeutil import now
@@ -854,7 +855,8 @@ async def run_turn(
     )
     router_started = time.perf_counter()
     routed_names = tool_routing.route(user_text, previous_user_text)
-    offered_tools = openai_tools(routed_names)
+    # The public edition offers only its allow-list (app/core/edition.py).
+    offered_tools = edition.filter_tool_specs(openai_tools(routed_names))
     router_ms = (time.perf_counter() - router_started) * 1000
     if routed_names is None:
         router_label = "fallback(all)"
@@ -987,6 +989,11 @@ async def run_turn(
                 logger.info("tool call: %s", call.name)
                 if parse_error is not None:
                     outcome_text = f"{call.name} was called with invalid input — {parse_error}."
+                    ok = False
+                elif not edition.tool_allowed(call.name):
+                    # Never offered in this edition; refuse a hallucinated call
+                    # rather than run it.
+                    outcome_text = f"{call.name} is not available in this app."
                     ok = False
                 else:
                     outcome = await execute_tool(

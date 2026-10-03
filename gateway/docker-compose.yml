@@ -1,0 +1,59 @@
+# HOLO gateway on one Mumbai-region VM: Postgres + the gateway + Caddy (TLS).
+#
+#   cp .env.example .env      # fill in the secrets
+#   docker compose up -d --build
+#
+# Compose reads .env twice: for ${...} substitution below, and as the
+# gateway's environment (env_file). DATABASE_URL is set here so it always
+# points at the bundled Postgres, whatever .env says for local dev.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: holo
+      POSTGRES_USER: holo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holo -d holo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # No published port: only the gateway reaches the database.
+
+  gateway:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://holo:${POSTGRES_PASSWORD}@db:5432/holo
+    depends_on:
+      db:
+        condition: service_healthy
+    # Loopback only: the public reaches it through Caddy.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN:?set GATEWAY_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - gateway
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

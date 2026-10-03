@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/  — everything relative resolves against this.
@@ -194,6 +194,22 @@ class Settings(BaseSettings):
     jarvis_voice_stack: Literal["legacy", "cloud"] = Field(
         default="cloud", alias="JARVIS_VOICE_STACK"
     )
+
+    #: Which build this is: the owner's personal JARVIS, or the public edition
+    #: (docs/public-edition.md). Public ships no provider key: every model
+    #: call goes to the HOLO gateway with the signed-in user's session token,
+    #: which meters it against their plan. Android's launcher passes it in
+    #: from the build (Gradle ``-PjarvisEdition``).
+    jarvis_edition: Literal["personal", "public"] = Field(
+        default="personal", alias="JARVIS_EDITION"
+    )
+    #: The gateway's origin, e.g. ``https://api.example.in``; the OpenRouter
+    #: client appends ``/api/v1``. Only read in the public edition.
+    holo_gateway_url: str = Field(default="", alias="HOLO_GATEWAY_URL")
+    #: The signed-in user's Supabase access token, handed over by the app via
+    #: /api/local/credentials (never from disk) and refreshed by it. Public
+    #: edition only; it stands where the OpenRouter key does in personal.
+    holo_session_token: str = Field(default="", alias="HOLO_SESSION_TOKEN")
 
     #: OpenRouter is an OpenAI-shaped gateway (same wire format Sarvam already
     #: speaks), used as the chat provider when jarvis_voice_stack="cloud".
@@ -466,8 +482,12 @@ class Settings(BaseSettings):
         this stays on there even now that desktop is also client-owned-data,
         which is exactly why this is keyed on ``jarvis_android`` and not on
         ``jarvis_client_owned_data`` any more.
+
+        Never in the public edition: computer control is the owner's alone
+        (app/core/edition.py), and this also keeps desktop-only model routing
+        (``openrouter_desktop_model``) off the gateway's allow-list.
         """
-        return self.jarvis_system_tools and not self.jarvis_android
+        return self.jarvis_system_tools and not self.jarvis_android and not self.is_public_edition
 
     @property
     def scheduler_enabled(self) -> bool:
@@ -490,7 +510,15 @@ class Settings(BaseSettings):
         return bool(self.gemini_api_key.strip())
 
     @property
+    def is_public_edition(self) -> bool:
+        return self.jarvis_edition == "public"
+
+    @property
     def has_openrouter_key(self) -> bool:
+        # In the public edition the "key" is the user's session: the gateway
+        # holds the real one.
+        if self.is_public_edition:
+            return bool(self.holo_session_token.strip() and self.holo_gateway_url.strip())
         return bool(self.openrouter_api_key.strip())
 
     @property
@@ -512,6 +540,17 @@ class Settings(BaseSettings):
         # Below ~15s the loop spends more time on round trips than on real
         # change; above an hour the phone feels stale.
         return max(15, min(value, 3600))
+
+    @model_validator(mode="after")
+    def _public_edition_is_cloud_only(self) -> "Settings":
+        # A public build holds no Sarvam/Gemini/DeepInfra key, only the user's
+        # session for the gateway, which speaks OpenRouter's shapes. So the
+        # cloud stack, whose every engine is an OpenRouter model, is the only
+        # one that can work there. Set directly: assignment validation would
+        # re-enter this validator.
+        if self.jarvis_edition == "public" and self.jarvis_voice_stack != "cloud":
+            object.__setattr__(self, "jarvis_voice_stack", "cloud")
+        return self
 
     @field_validator("jarvis_max_tool_iterations")
     @classmethod

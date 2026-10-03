@@ -544,6 +544,66 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-03: Public edition foundation (HOLO), gateway, cost measurements
+
+- **What:** the user accepted the recommended plan: working title HOLO, 18+,
+  Android first, a Mumbai gateway, Aura plans from Spawn to God Mode, and a
+  3-day Lock-in trial. The spec is `docs/public-edition.md`.
+- **Costs measured:**
+  - **Text:** 186 real turns from the phone log, priced at Luna's OpenRouter
+    rates: median ₹0.05, p90 ₹0.10.
+  - **English voice:** exact Grok STT and Kokoro costs from OpenRouter's
+    generation endpoint, ≈ ₹0.25 a minute.
+  - **Telugu voice:** Grok voice TTS is about 15× Kokoro, ≈ ₹0.7 a minute.
+  - **Result:** 1 Aura = ₹0.10 of provider cost.
+- **Edition switch:** `node scripts/build-android.mjs --public
+  --gateway=<origin>` builds `builds.yashwanth.holo`, named HOLO, beside
+  JARVIS.
+  - `JARVIS_EDITION=public` routes every model, STT and TTS call to
+    `<gateway>/api/v1` with the user's session token. No provider key is held.
+  - It forces the cloud stack, turns system tools off and offers only the
+    tools in `app/core/edition.py`.
+  - `/api/local/credentials` takes only the session, and `/sync-bootstrap`
+    returns no service key.
+  - The frontend hides Design lab, keys, connected apps, sync setup and the
+    runtime address.
+- **Gateway:** new `gateway/` service, a FastAPI metering proxy. See
+  `gateway/README.md`.
+- **IndicConformer on the VPS (benchmark only, nothing switched):**
+  - **Latency:** the 600M int8 model gave its final text 1.6 s after speech
+    ended, median. Grok STT's is 1.1 s.
+  - **Accuracy:** very good Telugu on synthetic clips.
+  - **Memory:** it holds 1.2 GB.
+  - **Verdict:** not worth it on 2 vCPUs in Sydney. A Telugu-only model on an
+    Indian host is the candidate.
+  - **On the VPS:** the model is left in `~/indic-asr`, and nothing is
+    running.
+- **Validation:**
+  - **Tests:**
+    - `public_edition_test` (39 checks);
+    - `openrouter_transport_test` (41);
+    - `credentials_test` (25);
+    - smoke;
+    - `routine_undo` (30);
+    - `serious_mode` (20);
+    - `reminder_lead` (22);
+    - scheduler (37);
+    - `voice_pipeline` and the agent tests;
+    - all 6 gateway suites (200 checks).
+  - **Builds:**
+    - the public APK built as `builds.yashwanth.holo.debug`, label HOLO;
+    - the personal APK rebuilt unchanged as `builds.yashwanth.jarvis.debug`,
+      label JARVIS.
+  - **End to end on the laptop** (temp databases, sync off, an empty provider
+    key in the backend):
+    - a real chat turn went through the gateway and was charged 0.83 Aura;
+    - voice was locked on Spawn and worked after a grant to Side Quest;
+    - Telugu was locked below Main Character.
+  - **Not yet done:**
+    - the HOLO APK is not installed on the phone (it wasn't connected);
+    - no Supabase project and no deployed gateway, so there is no sign-in UI;
+    - Postgres and Docker are untested.
+
 ### 2026-10-02: Lock-in (serious mode), upcoming-only pings, glass dock, notification cards
 
 - **Old versions removed:**

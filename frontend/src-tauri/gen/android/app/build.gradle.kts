@@ -7,6 +7,18 @@ plugins {
     id("com.chaquo.python")
 }
 
+// Which app this builds: the owner's personal JARVIS (default) or the public
+// HOLO edition (docs/public-edition.md), with `-PjarvisEdition=public`.
+// Public gets its own application id, so it installs beside JARVIS with
+// separate data, and its backend talks only to the metering gateway
+// (`-PholoGatewayUrl=https://...`). Nothing changes for a personal build.
+val jarvisEdition = ((findProperty("jarvisEdition") as String?) ?: "personal").lowercase()
+require(jarvisEdition == "personal" || jarvisEdition == "public") {
+    "jarvisEdition must be 'personal' or 'public', not '$jarvisEdition'"
+}
+val isPublicEdition = jarvisEdition == "public"
+val holoGatewayUrl = (findProperty("holoGatewayUrl") as String?) ?: ""
+
 val tauriProperties = Properties().apply {
     val propFile = file("tauri.properties")
     if (propFile.exists()) {
@@ -19,7 +31,9 @@ android {
     namespace = "builds.yashwanth.jarvis"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "builds.yashwanth.jarvis"
+        applicationId = if (isPublicEdition) "builds.yashwanth.holo" else "builds.yashwanth.jarvis"
+        buildConfigField("String", "JARVIS_EDITION", "\"$jarvisEdition\"")
+        buildConfigField("String", "HOLO_GATEWAY_URL", "\"$holoGatewayUrl\"")
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
@@ -53,6 +67,12 @@ android {
     }
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+    // The public app's name. Build-type source sets outrank `main`, so these
+    // strings override res/values/strings.xml without a duplicate.
+    if (isPublicEdition) {
+        sourceSets.getByName("debug").res.srcDir("src/publicEdition/res")
+        sourceSets.getByName("release").res.srcDir("src/publicEdition/res")
     }
     buildFeatures {
         buildConfig = true
