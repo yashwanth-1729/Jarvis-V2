@@ -599,9 +599,26 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
     - a real chat turn went through the gateway and was charged 0.83 Aura;
     - voice was locked on Spawn and worked after a grant to Side Quest;
     - Telugu was locked below Main Character.
+  - **Later the same day:**
+    - **Name:** the public app is now shown as **JARVIS Public** (the owner's
+      choice). It installs as a second app: package `builds.yashwanth.holo`.
+    - **Its own backend port:** 8100, against JARVIS's 8000. With one shared
+      port, whichever app started second would have talked to the other's
+      backend and data.
+    - **Wallet guard:** a shared daily free-Aura pool,
+      `FREE_POOL_DAILY_AURA`, default 500 Aura (≈ ₹50 a day, ₹1,500 a month
+      at most). It's enforced in the gateway; free calls past it get
+      `free_pool_exhausted` until midnight, and paid plans aren't affected.
+  - **On the phone** (OnePlus CPH2767): JARVIS Public installed beside JARVIS.
+    - Over `adb reverse` to a local gateway, its chat answered "JARVIS Public
+      online." and was charged 0.84 Aura.
+    - Settings showed only Location and Local storage.
+    - With both apps running, their backends answered on 8000 and 8100, each
+      with its own database.
+    - The test chat was cleared afterwards.
   - **Not yet done:**
-    - the HOLO APK is not installed on the phone (it wasn't connected);
-    - no Supabase project and no deployed gateway, so there is no sign-in UI;
+    - no Supabase project and no deployed gateway, so there is no sign-in UI
+      yet;
     - Postgres and Docker are untested.
 
 ### 2026-10-02: Lock-in (serious mode), upcoming-only pings, glass dock, notification cards

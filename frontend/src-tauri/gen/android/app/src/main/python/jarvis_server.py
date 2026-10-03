@@ -28,6 +28,11 @@ from typing import Any
 
 HOST = "127.0.0.1"
 PORT = 8000
+#: The public edition's own port. Both apps can be installed, and both alive
+#: at once; on one port the second would silently talk to the first's
+#: backend and data. frontend: NEXT_PUBLIC_API_PORT, set by build-android.mjs.
+PUBLIC_PORT = 8100
+_port = PORT
 
 _server: Any = None
 _thread: threading.Thread | None = None
@@ -48,7 +53,7 @@ def _configure(files_dir: str, edition: str = "personal", gateway_url: str = "")
     # asset directory rather than here.
     os.environ.setdefault("JARVIS_DB_PATH", os.path.join(storage, "jarvis_memory.db"))
     os.environ.setdefault("JARVIS_HOST", HOST)
-    os.environ.setdefault("JARVIS_PORT", str(PORT))
+    os.environ.setdefault("JARVIS_PORT", str(_port))
 
     # The desktop reads these from backend/.env, which is not shipped. Sync
     # stays off until the user enters credentials in the app's settings; the
@@ -146,13 +151,14 @@ def start(files_dir: str, edition: str = "personal", gateway_url: str = "") -> s
     from local data, which it can, rather than taking the activity down with
     it.
     """
-    global _server, _thread
+    global _server, _thread, _port
 
     with _lock:
         if _thread is not None and _thread.is_alive():
-            return json.dumps({"ok": True, "already_running": True, "port": PORT})
+            return json.dumps({"ok": True, "already_running": True, "port": _port})
 
         try:
+            _port = PUBLIC_PORT if edition == "public" else PORT
             _configure(files_dir, edition, gateway_url)
             _wire_logging(files_dir)
 
@@ -163,7 +169,7 @@ def start(files_dir: str, edition: str = "personal", gateway_url: str = "") -> s
             config = uvicorn.Config(
                 app,
                 host=HOST,
-                port=PORT,
+                port=_port,
                 # asyncio rather than uvloop, and wsproto rather than
                 # websockets: both alternatives are native and neither is
                 # available here. Pure-Python equivalents cost throughput that
@@ -182,7 +188,7 @@ def start(files_dir: str, edition: str = "personal", gateway_url: str = "") -> s
             _thread = threading.Thread(target=_server.run, name="jarvis-uvicorn", daemon=True)
             _thread.start()
 
-            return json.dumps({"ok": True, "port": PORT, "db": os.environ["JARVIS_DB_PATH"]})
+            return json.dumps({"ok": True, "port": _port, "db": os.environ["JARVIS_DB_PATH"]})
         except Exception as exc:
             return json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
 

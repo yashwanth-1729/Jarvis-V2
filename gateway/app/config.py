@@ -131,6 +131,12 @@ class Settings(BaseSettings):
     #: A hold older than this belongs to a request that never settled (the
     #: process died mid-call). It is charged at its reserve and released.
     reservation_ttl_seconds: int = 900
+    #: The most Aura ALL free (Spawn) users together may spend in one day
+    #: (same IST day as the daily caps). The wallet guarantee for the free
+    #: plan: free usage can never cost more than this x Rs 0.10 a day, however
+    #: many people sign up. When it runs out, free AI waits for midnight (paid
+    #: plans are unaffected). 0 turns the pool off.
+    free_pool_daily_aura: int = 500
     charge_upstream_cost_if_higher: bool = True
 
     # --- Abuse limits -------------------------------------------------------------

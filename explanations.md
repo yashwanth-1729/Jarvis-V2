@@ -156,7 +156,13 @@ Medium, worth doing:
   - a Supabase project for the public app and the Mumbai deploy (owner);
   - sign-in UI with onboarding (phase 2);
   - the Play verifier;
-  - installing HOLO on the phone and a phone end to end via `adb reverse`.
+  - Done later the same day:
+    - shown as "JARVIS Public";
+    - its own backend port, 8100 (`jarvis_server.PUBLIC_PORT`, and
+      `NEXT_PUBLIC_API_PORT` from `build-android.mjs`);
+    - the gateway's free pool (`FREE_POOL_DAILY_AURA`);
+    - a phone end to end via `adb reverse` passed;
+    - both apps ran side by side with separate databases.
 
 ### 2026-10-02 · Claude Code · Lock-in, pings, glass dock, notification cards, old versions gone
 

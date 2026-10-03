@@ -124,6 +124,8 @@ async def main() -> None:
         check("feature lock names the plan", isinstance(out, ProviderOutOfCredit) and "Main Character" in str(out), out)
         out = refusal(401, {"code": "token_expired"})
         check("expired session asks to sign in", isinstance(out, ProviderAuthError) and "sign in" in str(out), out)
+        out = refusal(429, {"code": "free_pool_exhausted"})
+        check("shared free pool stops retries and points to midnight", isinstance(out, ProviderOutOfCredit) and "midnight" in str(out), out)
         out = refusal(429, {"code": "daily_cap_reached"})
         check("daily cap is a rate limit", isinstance(out, ProviderRateLimited) and "today" in str(out), out)
         check("no message mentions an API key", all("API key" not in str(refusal(c, {"code": k})) for c, k in ((401, "invalid_token"), (403, "feature_locked"))))

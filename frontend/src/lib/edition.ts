@@ -9,5 +9,5 @@ export const EDITION: Edition = process.env.NEXT_PUBLIC_JARVIS_EDITION === "publ
 
 export const IS_PUBLIC = EDITION === "public";
 
-/** The app's name as users see it. "HOLO" is a working title for the public app. */
-export const BRAND = IS_PUBLIC ? "HOLO" : "JARVIS";
+/** The app's name as users see it (the owner named the public app "JARVIS Public", 2026-10-03). */
+export const BRAND = IS_PUBLIC ? "JARVIS Public" : "JARVIS";

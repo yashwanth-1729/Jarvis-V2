@@ -158,6 +158,35 @@ async def test_holds_prevent_overspend_and_expire() -> None:
               late["milli_aura"] == 500, late)
 
 
+async def test_free_pool_caps_all_free_users_together() -> None:
+    # The wallet guarantee: every free user together gets 1 Aura a day here.
+    async with Harness(free_pool_daily_aura=1) as h:
+        scripted(h, 5_000, 5_000, 5_000)  # each about 0.44 Aura
+        r = await chat(h, "free-a")
+        check("first free chat fits the pool", r.status_code == 200, r.text)
+        r = await chat(h, "free-b")
+        error = r.json().get("error", {})
+        check("a second free user is refused once the pool is spent",
+              r.status_code == 429 and error.get("code") == "free_pool_exhausted", r.text)
+        check("the refusal says when it is back and offers the upgrade",
+              error.get("resets_at") and error.get("upgrade_available") is True
+              and "Retry-After" in r.headers, error)
+        await h.grant("paid-c", plan="side_quest", days=30)
+        r = await chat(h, "paid-c")
+        check("paid plans are not limited by the free pool", r.status_code == 200, r.text)
+        rows = await h.rows(usage)
+        check("usage rows record the plan they were spent on",
+              sorted(u["plan"] for u in rows) == ["side_quest", "spawn"], [u["plan"] for u in rows])
+        h.clock.advance(days=1)
+        r = await chat(h, "free-b")
+        check("the pool refills the next day", r.status_code == 200, r.text)
+
+    async with Harness(free_pool_daily_aura=0) as h:
+        scripted(h, 5_000, 5_000)
+        ok = [(await chat(h, f"free-{i}")).status_code for i in range(2)]
+        check("pool 0 means no shared limit", ok == [200, 200], ok)
+
+
 if __name__ == "__main__":
     run([
         test_insufficient_aura_402,
@@ -165,4 +194,5 @@ if __name__ == "__main__":
         test_monthly_reset,
         test_daily_cap,
         test_holds_prevent_overspend_and_expire,
+        test_free_pool_caps_all_free_users_together,
     ])

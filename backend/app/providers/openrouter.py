@@ -88,7 +88,7 @@ def _require_key() -> str:
         # the credential, and the gateway holds the real key.
         token = settings.holo_session_token.strip()
         if not token or not settings.holo_gateway_url.strip():
-            raise ProviderNotConfigured("Sign in to talk to HOLO.")
+            raise ProviderNotConfigured("Sign in to keep going.")
         return token
     key = settings.openrouter_api_key.strip()
     if not key:
@@ -391,6 +391,11 @@ def _raise_gateway_error(status: int, detail: dict[str, Any], message: str) -> N
         refill = str(detail.get("refills_at") or "")[:10]
         when = f" It refills on {refill}," if refill else ""
         raise ProviderOutOfCredit(f"You're out of Aura for now.{when} or top up to keep going.")
+    if code == "free_pool_exhausted":
+        # Every free user shares one daily budget (gateway FREE_POOL_DAILY_AURA).
+        raise ProviderOutOfCredit(
+            "Today's free Aura is all used up. It's back at midnight, or Side Quest (₹99) keeps you going."
+        )
     if code == "feature_locked":
         plan = _PLAN_NAMES.get(str(detail.get("required_plan") or ""), "a paid plan")
         raise ProviderOutOfCredit(f"That unlocks with {plan}.")

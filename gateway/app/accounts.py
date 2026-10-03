@@ -362,6 +362,8 @@ class AuraBank:
             plan = self.plans.get(acct.plan)
             if acct.balance_milli < amount_milli:
                 refusal = self._insufficient(acct, amount_milli)
+            elif acct.plan == FREE_PLAN and await self._free_pool_exhausted(conn, amount_milli, now):
+                refusal = self._free_pool_refusal(acct, now)
             else:
                 spent = await self._spent_today(conn, user_id, now)
                 cap = plan.daily_cap_aura * 1000
@@ -407,7 +409,7 @@ class AuraBank:
                 # The stale-hold sweep got here first and already charged the
                 # reserve; only the excess over it is still owed.
                 milli = max(milli - reservation.amount_milli, 0)
-            usage_id = await self._record_usage(conn, reservation, milli, record, now)
+            usage_id = await self._record_usage(conn, reservation, milli, record, now, acct.plan)
             if milli > 0:
                 from_plan, from_topup = split_spend(acct.plan_milli, acct.topup_milli, milli)
                 await self._move(
@@ -449,7 +451,7 @@ class AuraBank:
                 .values(held_milli=acct.held_milli, updated_at=now)
             )
             usage_id = await self._record_usage(
-                conn, hold, hold.amount_milli, {"status": "stale_hold"}, now,
+                conn, hold, hold.amount_milli, {"status": "stale_hold"}, now, acct.plan,
             )
             from_plan, from_topup = split_spend(acct.plan_milli, acct.topup_milli, hold.amount_milli)
             acct = await self._move(
@@ -484,11 +486,11 @@ class AuraBank:
 
     async def _record_usage(
         self, conn: AsyncConnection, reservation: Reservation, milli: int,
-        record: dict[str, Any], now: datetime,
+        record: dict[str, Any], now: datetime, plan: str | None = None,
     ) -> int:
         result = await conn.execute(insert(usage).values(
             user_id=reservation.user_id, endpoint=reservation.endpoint,
-            model=reservation.model, milli_aura=milli,
+            model=reservation.model, milli_aura=milli, plan=plan,
             reserve_milli=reservation.amount_milli, created_at=now,
             **{"streamed": False, **record},
         ))
@@ -501,6 +503,31 @@ class AuraBank:
             .where(usage.c.user_id == user_id, usage.c.created_at >= start)
         )).scalar_one()
         return int(total)
+
+    async def _free_pool_exhausted(self, conn: AsyncConnection, amount_milli: int, now: datetime) -> bool:
+        """Whether this would take today's free spend past the shared pool.
+
+        Summed from today's Spawn usage rows. Open holds are not counted, so
+        concurrent requests can overrun by at most a few reserves, which is
+        bounded and small next to the pool."""
+        pool = self.settings.free_pool_daily_aura * 1000
+        if pool <= 0:
+            return False
+        spent = (await conn.execute(
+            select(func.coalesce(func.sum(usage.c.milli_aura), 0))
+            .where(usage.c.plan == FREE_PLAN, usage.c.created_at >= self._day_start(now))
+        )).scalar_one()
+        return int(spent) + amount_milli > pool
+
+    def _free_pool_refusal(self, acct: Account, now: datetime) -> GatewayError:
+        resets = self._day_start(now) + timedelta(days=1)
+        return GatewayError(
+            429, "free_pool_exhausted",
+            "Today's free Aura is all used up. It's back at midnight, or Side Quest "
+            "keeps you going now.",
+            headers={"Retry-After": str(max(int((resets - now).total_seconds()), 1))},
+            plan=acct.plan, resets_at=resets.isoformat(), upgrade_available=True,
+        )
 
     def _day_start(self, now: datetime) -> datetime:
         offset = timedelta(minutes=self.settings.daily_cap_utc_offset_minutes)

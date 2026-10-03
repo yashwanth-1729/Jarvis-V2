@@ -164,6 +164,14 @@ X-Holo-Feature: lockin         (optional; the gateway checks the plan has it)
 | `POST /v1/admin/grant` | `{user_id, plan?, days?, topup_aura?, refund_aura?, note?}` | `X-Admin-Token` | (none) |
 | `GET /healthz` | (none) | (none) | (none) |
 
+### Free pool
+
+`FREE_POOL_DAILY_AURA` (default 500) is the most Aura all Spawn users together
+may spend in one IST day. The `usage.plan` column records the plan each spend
+happened on, and the check sums today's Spawn rows. Past the pool, a free
+user's call gets `429 free_pool_exhausted` with `resets_at`, `Retry-After` and
+`upgrade_available`. Paid plans are not affected, and `0` turns the pool off.
+
 ### Errors
 
 Every refusal the gateway itself makes has one shape. It matches OpenRouter's

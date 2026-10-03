@@ -9,7 +9,7 @@ them only with the user.
 
 | Topic | Decision |
 | --- | --- |
-| Name | Working title **HOLO** (the mascot), kept in one config value. The Design lab candidates are all taken by similar apps: Kairo, Nudgy, Holobud (trademarked hardware with an app) and Hollo (Hollo AI). The final name is still open. |
+| Name | Shown as **JARVIS Public** on the owner's phone (owner's choice, 2026-10-03). The code name stays HOLO, and so does the package id, `builds.yashwanth.holo`. The store name is still open: "JARVIS" is Marvel's. The Design lab candidates are all taken by similar apps: Kairo, Nudgy, Holobud (trademarked hardware with an app) and Hollo (Hollo AI). The final name is still open. |
 | Platform | Android first. Desktop later. |
 | Age | 18+ at launch (college students and working users). India's DPDP Act needs verifiable parental consent for under-18s, so that is deferred. |
 | Plans | Five plans with game names; credits are called **Aura**. |
@@ -83,6 +83,28 @@ A top-up costs ₹49 for 150 Aura. Anything done by hand, with no AI involved
   characters, a median of $0.000375 per call, about 15× Kokoro, which makes a
   Telugu minute ≈ ₹0.7. Sarvam's list prices (₹30 per hour of STT, ₹30 per
   10k characters of Bulbul v3) apply only if Sarvam is brought back.
+
+### Free plan wallet guard
+
+Free usage is capped in total, not just per user, so it can never cost more
+than the owner chooses, however many people sign up:
+
+- **Shared daily pool (enforced):** `FREE_POOL_DAILY_AURA`, default 500 Aura,
+  which is ₹50 a day and at most ₹1,500 a month. It's the most all Spawn users
+  together may spend per IST day.
+  - When it's spent, free AI calls get `free_pool_exhausted` ("back at
+    midnight, or Side Quest keeps you going") until midnight.
+  - Paid plans are never touched by it.
+  - Raise it as revenue grows, for example to 10% of last month's net.
+- **Per-user limits (enforced):** 50 Aura a month and at most 25 a day, so one
+  user can't drain the pool.
+- **Free value that costs nothing:**
+  - tasks, schedule, reminders, notifications and the Lock-in trial make no
+    AI calls;
+  - News Drops are summarised once per topic and shared.
+- **Recommended next:** phone-OTP sign-in plus Play Integrity, so one person
+  can't farm many free accounts. Aura for referrals is paid for by the
+  referral, not by the pool.
 
 ### Margin
 

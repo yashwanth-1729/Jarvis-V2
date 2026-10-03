@@ -130,6 +130,8 @@ usage = Table(
     Column("cost_inr", Float, nullable=False, default=0.0),
     #: What was actually taken from the balance.
     Column("milli_aura", BigInteger, nullable=False, default=0),
+    #: The plan the user was on when they spent it (the free pool sums Spawn rows).
+    Column("plan", String(32)),
     Column("reserve_milli", BigInteger, nullable=False, default=0),
     Column("generation_id", String(128)),
     Column("language", String(16)),
@@ -137,6 +139,7 @@ usage = Table(
     _ts("created_at", nullable=False),
 )
 Index("ix_usage_user_created", usage.c.user_id, usage.c.created_at)
+Index("ix_usage_plan_created", usage.c.plan, usage.c.created_at)
 
 reservations = Table(
     "reservations", metadata,

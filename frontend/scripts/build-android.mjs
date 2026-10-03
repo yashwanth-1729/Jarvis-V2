@@ -140,6 +140,9 @@ const env = {
   CARGO_PROFILE_DEV_STRIP: "true",
   // Read by the Next.js build that `tauri android build` runs first.
   NEXT_PUBLIC_JARVIS_EDITION: publicEdition ? "public" : "personal",
+  // Its own backend port, so JARVIS and JARVIS Public never share one
+  // (jarvis_server.PUBLIC_PORT).
+  ...(publicEdition ? { NEXT_PUBLIC_API_PORT: "8100" } : {}),
   PATH: [
     join(javaHome, "bin"),
     join(androidHome, "platform-tools"),
