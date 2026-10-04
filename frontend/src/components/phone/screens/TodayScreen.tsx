@@ -121,6 +121,28 @@ export function TodayScreen() {
 
             <section className="ph-section">
               <SectionHead
+                title="Timeline"
+                count={agenda.all.length}
+                action={
+                  <Tap className="ph-link" onClick={() => go("plan")} feel="select">
+                    Full plan <ArrowRight size={14} weight="bold" />
+                  </Tap>
+                }
+              />
+              {agenda.all.length ? (
+                <Timeline items={agenda.all} now={now.getTime()} onOpen={(kind) => openPlan(SECTION_FOR[kind])} />
+              ) : (
+                <Empty
+                  icon={<Icon3D name="plan" size={52} />}
+                  title="Wide open day"
+                  hint="Nothing scheduled. Protect the free time, or plan something."
+                  action={<Tap className="ph-btn" onClick={() => go("plan")}>Plan something</Tap>}
+                />
+              )}
+            </section>
+
+            <section className="ph-section">
+              <SectionHead
                 title="Up next"
                 count={open.length}
                 action={
@@ -147,27 +169,6 @@ export function TodayScreen() {
               )}
             </section>
 
-            <section className="ph-section">
-              <SectionHead
-                title="Timeline"
-                count={agenda.all.length}
-                action={
-                  <Tap className="ph-link" onClick={() => go("plan")} feel="select">
-                    Full plan <ArrowRight size={14} weight="bold" />
-                  </Tap>
-                }
-              />
-              {agenda.all.length ? (
-                <Timeline items={agenda.all} now={now.getTime()} onOpen={(kind) => openPlan(SECTION_FOR[kind])} />
-              ) : (
-                <Empty
-                  icon={<Icon3D name="plan" size={52} />}
-                  title="Wide open day"
-                  hint="Nothing scheduled. Protect the free time, or plan something."
-                  action={<Tap className="ph-btn" onClick={() => go("plan")}>Plan something</Tap>}
-                />
-              )}
-            </section>
           </>
         )}
       </div>
@@ -177,6 +178,7 @@ export function TodayScreen() {
 }
 
 function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext>; now: number; onOpen: (kind: Occurrence["event"]["kind"]) => void }) {
+  const serious = useSerious();
   const item = agenda.current ?? agenda.next;
   if (!item) {
     return (
@@ -191,11 +193,16 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
   const event = item.event;
   const progress = live ? Math.min(1, Math.max(0, (now - item.start) / (item.end - item.start))) : 0;
   const left = minutesUntil(live ? item.end : item.start, now);
-  return (
-    <Tap className="ph-tile ph-tile-wide ph-tile-now" data-tone={KIND_TONE[event.kind]} data-live={live} onClick={() => onOpen(event.kind)} squish={0.97}>
+  // A serious (Lock-in) block gets Start/Stop right here, on the first thing
+  // Today shows (2026-10-04, the owner: "start, stop on the starting page").
+  const occurrence = dayKey(new Date(item.start));
+  const ended = item.end <= now;
+  const lockin = event.uid && serious?.items.has(event.uid) ? seriousStateOf(serious.eventFor(event.uid, occurrence)?.status, ended) : undefined;
+  const tile = (
+    <Tap className="ph-tile ph-tile-wide ph-tile-now" data-tone={KIND_TONE[event.kind]} data-live={live} data-serious={lockin} onClick={() => onOpen(event.kind)} squish={0.97}>
       <span className="ph-now-top">
         {live ? <Sticker tone="red" tilt={-4} pulse>LIVE</Sticker> : <Sticker tone="lime" tilt={-4}>NEXT</Sticker>}
-        <span className="ph-tile-label">{KIND_LABEL[event.kind]}</span>
+        <span className="ph-tile-label">{lockin ? "Lock-in" : KIND_LABEL[event.kind]}</span>
       </span>
       <strong className="ph-now-title">{event.event_name}</strong>
       <span className="ph-now-meta">
@@ -210,6 +217,13 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
         <strong>{duration(left)}</strong>
       </span>
     </Tap>
+  );
+  if (!lockin || !event.uid) return tile;
+  return (
+    <div className="ph-now-wrap">
+      {tile}
+      <span className="ph-now-serious"><SeriousControl uid={event.uid} occurrence={occurrence} ended={ended} /></span>
+    </div>
   );
 }
 

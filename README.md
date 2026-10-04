@@ -544,6 +544,21 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-04 (fifth): Start/Stop on Today's first card; Lock-in actually unlocked in JARVIS Public
+
+- **Why:** the owner asked "where is the start button for locked-in tasks/scheduled blocks? I need start, stop on the starting page where it shows the schedule".
+- **Root cause in JARVIS Public:** Lock-in only unlocked from the gateway after sign-in. With no Supabase project yet nobody can sign in, so every control was a small lock.
+  - The onboarding's 3-day trial is now honoured on the device (`localLockinTrial` in `PublicContext`): it starts when onboarding finishes with must-dos picked, and lasts 3 days.
+  - A signed-in account's own features still win.
+  - When Lock-in really is locked, the control is still a **Start** with a lock icon, and it leads to the plans.
+- **Today:**
+  - The big "Right now / Next" card now carries **Start**, or the timer and **Stop**, when its block is a Lock-in. It turns black and red with the turning crimson ring.
+  - The **Timeline** (every block of the day, with Start on serious ones) moved above "Up next".
+- **Validation:**
+  - tsc and ESLint are clean.
+  - In the design preview (fixture data, with a block marked serious there), the Now card showed "LIVE · LOCK-IN" with Start. Tapping it ran the timer with Stop on the card, the Lock-in bar and the red theme.
+  - Not yet on the phone.
+
 ### 2026-10-04 (fourth): The planner thinks in real life, not by meter
 
 - **Why:** the owner said "don't blindly convert everything into schedule solely based on meter... if he said bath and gave it more importance, that doesn't mean two hours... skin care is best after waking and before sleep... understand reality of everything".

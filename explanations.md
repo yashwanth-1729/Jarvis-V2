@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-04 (late night) · Claude Code · Start/Stop on Today's Now card; local Lock-in trial
+
+- **`PublicContext.has("lockin")`** is also true during `localLockinTrial(profile)`:
+  3 days from `completedAt` when `wantsLockinTrial`. Without Supabase the
+  gateway trial can never start.
+- **`SeriousControl`:** locked state is a Start with a lock (`data-locked`).
+- **TodayScreen:**
+  - `NowTile` renders `SeriousControl` (wrapped in `.ph-now-wrap`) when its
+    block is serious, with `data-serious` styling.
+  - The Timeline section is now above "Up next".
+
 ### 2026-10-04 (night) · Claude Code · Planner reasons about real life
 
 - **`gateway/app/planner.py`:**

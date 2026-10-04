@@ -2766,3 +2766,49 @@
   .ph-focus .ph-focus-btn[data-kind="start"], .ph-btn-ember, .ph-cu-orb, .ph-cu-loading-line,
   .ph-ci-list li[data-state="running"] .ph-ci-mark { animation: none; }
 }
+
+/* --- Start/Stop on Today's Now tile (2026-10-04) ---------------------------
+   When the current or next block is serious, the big tile wears Lock-in's
+   black and red and carries the control at its bottom right. */
+.ph-now-wrap { position: relative; grid-column: span 2; display: grid; }
+.ph-now-wrap > .ph-tile-now { grid-column: auto; }
+.ph-tile-now[data-serious] {
+  position: relative;
+  isolation: isolate;
+  padding-bottom: 74px;
+  background:
+    radial-gradient(130% 150% at 100% 0%, rgba(255, 31, 61, 0.22), transparent 58%),
+    radial-gradient(90% 120% at 0% 100%, rgba(122, 0, 16, 0.32), transparent 60%),
+    linear-gradient(160deg, #130305, #050505);
+  color: #ffe8ea;
+  box-shadow: 0 18px 34px -18px rgba(255, 31, 61, 0.85);
+}
+.ph-tile-now[data-serious]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--ember-angle), #ff1f3d, #ff4d5e 5%, #4a0610 18%, #0b0204 36%, #4a0610 54%, #c8102e 74%, #ff1f3d);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: ph-ember-spin 5s linear infinite;
+  pointer-events: none;
+}
+.ph-tile-now[data-serious="running"] { animation: ph-ember-breathe 1.6s ease-in-out infinite; }
+.ph-tile-now[data-serious="running"]::before { animation-duration: 1.8s; }
+.ph-tile-now[data-serious="done"], .ph-tile-now[data-serious="moved"] { filter: saturate(0.6) brightness(0.85); }
+.ph-tile-now[data-serious] .ph-tile-label { color: #ff4d5e; letter-spacing: 0.14em; }
+.ph-tile-now[data-serious] .ph-now-bar { background: rgba(255, 255, 255, 0.08); }
+.ph-tile-now[data-serious] .ph-now-fill { background: #ff1f3d; box-shadow: 0 0 12px #ff1f3d; }
+.ph-now-serious { position: absolute; right: 14px; bottom: 14px; z-index: 2; }
+.ph-now-serious .ph-serious-ctl { flex-direction: row; align-items: center; gap: 10px; margin: 0; }
+.ph-now-serious .ph-serious-btn { height: 46px; padding: 0 20px; font-size: 15px; }
+.ph-now-serious .ph-serious-timer { font-size: 19px; }
+/* Locked (JARVIS Public without Lock-in): still a Start, calmer. */
+.ph-serious-btn[data-kind="start"][data-locked] { animation: none; opacity: 0.88; }
+@media (prefers-reduced-motion: reduce) {
+  .ph-tile-now[data-serious]::before, .ph-tile-now[data-serious="running"] { animation: none; }
+}

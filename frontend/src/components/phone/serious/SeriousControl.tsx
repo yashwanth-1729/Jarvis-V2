@@ -63,10 +63,11 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
   const state = seriousStateOf(event?.status, ended);
 
   if (pub && !pub.has("lockin")) {
+    // Still a Start, so the feature is visible; it leads to the plans.
     return (
       <span className="ph-serious-ctl">
-        <Tap className="ph-serious-btn" data-kind="locked" aria-label="Unlock Lock-in" onClick={() => push({ kind: "plans", highlight: "side_quest" })} feel="select">
-          <LockSimple size={15} weight="fill" />
+        <Tap className="ph-serious-btn" data-kind="start" data-locked="true" aria-label={`Start ${item.title}: unlock Lock-in`} onClick={() => push({ kind: "plans", highlight: "side_quest" })} feel="select" squish={0.9}>
+          <LockSimple size={15} weight="fill" /> Start
         </Tap>
       </span>
     );

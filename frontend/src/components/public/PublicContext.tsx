@@ -176,7 +176,8 @@ export function PublicProvider({ children }: { children: React.ReactNode }) {
       me,
       profile,
       offline,
-      has: (feature) => (feature === "chat" ? true : Boolean(me?.features[feature])),
+      has: (feature) =>
+        feature === "chat" ? true : Boolean(me?.features[feature]) || (feature === "lockin" && localLockinTrial(profile)),
       refreshMe,
       startTrial,
       completeOnboarding: (next) => setProfile(next),
@@ -233,6 +234,25 @@ export function PublicProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** The public state, or null in the personal edition. */
+/** The onboarding's 3-day Lock-in trial, kept on the device. */
+export const LOCAL_TRIAL_DAYS = 3;
+
+/**
+ * The 3-day Lock-in trial onboarding promises, honoured on the device too.
+ *
+ * The gateway's trial (`/v1/trial/lockin`) only starts after sign-in, and
+ * until the Supabase project exists nobody can sign in, so every Lock-in
+ * control stayed locked (2026-10-04, the owner: "where is the start
+ * button?"). Lock-in runs entirely on the device and costs no AI, so the
+ * trial starts when onboarding finishes with must-dos picked, for 3 days. A
+ * signed-in account's own features still win.
+ */
+export function localLockinTrial(profile: OnboardingProfile | null, now = Date.now()): boolean {
+  if (!profile?.wantsLockinTrial || !profile.completedAt) return false;
+  const started = Date.parse(profile.completedAt);
+  return Number.isFinite(started) && now >= started && now - started < LOCAL_TRIAL_DAYS * 24 * 3_600_000;
+}
+
 export function usePublicOptional(): PublicState | null {
   return React.useContext(PublicContext);
 }
