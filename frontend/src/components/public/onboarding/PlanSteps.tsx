@@ -6,8 +6,9 @@
  * screen):
  * 1. **When's college?** Only for school, college or work.
  * 2. **What do you want to do every week?** One input, a plain list.
- * 3. **How much of your week?** A meter per item, with what it turns into
- *    ("3 times a week").
+ * 3. **How much does each one matter?** A meter per item (priority, not a
+ *    formula: the planner keeps a bath a bath and puts skin care after waking
+ *    and before sleep).
  * 4. **Free time, or strict?** Then "Build my timetable".
  *
  * Then the review draws the plan: a donut of how the week splits, and one
@@ -321,8 +322,8 @@ export function WeightStep({ week, setWeek, next }: { week: WeekState; setWeek: 
   return (
     <StepFrame
       eyebrow={EYEBROW}
-      title="How much of your week?"
-      sub="Drag each one. MAX means as much as possible."
+      title="How much does each one matter?"
+      sub="Drag it. JARVIS works out how often and how long, the real-life way."
       footer={<Cta disabled={items.length === 0} onClick={next}>Next</Cta>}
     >
       <ul className="ob-weights">

@@ -92,18 +92,20 @@ export function clampPoints(value: number): number {
 }
 
 /**
- * What a meter value turns into, in words, so the meter means something.
- * This is the planner's own rule (gateway/app/planner.py SYSTEM): 1-2 once,
- * 3-4 twice, 5-6 three times, 7-8 four or five, 9-10 five or six, MAX daily.
+ * What a meter value says, in words: how much it matters, never a fixed
+ * frequency. The planner works out how often and how long from what each
+ * thing really is (a bath stays a bath, skin care goes after waking and
+ * before sleep) and uses points as priority (the owner, 2026-10-04: "don't
+ * blindly convert everything into schedule solely based on meter").
  */
 export function pointsMeaning(points: number): string {
   const value = clampPoints(points);
-  if (value >= POINTS_MAX) return "Every day, best slots";
-  if (value >= 9) return "5–6 times a week";
-  if (value >= 7) return "4–5 times a week";
-  if (value >= 5) return "3 times a week";
-  if (value >= 3) return "Twice a week";
-  return "Once a week";
+  if (value >= POINTS_MAX) return "Non-negotiable";
+  if (value >= 9) return "Top priority";
+  if (value >= 7) return "Big priority";
+  if (value >= 5) return "Matters";
+  if (value >= 3) return "Matters a bit";
+  return "Nice to have";
 }
 
 /** "DSA / coding" → "DSA": the short form used in examples. */

@@ -128,6 +128,21 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-04 (night) · Claude Code · Planner reasons about real life
+
+- **`gateway/app/planner.py`:**
+  - new SYSTEM prompt: routines keep their natural shape, effort scales with
+    points;
+  - a required `understanding` array first in the schema;
+  - `PLAN_EFFORT = "medium"`, `PLAN_MAX_TOKENS = 12_000`;
+  - minimum block length 5 min;
+  - the understanding is logged.
+- **Deployed** to the VPS; the live check is in the README.
+- **Frontend:** `pointsMeaning` gives priority words; the WeightStep title is
+  "How much does each one matter?".
+- **Next:** a public APK rebuild with the labels, installed when the phone is
+  connected.
+
 ### 2026-10-04 (evening) · Claude Code · Week planner: four calm screens, donut and day rings
 
 - **Steps:** `state.ts` STEPS gained `hours`, `weight` and `freetime`, around

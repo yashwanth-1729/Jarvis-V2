@@ -50,30 +50,56 @@ router = APIRouter()
 MODEL = "openai/gpt-6-luna"
 #: The points meter: 1-10, then MAX.
 MAX_POINTS = 11
+#: Reasoning effort for planning: realism over speed (measured live, see docs).
+PLAN_EFFORT = "medium"
+PLAN_MAX_TOKENS = 12_000
 #: The free-time blocks a "leave me free time" plan includes.
 FREE_NAME = "Free time"
 FREQUENCIES = {"daily": 7, "6x": 6, "5x": 5, "4x": 4, "3x": 3, "2x": 2, "1x": 1}
 PHASES = (("morning", 12 * 60), ("afternoon", 17 * 60), ("evening", 21 * 60), ("night", 24 * 60))
 
-SYSTEM = """You build ONE weekly timetable for a young person in India. Answer with JSON only, matching the schema.
+# 2026-10-04, the owner: "don't blindly convert everything into schedule
+# solely based on meter. Let the model think in reality... if they keep skin
+# care, then don't add it randomly; skin care is best after waking and before
+# sleep... understand reality of everything." So the model first writes down
+# what each activity really is (`understanding`, generated before the blocks),
+# and points only scale effort activities; routines keep their natural shape.
+SYSTEM = """You build ONE realistic weekly timetable for a young person in India. Answer with JSON only, matching the schema.
 
-Rules:
-- Use only the activities given, by their exact names.
-- Each activity has points (1-10, or "MAX") saying how much of the week it should get compared with the others. Turn points into times per week and session length: 1-2 -> once, 3-4 -> twice, 5-6 -> 3 times, 7-8 -> 4-5 times, 9-10 -> 5-6 times, MAX -> daily or nearly, with the best slots. More points also means longer sessions within the sensible range. If an activity has a frequency, it wins (daily = 7).
-- Pick sensible session lengths (gym ~60 min, deep study 60-120, coding 60-90, reading 30, meditation 15-20, a language 30, walk 30, practice 30-60).
-- Everything between wake and sleep, never during the busy hours on busy days, no overlaps, at least 15 minutes between blocks, at most 5 activity blocks a day.
-- freeTime true: also add blocks named exactly "Free time", 1-2 a day of 30-90 minutes (mostly evenings, more on weekends), so the week has breathing room. freeTime false: a strict timetable with no free-time blocks; the activities fill the week tightly but realistically.
-- Leave ~30 minutes free after waking and before sleep.
-- Keep the same activity at a consistent time across days. Put demanding focus work when energy is high (early birds: morning; night owls: evening). Spread repeats across the week and keep one lighter day.
-- Days are 0=Monday ... 6=Sunday; times are 24h "HH:MM", start before end, inside one day.
-- If a previous plan and feedback are given, change what the feedback asks ("less" = fewer or shorter sessions, "more" = more or longer) and follow the comment; keep everything else stable.
+First understand every activity as it is in real life, then schedule it:
+- Work out what it really is, how long it naturally takes, how often people really do it, and when in the day it belongs (its anchor). Write that in "understanding" before you place any block.
+- Routines and self-care keep their natural length, frequency and anchor whatever the points say. Bath or shower: 15-25 min once a day, in the morning or straight after a workout. Skin care: 5-10 min right after waking and again right before sleep. Brushing, prayer or puja, medicine, meals, a commute: where they naturally happen. For a routine, points only say how much it matters (protect its slot); never stretch a 15-minute habit into hours, and never squash it into an unrealistic minute.
+- Effort activities (study, DSA, coding, gym, sport, music or art practice, reading, writing, a side project, a language) scale with points: more points means more sessions and somewhat longer ones, within what a real person can sustain. Rough guide: 1-2 points about once a week, 3-4 twice, 5-6 three times, 7-8 four or five, 9-10 five or six, MAX daily or nearly. A body needs rest days: gym or sport at most 5-6 days a week.
+- Realistic lengths: gym 45-90 min, deep study 60-120, coding 60-90, reading 20-45, meditation 10-20, a language 20-30, a walk 20-40, practice 30-60, a mock test 120-180.
+- Put demanding focus work where energy is high (early birds: morning; night owls: evening), never right before sleep. A shower goes right after gym or sport when both happen that day. Keep the same activity at a consistent time across days. Spread repeats; keep one lighter day.
+- If an activity has a frequency, it wins (daily = 7).
+- Hard limits: everything between wake and sleep, never during the busy hours on busy days, no overlaps, about 10-15 minutes between effort blocks (short routines may sit right next to what they are anchored to), at most 5 effort blocks a day (routines don't count).
+- freeTime true: also add blocks named exactly "Free time", 1-2 a day of 30-90 minutes (mostly evenings, more on weekends). freeTime false: no free-time blocks; a tight but realistic plan.
+- Use only the activities given, by their exact names. Days are 0=Monday ... 6=Sunday; times are 24h "HH:MM", start before end, inside one day.
+- If a previous plan and feedback are given, change what the feedback asks ("less" = fewer or shorter, "more" = more or longer, but still realistic for that activity) and follow the comment; keep everything else stable.
 - summary: one short, friendly line about the week (under 120 characters)."""
 
 SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["summary", "blocks"],
+    "required": ["understanding", "summary", "blocks"],
     "properties": {
+        # First, so the model reasons about each activity before placing blocks.
+        "understanding": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["activity", "kind", "minutes", "perWeek", "when"],
+                "properties": {
+                    "activity": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["routine", "effort"]},
+                    "minutes": {"type": "integer"},
+                    "perWeek": {"type": "integer"},
+                    "when": {"type": "string"},
+                },
+            },
+        },
         "summary": {"type": "string"},
         "blocks": {
             "type": "array",
@@ -212,7 +238,7 @@ def _repair(plan: dict[str, Any], request: dict[str, Any]) -> list[dict[str, Any
         start, end = round(start / 5) * 5, round(end / 5) * 5
         start, end = max(start, wake), min(end, sleep)
         free = bool(activity.get("free"))
-        if end - start < (20 if free else 10) or end - start > (120 if free else 240):
+        if end - start < (20 if free else 5) or end - start > (120 if free else 240):
             continue
         if day in busy_days and busy_start is not None and start < busy_end and end > busy_start:
             continue
@@ -306,8 +332,9 @@ async def plan_week(request: Request) -> dict[str, Any]:
             {"role": "user", "content": json.dumps(_prompt_view(clean), ensure_ascii=False)},
         ],
         "response_format": {"type": "json_schema", "json_schema": {"name": "week_plan", "strict": True, "schema": SCHEMA}},
-        "reasoning": {"effort": "low"},
-        "max_tokens": gw.settings.max_output_tokens,
+        "reasoning": {"effort": PLAN_EFFORT},
+        # Reasoning tokens count as output: room for the thinking and a full week.
+        "max_tokens": max(gw.settings.max_output_tokens, PLAN_MAX_TOKENS),
         "usage": {"include": True},
     }
     started = time.perf_counter()
@@ -352,6 +379,12 @@ async def plan_week(request: Request) -> dict[str, Any]:
         plan = None
     if not isinstance(plan, dict):
         raise GatewayError(502, "plan_failed", "The planner returned something unreadable. Try again.")
+    understood = plan.get("understanding")
+    if isinstance(understood, list):
+        logger.info("plan understanding: %s", [
+            (str(u.get("activity"))[:24], u.get("kind"), u.get("minutes"), u.get("perWeek"))
+            for u in understood[:12] if isinstance(u, dict)
+        ])
     blocks = _repair(plan, clean)
     if not any(not b.get("free") for b in blocks):
         raise GatewayError(502, "plan_failed", "Couldn't fit that week. Try fewer activities or wider hours.")

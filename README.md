@@ -544,6 +544,25 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-04 (fourth): The planner thinks in real life, not by meter
+
+- **Why:** the owner said "don't blindly convert everything into schedule solely based on meter... if he said bath and gave it more importance, that doesn't mean two hours... skin care is best after waking and before sleep... understand reality of everything".
+- **Gateway** (`gateway/app/planner.py`):
+  - **New prompt:** first understand each activity in real life: its natural length, how often people really do it, and when it belongs.
+    - Routines and self-care keep that shape whatever the points: a bath is 15–25 min once a day, morning or right after a workout; skin care is 5–10 min after waking and before sleep.
+    - Only effort activities (study, gym, practice…) scale with points, within what a person can sustain, with rest days.
+  - **Schema:** the strict schema now makes the model write an `understanding` entry per activity (routine or effort, minutes, sessions a week, when) before any block.
+  - **Reasoning and limits:** effort goes from low to **medium**, and the output cap is 12k tokens. Routines as short as 5 min are kept.
+- **Meter labels** now say how much a thing matters ("Nice to have" … "Non-negotiable"), not "3 times a week". The screen asks "How much does each one matter?".
+- **Validation:**
+  - **Tests:** `planner_test` 44, with new checks: understanding first, medium effort, a 5-minute routine kept, a 2-minute sliver dropped.
+  - **Deployed** to the VPS. One live plan in 17.6 s (Bath MAX, Skin care 1 point, DSA 8, Gym 6, Reading 2):
+    - skin care 10 min at 6:30 and 10:50 PM every day;
+    - bath 20 min daily, right after gym on gym days;
+    - DSA 4×75, Gym 3×60, Reading 1×30;
+    - nothing in college hours.
+  - **Frontend:** tsc and ESLint are clean.
+
 ### 2026-10-04 (third): The week planner as four calm screens, drawn as rings
 
 - **Why:** the owner tested it: "lock in is perfect", but people still couldn't tell what to type, the one busy screen felt like "lots of disturbance", the review's per-day bars should be "a pie chart or any good visual", and college shouldn't show at all.

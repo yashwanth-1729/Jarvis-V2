@@ -98,7 +98,7 @@ function opener(step: StepId, answers: Answers, week: WeekState): { mood: Mood; 
       if (week.saved) return { mood: "happy", line: "Already in your Plan. Nice." };
       return { mood: "happy", line: "Just the list. I'll do the timetable." };
     case "weight":
-      return { mood: "excited", line: "Drag it. I'll turn it into days and times." };
+      return { mood: "excited", line: "How much it matters. I'll figure out the how-often." };
     case "freetime":
       return { mood: "calm", line: "Last one. Then I build it." };
     case "weekplan":

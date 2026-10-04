@@ -198,6 +198,41 @@ async def test_points_and_free_time() -> None:
               acts["Gym"]["points"] == 8 and acts["DSA"]["points"] == 5, acts)
 
 
+ROUTINE_PLAN = {
+    "understanding": [
+        {"activity": "Skin care", "kind": "routine", "minutes": 8, "perWeek": 14, "when": "after waking, before sleep"},
+        {"activity": "Bath", "kind": "routine", "minutes": 20, "perWeek": 7, "when": "morning"},
+    ],
+    "summary": "Routines anchored, effort where your energy is.",
+    "blocks": [
+        {"activity": "Skin care", "day": 0, "start": "06:30", "end": "06:35"},   # 5 min routine: kept
+        {"activity": "Bath", "day": 0, "start": "06:40", "end": "07:00"},
+        {"activity": "Skin care", "day": 0, "start": "22:50", "end": "22:52"},   # 2 min rounds to nothing: dropped
+    ],
+}
+
+
+async def test_reality_rules() -> None:
+    planner._anon_counts.clear()
+    async with Harness() as h:
+        h.upstream.handler = lambda r: answer(ROUTINE_PLAN)
+        body = {"wake": "06:30", "sleep": "23:00", "freeTime": False,
+                "activities": [{"name": "Skin care", "points": 1}, {"name": "Bath", "points": 11}]}
+        r = await h.client.post("/v1/plan/week", json=body)
+        check("routine plan answers 200", r.status_code == 200, r.text)
+        sent = h.upstream.json()
+        schema = sent["response_format"]["json_schema"]["schema"]
+        check("the model writes its understanding first, and must",
+              list(schema["properties"])[0] == "understanding" and "understanding" in schema["required"], list(schema["properties"]))
+        check("it thinks at medium effort with room to answer",
+              sent["reasoning"]["effort"] == "medium" and sent["max_tokens"] >= 12_000, (sent["reasoning"], sent["max_tokens"]))
+        check("the prompt tells it routines keep their real shape",
+              "Skin care: 5-10 min right after waking and again right before sleep" in sent["messages"][0]["content"])
+        key = {(b["activity"], b["start"], b["end"]) for b in r.json()["blocks"]}
+        check("a real 5-minute routine is kept", ("Skin care", "06:30", "06:35") in key, key)
+        check("a 2-minute sliver is dropped", not any(start == "22:50" for _, start, _ in key), key)
+
+
 if __name__ == "__main__":
     run([test_anonymous_plan_is_checked, test_feedback_reaches_the_model, test_limits_and_errors, test_signed_in_plan_costs_aura,
-         test_points_and_free_time])
+         test_points_and_free_time, test_reality_rules])
