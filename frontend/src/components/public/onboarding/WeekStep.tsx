@@ -37,6 +37,7 @@ const ADDED_LINES: Record<TemplateId, (block: BlockSpec) => string> = {
   sleep: () => "Sleep, scheduled. Revolutionary.",
   custom: (block) => `${block.name}, added. Your week, your rules.`,
   planned: (block) => `${block.name}, added.`,
+  free: () => "Free time, saved.",
 };
 
 const PRESETS: Array<{ label: string; days: number[] }> = [
@@ -100,7 +101,7 @@ export function WeekStep({ answers, blocks, onAdded, react, next, onAuto }: {
       app.handleRecordChanged();
       haptic("success");
       emitFx("success", preview.current);
-      react(blocks.length >= 2 ? "excited" : "happy", blocks.length >= 2 ? "Okay, this week is looking stacked. 🔥" : ADDED_LINES[spec.template](block));
+      react(blocks.length >= 2 ? "excited" : "happy", blocks.length >= 2 ? "Okay, this week is looking stacked." : ADDED_LINES[spec.template](block));
     }
     if (result.error) {
       const done = result.records.length;

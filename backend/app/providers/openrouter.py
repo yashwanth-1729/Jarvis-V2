@@ -433,6 +433,52 @@ def _raise_for_status(response: httpx.Response, body: bytes) -> None:
     raise ProviderError(f"OpenRouter rejected the request ({response.status_code}): {message}")
 
 
+async def complete_json(
+    messages: Sequence[dict[str, Any]],
+    *,
+    name: str,
+    schema: dict[str, Any],
+    model: str,
+    max_tokens: int = 1500,
+    reasoning_effort: str | None = "low",
+    read_timeout: float = 45.0,
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """One non-streamed completion held to a strict JSON schema
+    (``response_format``), parsed into a dict, plus its usage.
+
+    For planning calls (services/replan.py) that need data, not prose. Goes
+    wherever chat goes: OpenRouter with the key, or the public gateway with
+    the user's session. Raises a ``ProviderError`` when the call fails or the
+    answer is not a JSON object.
+    """
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": list(messages),
+        "max_tokens": max_tokens,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": name, "strict": True, "schema": schema},
+        },
+    }
+    if reasoning_effort and model.startswith(("openai/gpt-5", "openai/gpt-6")):
+        payload["reasoning"] = {"effort": reasoning_effort}
+    try:
+        response = await _post_with_retry("/chat/completions", payload, read_timeout=read_timeout)
+    except httpx.HTTPError as exc:
+        raise ProviderUnavailable(f"OpenRouter request failed ({_describe(exc)}).") from exc
+    if response.status_code >= 400:
+        _raise_for_status(response, response.content)
+    try:
+        body = response.json()
+        content = ((body.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        parsed = json.loads(content)
+    except (ValueError, AttributeError, IndexError) as exc:
+        raise ProviderError("The model's answer wasn't readable JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise ProviderError("The model's answer wasn't a JSON object.")
+    return parsed, _extract_usage(body.get("usage"))
+
+
 class WebSearchRouter:
     """Decides whether a turn needs OpenRouter's built-in web-search plugin.
 

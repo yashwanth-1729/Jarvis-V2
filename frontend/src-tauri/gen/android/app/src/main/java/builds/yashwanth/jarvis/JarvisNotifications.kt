@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.text.format.DateFormat
 import android.util.Log
 import android.webkit.JavascriptInterface
@@ -17,6 +18,7 @@ import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Date
+import java.util.Locale
 
 private const val PREFS = "jarvis_native_notifications"
 private const val PLAN = "alarm_plan"
@@ -29,10 +31,19 @@ private const val TAG = "JarvisNotify"
 /**
  * Plan entries under this prefix are one-off copies booked by a notification's
  * Snooze button. The WebView's syncs only replace their own prefixes
- * (schedule:, task:, reminder:), so a pending snooze survives them.
+ * (schedule:, task:, reminder:, lockin:, checkin:), so a pending snooze
+ * survives them.
  */
 internal const val SNOOZE_PREFIX = "snooze:"
 internal const val SNOOZE_MINUTES = 10
+
+/**
+ * Serious mode (nativeNotifications.ts): `lockin:<uid>` rings when a serious
+ * block starts, instead of its `schedule:` alarm; `checkin:<YYYY-MM-DD>` is
+ * the evening check-in on a day with serious blocks.
+ */
+internal const val LOCKIN_PREFIX = "lockin:"
+internal const val CHECKIN_PREFIX = "checkin:"
 
 data class JarvisAlarm(
   val id: String,
@@ -48,6 +59,11 @@ data class JarvisAlarm(
   val kind: String = "",
   /** When a snoozed or late-restored copy was originally due; 0 otherwise. */
   val originalAt: Long = 0L,
+  /**
+   * A Lock-in's mode from the WebView: "session" puts Start on the card,
+   * "quick" puts Done. Empty for every other alarm; a snoozed copy keeps it.
+   */
+  val mode: String = "",
 ) {
   fun json() = JSONObject().apply {
     put("id", id)
@@ -57,6 +73,7 @@ data class JarvisAlarm(
     put("weekly", weekly)
     if (kind.isNotEmpty()) put("kind", kind)
     if (originalAt > 0L) put("originalAt", originalAt)
+    if (mode.isNotEmpty()) put("mode", mode)
   }
 
   companion object {
@@ -73,6 +90,7 @@ data class JarvisAlarm(
         weekly = json.optBoolean("weekly", false),
         kind = if (json.isNull("kind")) "" else json.optString("kind").trim(),
         originalAt = json.optLong("originalAt", 0L),
+        mode = if (json.isNull("mode")) "" else json.optString("mode").trim(),
       )
     }
   }
@@ -272,6 +290,20 @@ class JarvisNotificationBridge(
   fun syncReminders(json: String): Int = JarvisAlarmScheduler.replace(context, "reminder:", json)
 
   @JavascriptInterface
+  fun syncLockins(json: String): Int = JarvisAlarmScheduler.replace(context, LOCKIN_PREFIX, json)
+
+  @JavascriptInterface
+  fun syncCheckins(json: String): Int = JarvisAlarmScheduler.replace(context, CHECKIN_PREFIX, json)
+
+  /**
+   * The Start / Done / Check in tap waiting for the WebView, as JSON
+   * `{"verb","uid","occurrence"}`, or "" when there is none. Reading it
+   * clears it (lib/notificationActions.ts).
+   */
+  @JavascriptInterface
+  fun takeAction(): String = JarvisPendingAction.take()
+
+  @JavascriptInterface
   fun firedReminders(): String {
     val result = JSONArray()
     JarvisAlarmStore.firedReminders(context).forEach { result.put(it) }
@@ -288,6 +320,53 @@ class JarvisNotificationBridge(
     }
     JarvisAlarmStore.acknowledgeFiredReminders(context, ids)
     return ids.size
+  }
+}
+
+/**
+ * The Start, Done or Check in tap that opened MainActivity, held until the
+ * WebView collects it with [JarvisNotificationBridge.takeAction]. One slot: a
+ * newer tap replaces one nobody collected, and a tap left uncollected for
+ * [TTL_MS] is dropped rather than replayed much later.
+ */
+object JarvisPendingAction {
+  private const val TTL_MS = 10L * 60L * 1000L
+  private val VERBS = setOf(VERB_START, VERB_DONE, VERB_CHECKIN)
+  private var pending: String? = null
+  private var capturedAt = 0L
+
+  /**
+   * Keep the action [intent] carries, if any, and clear its notification: an
+   * action button, unlike a tap on the card, leaves it up. The verb is removed
+   * from [intent], so reading the same intent again is not a second tap.
+   */
+  fun capture(context: Context, intent: Intent?): Boolean {
+    if (intent == null) return false
+    val verb = intent.getStringExtra(EXTRA_ACTION)?.trim()?.lowercase(Locale.ROOT) ?: return false
+    intent.removeExtra(EXTRA_ACTION)
+    if (verb !in VERBS) return false
+    if (intent.hasExtra(EXTRA_NOTIFICATION_ID)) {
+      context.getSystemService(NotificationManager::class.java)
+        ?.cancel(intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0))
+    }
+    val action = JSONObject().apply {
+      put("verb", verb)
+      put("uid", intent.getStringExtra(EXTRA_UID)?.trim().orEmpty())
+      put("occurrence", intent.getStringExtra(EXTRA_OCCURRENCE)?.trim().orEmpty())
+    }.toString()
+    synchronized(this) {
+      pending = action
+      capturedAt = SystemClock.elapsedRealtime()
+    }
+    Log.i(TAG, "notification action waiting: $verb")
+    return true
+  }
+
+  /** The waiting action as JSON, cleared once read; "" when there is none or it went stale. */
+  fun take(): String = synchronized(this) {
+    val action = pending
+    pending = null
+    if (action == null || SystemClock.elapsedRealtime() - capturedAt > TTL_MS) "" else action
   }
 }
 
@@ -310,9 +389,10 @@ class JarvisAlarmReceiver : BroadcastReceiver() {
 }
 
 /**
- * The Got it and Snooze buttons on a JARVIS notification. Both clear it; Snooze
- * also books the same alarm again [SNOOZE_MINUTES] from now. Like
- * [JarvisAlarmReceiver], it needs neither the WebView nor Python.
+ * The Got it (a check-in's Later) and Snooze buttons on a JARVIS notification.
+ * Both clear it; Snooze also books the same alarm again [SNOOZE_MINUTES] from
+ * now. Like [JarvisAlarmReceiver], it needs neither the WebView nor Python.
+ * Start, Done and Check in open MainActivity instead ([JarvisPendingAction]).
  */
 class JarvisNotificationActionReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {

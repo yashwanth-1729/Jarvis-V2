@@ -15,11 +15,16 @@ DEFAULT_POLICY: dict[str, Any] = {
     "routine": False,
     "blocks": False,
     "reminders": False,
+    # Serious mode: a Lock-in nudge when a serious block starts, and the
+    # evening check-in on days with one (frontend nativeNotifications.ts).
+    "serious": True,
     "include": [],
     "exclude": [],
 }
 
-_BOOL_KEYS = ("enabled", "deadline_tasks", "college", "routine", "blocks", "reminders")
+_BOOL_KEYS = (
+    "enabled", "deadline_tasks", "college", "routine", "blocks", "reminders", "serious",
+)
 
 
 def normalize(value: Any) -> dict[str, Any]:
@@ -84,6 +89,8 @@ def describe(policy: dict[str, Any]) -> str:
         active.append("Blocks")
     if policy["reminders"]:
         active.append("all reminders")
+    if policy.get("serious"):
+        active.append("Lock-in nudges and check-ins")
     if policy["include"]:
         active.append(f"{len(policy['include'])} specifically enabled item(s)")
     summary = ", ".join(active) if active else "no categories"

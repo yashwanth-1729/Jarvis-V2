@@ -146,13 +146,21 @@ reads "Building your HOLO… 40%".
 9. Language: English, Telugu or Hinglish. Telugu shows a lock for Main
    Character.
 10. Build your week (owner's change, 2026-10-04: one AI-built timetable, not
-    block-by-block entry).
-    - They set their fixed hours, list what they want in their week, rate
-      each 1–5 flames and, optionally, say how often.
-    - HOLO (GPT-6 Luna through `/v1/plan/week`) builds one week around the
-      fixed hours, grouped morning, afternoon, evening and night.
-    - They can mark activities less or more, or leave a comment, and tweak up
-      to 5 times. Then "Lock it in" saves it.
+    block-by-block entry; simplified the same day after "very hard to add or
+    understand").
+    - **Ask:**
+      - one compact fixed-hours line;
+      - one input for what they want or need to do;
+      - a small note that JARVIS turns it into the timetable.
+    - **A points meter for each item:** 1–10, then MAX. This replaced the
+      flames and the daily/5×/3× chips.
+    - **A required question:** free blocks, or a strict timetable.
+    - **Plan:** HOLO (GPT-6 Luna through `/v1/plan/week`) builds one week
+      around the fixed hours, grouped morning, afternoon, evening and night,
+      plus "Free time" blocks if they asked for them.
+    - **Tweak:** they can mark activities less or more, or leave a comment,
+      and tweak up to 5 times. Then "Lock it in" saves it. Free time is saved
+      as ROUTINE "Free time" entries and is never offered for Lock-in.
     - "I'll set it up myself" keeps the template builder. Snapping a timetable
       photo is still to come.
 11. "Which of these can you NOT skip?" This previews Lock-in and starts the
@@ -257,6 +265,26 @@ to measure: the timetable photo and an autonomous job.
   - the onboarding's two week screens (`PlanSteps.tsx`, `planWeek.ts`).
 
   The APK is built but not yet run on the device.
+
+  **Reworked later the same day:** a points meter (`PointsMeter.tsx`), the
+  free-blocks question, and `points`/`freeTime` on the gateway (38 checks).
+- **The product answer (2026-10-04).** The owner's brother asked what the app
+  is for and why anyone would pay. The direction agreed:
+  - **What it is for:** people who keep making timetables and keep breaking
+    them. JARVIS builds the week, bends it when they slip, reaches out at the
+    right moment, and shows the honest hours.
+  - **Built so far:**
+    - catch-up after misses (`/api/focus/catchup`, Today's slipped card);
+    - Lock-in nudges with one-tap Start;
+    - the evening check-in;
+    - Lock-in restyled in black and red, with the stamp and pulse.
+  - **Proposed next:**
+    - one honest weekly number on Today;
+    - Focus Guard;
+    - squads;
+    - Weekly Wrapped;
+    - one paid plan to start, rather than five;
+    - a 15–20 person pilot that asks for real money.
 - **Play requirements:**
   - "Report this reply" on every JARVIS reply (`POST /v1/report`, a new
     `reports` table).

@@ -29,8 +29,9 @@ import { Tap } from "../ui/Tap";
 import { Icon3D } from "../ui/Icon3D";
 import { Ticker } from "../ui/Ticker";
 import { TaskRow } from "./TaskRow";
-import { SeriousControl } from "../serious/SeriousControl";
+import { SeriousControl, seriousStateOf } from "../serious/SeriousControl";
 import { dayKey, useSerious } from "../serious/SeriousContext";
+import { SlippedCard } from "../serious/SlippedCard";
 import { Num } from "../ui/Num";
 
 const SECTION_FOR: Record<Occurrence["event"]["kind"], PlanSection> = { COLLEGE: "college", ROUTINE: "routine", SESSION: "session" };
@@ -96,6 +97,7 @@ export function TodayScreen() {
           app.loading ? <Skeleton rows={4} /> : <NoData />
         ) : (
           <>
+            <SlippedCard />
             <div className="ph-bento">
               <NowTile agenda={agenda} now={now.getTime()} onOpen={(kind) => openPlan(SECTION_FOR[kind])} />
               <Tap className="ph-tile ph-tile-count" data-tone="lime" onClick={() => go("tasks")} squish={0.95}>
@@ -281,8 +283,7 @@ function Timeline({ items, now, onOpen }: { items: Occurrence[]; now: number; on
   const serious = useSerious();
   const seriousState = (uid: string, occurrence: string, ended: boolean) => {
     if (!serious?.items.has(uid)) return undefined;
-    const status = serious.eventFor(uid, occurrence)?.status;
-    return status === "done" ? "done" : status === "running" ? "running" : ended ? "missed" : "pending";
+    return seriousStateOf(serious.eventFor(uid, occurrence)?.status, ended);
   };
   return (
     <ol className="ph-timeline">

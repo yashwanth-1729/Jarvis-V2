@@ -28,19 +28,26 @@ export function StepFrame({ eyebrow, title, sub, children, footer }: {
   );
 }
 
-/** The big go-on button. Springs into place the moment it can be pressed. */
-export function Cta({ children, disabled = false, busy = false, onClick, arrow = true, feel = "heavy" }: {
+/**
+ * The big go-on button. Springs into place the moment it can be pressed.
+ * `variant="lock"` is the black-and-red Lock-in button; `icon` leads the
+ * label and replaces the arrow.
+ */
+export function Cta({ children, disabled = false, busy = false, onClick, arrow = true, feel = "heavy", variant, icon }: {
   children: React.ReactNode;
   disabled?: boolean;
   busy?: boolean;
   onClick: () => void;
   arrow?: boolean;
   feel?: HapticKind | false;
+  variant?: "lock";
+  icon?: React.ReactNode;
 }) {
   return (
     <Tap
       key={disabled ? "off" : "on"}
       className="ob-cta"
+      data-variant={variant}
       data-ready={!disabled || undefined}
       data-busy={busy || undefined}
       disabled={disabled || busy}
@@ -49,8 +56,9 @@ export function Cta({ children, disabled = false, busy = false, onClick, arrow =
       squish={0.94}
       onClick={onClick}
     >
+      {icon && <span className="ob-cta-icon" aria-hidden="true">{icon}</span>}
       <span>{children}</span>
-      {arrow && !busy && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
+      {arrow && !icon && !busy && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
     </Tap>
   );
 }
@@ -96,7 +104,8 @@ export function Chip({ on, tone, emoji, label, onClick, index = 0, disabled = fa
 export function OptionCard({ on, tone, emoji, title, line, badge, onClick, index = 0, dim = false }: {
   on: boolean;
   tone: Tone;
-  emoji: string;
+  /** An emoji or an icon. */
+  emoji: React.ReactNode;
   title: React.ReactNode;
   line?: React.ReactNode;
   badge?: React.ReactNode;

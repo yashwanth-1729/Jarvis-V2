@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { drainAgentStore, seedAgentStore, sendProviderKey } from "@/lib/agentBridge";
 import { refreshConnectors, saveRotatedTokens } from "@/lib/connectors";
+import { FOCUS_CHANGED } from "@/lib/focus";
 import { localDashboard } from "@/lib/localDashboard";
 import { syncNativeNotifications } from "@/lib/nativeNotifications";
 import { reportLocation } from "@/lib/geo";
@@ -33,6 +34,9 @@ const POLL_MS = 60_000;
  *  starting. Backing off from 1.5s up to the poll interval covers the gap
  *  without hammering a backend that is genuinely absent. */
 const RETRY_MS = [1_500, 2_500, 4_000, 8_000, 15_000];
+
+/** Serious-mode changes arrive in bursts (a Done fires more than one). */
+const FOCUS_SYNC_DEBOUNCE_MS = 1_000;
 
 /**
  * True only on a wide viewport, decided in JavaScript rather than CSS.
@@ -303,14 +307,25 @@ export function useCommandCenter() {
   // Android owns notification delivery after the WebView and Python runtime
   // close. Refresh the native alarm plan whenever the local dashboard changes,
   // and once more if the bridge attaches after React has already mounted.
+  // Serious-mode changes re-plan it too (debounced): marking or unmarking a
+  // block decides whether it rings as a Lock-in and which evenings get a
+  // check-in.
   React.useEffect(() => {
     if (!state) return;
     const sync = () => void syncNativeNotifications();
     const timer = setTimeout(sync, 200);
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
+    const onFocusChanged = () => {
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(sync, FOCUS_SYNC_DEBOUNCE_MS);
+    };
     window.addEventListener("jarvis-native-notifications-ready", sync);
+    window.addEventListener(FOCUS_CHANGED, onFocusChanged);
     return () => {
       clearTimeout(timer);
+      clearTimeout(focusTimer);
       window.removeEventListener("jarvis-native-notifications-ready", sync);
+      window.removeEventListener(FOCUS_CHANGED, onFocusChanged);
     };
   }, [state]);
 

@@ -38,7 +38,7 @@ import type { Mood } from "./content";
 import { Bubble, Holo } from "./Holo";
 import { LockinStep } from "./LockinStep";
 import { NotifyStep } from "./NotifyStep";
-import { EMPTY_WEEK, goalActivities, type WeekState } from "./planWeek";
+import { EMPTY_WEEK, type WeekState } from "./planWeek";
 import { PlanAskStep, PlanReviewStep } from "./PlanSteps";
 import { RevealStep } from "./RevealStep";
 import { buildProfile, clearDraft, EMPTY, loadDraft, saveDraft, STEPS, type Answers, type StepId } from "./state";
@@ -91,12 +91,11 @@ function opener(step: StepId, answers: Answers, week: WeekState): { mood: Mood; 
     case "week":
       if (week.mode === "manual") return { mood: "excited", line: "Add your regulars. Real entries, straight into your Plan." };
       if (week.saved) return { mood: "happy", line: "Already in your Plan. Nice." };
-      if (!week.seeded && goalActivities(answers.goals).length) return { mood: "happy", line: "I added a few from your goals. Add, drop, tweak." };
-      return { mood: "excited", line: "Tell me what matters. I'll do the maths." };
+      return { mood: "excited", line: "List your stuff. I'll turn it into a schedule." };
     case "weekplan":
       return { mood: "excited", line: week.plan?.summary ? week.plan.summary.slice(0, 160) : "Fresh out the oven. Tap a day to peek." };
     case "lockin":
-      return { mood: "fierce", line: "The ones you'd hate to miss. Be real." };
+      return { mood: "fierce", line: "Serious mode. Choose carefully." };
     case "notify":
       return { mood: "love", line: "I'll ping you like a friend, not a bank." };
     case "reveal":
@@ -131,8 +130,8 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   const resumed = React.useRef(false);
 
   const flow = React.useMemo(
-    () => STEPS.filter((id) => (id !== "lockin" || blocks.length > 0) && (id !== "weekplan" || week.mode === "auto")),
-    [blocks.length, week.mode],
+    () => STEPS.filter((id) => (id !== "lockin" || lockable(blocks)) && (id !== "weekplan" || week.mode === "auto")),
+    [blocks, week.mode],
   );
   const index = Math.max(0, flow.indexOf(step));
   const latest = React.useRef({ flow, step, answers, mustDo, week });
@@ -143,7 +142,7 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
     const draft = loadDraft();
     if (draft) {
       const step =
-        (draft.step === "lockin" && draft.blocks.length === 0) || (draft.step === "weekplan" && (draft.week.mode !== "auto" || !draft.week.plan)) ? "week" : draft.step;
+        (draft.step === "lockin" && !lockable(draft.blocks)) || (draft.step === "weekplan" && (draft.week.mode !== "auto" || !draft.week.plan)) ? "week" : draft.step;
       resumed.current = step !== "boot";
       setStep(step);
       setAnswers(draft.answers);
@@ -284,6 +283,13 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   return (
     <div ref={rootRef} className="ob" data-step={step}>
       <span className="ob-scrim" aria-hidden="true" />
+      {/* Lock-in's own world: black, a slow red heartbeat, scanlines and
+          grain. Always mounted so it can fade in; idle unless on Lock-in. */}
+      <span className="ob-lk-backdrop" aria-hidden="true">
+        <i className="ob-lk-beat" />
+        <i className="ob-lk-scan" />
+        <i className="ob-lk-grain" />
+      </span>
       {step !== "boot" && (
         <header className="ob-head">
           <div className="ob-top">
@@ -314,8 +320,15 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
           </motion.section>
         </AnimatePresence>
       </main>
+      {/* The red flash a Lock-in slam fires over everything. */}
+      <span className="ob-lk-flash" aria-hidden="true" />
     </div>
   );
+}
+
+/** Blocks the Lock-in step can offer: anything but free time. */
+function lockable(blocks: AddedBlock[]): boolean {
+  return blocks.some((block) => block.template !== "free");
 }
 
 function Progress({ percent, done }: { percent: number; done: boolean }) {

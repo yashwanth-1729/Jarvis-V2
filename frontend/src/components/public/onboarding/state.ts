@@ -8,7 +8,7 @@
  * removed when onboarding finishes.
  */
 import type { Chronotype, LanguagePref, LifeStage, OnboardingProfile, Vibe } from "@/lib/profile";
-import { EMPTY_WEEK, type WeekState } from "./planWeek";
+import { normalizeWeek, type WeekState } from "./planWeek";
 import type { AddedBlock } from "./weekPlan";
 
 export interface Answers {
@@ -59,7 +59,7 @@ export interface Draft {
   mustDo: string[];
   /** Schedule uids currently marked serious by this onboarding. */
   marked: string[];
-  /** HOLO-built week: what they asked for, the plan, tweaks. */
+  /** HOLO-built week: what they listed, points, free time, the plan, tweaks. */
   week: WeekState;
 }
 
@@ -78,7 +78,8 @@ export function loadDraft(): Draft | null {
       blocks: Array.isArray(draft.blocks) ? draft.blocks : [],
       mustDo: Array.isArray(draft.mustDo) ? draft.mustDo : [],
       marked: Array.isArray(draft.marked) ? draft.marked : [],
-      week: draft.week && typeof draft.week === "object" ? { ...EMPTY_WEEK, ...draft.week } : EMPTY_WEEK,
+      // Any older shape (importance 1-5, frequency) is mapped onto points.
+      week: normalizeWeek(draft.week),
     };
   } catch {
     return null;

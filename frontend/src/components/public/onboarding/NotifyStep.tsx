@@ -39,7 +39,7 @@ export function NotifyStep({ answers, blocks, react, next }: {
   next: () => void;
 }) {
   const call = answers.callMe.trim() || answers.name.trim().split(/\s+/)[0] || "";
-  const first = blocks.find((block) => block.template !== "sleep") ?? null;
+  const first = blocks.find((block) => block.template !== "sleep" && block.template !== "free") ?? null;
   const pings = samplePings(answers.vibe, call, answers.enemy, first ? { name: first.name, emoji: first.emoji } : null);
   return (
     <StepFrame

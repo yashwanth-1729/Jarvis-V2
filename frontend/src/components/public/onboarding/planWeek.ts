@@ -1,8 +1,8 @@
 /**
- * "Your week, your rules": the person says what they want in their week, how
- * much each thing matters and (optionally) how often; the HOLO gateway's
- * planner (GPT-6 Luna) turns that into one timetable, and rebuilds it from
- * their feedback.
+ * "What goes in your week?": the person lists what they want or need to do
+ * and drags how much of the week each one gets (1-10 points, or MAX); the
+ * HOLO gateway's planner (GPT-6 Luna) turns that into one timetable, with or
+ * without free blocks, and rebuilds it from their feedback.
  *
  * Day numbers are 0 = Monday … 6 = Sunday on both sides: the gateway's
  * convention is the app's own `day_of_week` (types/index.ts), so nothing is
@@ -13,9 +13,14 @@ import type { LifeStage } from "@/lib/profile";
 import { TONES, type Tone } from "./content";
 import { minutesOf, type BlockSpec } from "./weekPlan";
 
-export type Frequency = "daily" | "6x" | "5x" | "4x" | "3x" | "2x" | "1x";
-export type Importance = 1 | 2 | 3 | 4 | 5;
 export type Phase = "morning" | "afternoon" | "evening" | "night";
+
+/** Points per activity: 1-10, and 11 means MAX. */
+export const POINTS_MIN = 1;
+export const POINTS_MAX = 11;
+export const DEFAULT_POINTS = 5;
+/** What the planner calls the breathing room it leaves. */
+export const FREE_TIME = "Free time";
 
 export interface PlannedBlock {
   activity: string;
@@ -23,6 +28,8 @@ export interface PlannedBlock {
   start: string;
   end: string;
   phase: Phase;
+  /** Breathing room, not a task: drawn calm, never tweaked or locked in. */
+  free?: boolean;
 }
 
 export interface Busy {
@@ -41,7 +48,9 @@ export interface PlanWeekRequest {
   goals?: string[];
   interests?: string[];
   busy?: Busy | null;
-  activities: Array<{ name: string; importance: Importance; frequency?: Frequency | null }>;
+  /** true leaves free blocks in the week; false is a strict timetable. */
+  freeTime: boolean;
+  activities: Array<{ name: string; points: number }>;
   previous?: PlannedBlock[] | null;
   feedback?: Array<{ activity: string; change: "less" | "more" }>;
   comment?: string | null;
@@ -55,40 +64,34 @@ export interface PlanWeekResponse {
 
 export interface PlanActivity {
   name: string;
-  emoji: string;
-  importance: Importance;
-  frequency: Frequency | null;
+  /** 1-10, or 11 for MAX. */
+  points: number;
 }
 
 /** The week step's own state, kept in the onboarding draft. */
 export interface WeekState {
   /** "manual" is the template builder (the fallback). */
   mode: "auto" | "manual";
-  /** Fixed hours (school, college, work); null until first shown. */
+  /** Fixed hours (school, college, work); null until first changed. */
   hours: { off: boolean; days: number[]; start: string; end: string } | null;
   activities: PlanActivity[];
-  /** Goal-based picks were added once already. */
-  seeded: boolean;
+  /** Free blocks (true) or a strict timetable (false); null until answered. */
+  freeTime: boolean | null;
   plan: PlanWeekResponse | null;
   tweaks: number;
   /** The plan is in the schedule; it can no longer be rebuilt here. */
   saved: boolean;
 }
 
-export const EMPTY_WEEK: WeekState = { mode: "auto", hours: null, activities: [], seeded: false, plan: null, tweaks: 0, saved: false };
+export const EMPTY_WEEK: WeekState = { mode: "auto", hours: null, activities: [], freeTime: null, plan: null, tweaks: 0, saved: false };
 export const MAX_TWEAKS = 5;
 export const MAX_ACTIVITIES = 10;
 
-export const FREQUENCIES: Array<{ value: Frequency | null; label: string }> = [
-  { value: null, label: "Auto" },
-  { value: "daily", label: "Daily" },
-  { value: "5x", label: "5×" },
-  { value: "3x", label: "3×" },
-  { value: "2x", label: "2×" },
-  { value: "1x", label: "1×" },
-];
+export function clampPoints(value: number): number {
+  return Math.min(POINTS_MAX, Math.max(POINTS_MIN, Math.round(Number.isFinite(value) ? value : DEFAULT_POINTS)));
+}
 
-/* ---------------------------------------------------------- suggestions */
+/* -------------------------------------------------------------- names */
 
 const EMOJI: Record<string, string> = {
   "Gym": "🏋️",
@@ -111,9 +114,10 @@ const EMOJI: Record<string, string> = {
   "Art practice": "🎨",
   "Learn AI": "🤖",
   "Chill time": "🎮",
+  [FREE_TIME]: "🌿",
 };
 
-const DEFAULTS = ["Gym", "Study / revision", "DSA / coding", "Reading", "Meditation", "Language practice", "Music practice", "Content creation", "Sports", "Side project", "Walk", "Journaling"];
+const DEFAULTS = ["Gym", "Study / revision", "DSA / coding", "Reading", "Walk"];
 
 const FROM_GOAL: Record<string, string[]> = {
   "Finish the syllabus": ["Study / revision"],
@@ -152,9 +156,6 @@ const FROM_INTEREST: Record<string, string> = {
   "Art & design": "Art practice",
   "Startups": "Side project",
   "AI": "Learn AI",
-  "Gaming": "Chill time",
-  "Anime": "Chill time",
-  "K-drama": "Chill time",
 };
 
 export function emojiFor(name: string): string {
@@ -166,18 +167,13 @@ function unique(items: string[]): string[] {
   return items.filter((item, index) => items.indexOf(item) === index);
 }
 
-/** What their goals point at: the picks made for them up front. */
-export function goalActivities(goals: string[]): string[] {
-  return unique(goals.flatMap((goal) => (goal.startsWith("Crack ") ? ["Study / revision", "Mock test"] : FROM_GOAL[goal] ?? [])));
-}
-
-/** Chips to offer: from their goals, then interests, then the usual. */
-export function suggestions(goals: string[], interests: string[]): string[] {
+/** Two or three "e.g." examples for the input, from their goals and interests. */
+export function examples(goals: string[], interests: string[]): string[] {
   return unique([
-    ...goalActivities(goals),
+    ...goals.flatMap((goal) => (goal.startsWith("Crack ") ? ["Study / revision"] : FROM_GOAL[goal] ?? [])),
     ...interests.map((interest) => FROM_INTEREST[interest]).filter((item): item is string => Boolean(item)),
     ...DEFAULTS,
-  ]);
+  ]).slice(0, 3);
 }
 
 /* -------------------------------------------------------------- hours */
@@ -227,26 +223,34 @@ export function phaseOf(start: string): Phase {
   return "night";
 }
 
+function record(item: unknown): Record<string, unknown> {
+  return (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+}
+
 /** Keep only well-formed blocks; the model's output is checked, not trusted. */
 function cleanResponse(data: unknown): PlanWeekResponse {
-  const source = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const source = record(data);
   const blocks = (Array.isArray(source.blocks) ? source.blocks : [])
-    .map((item) => (item && typeof item === "object" ? item : {}) as Record<string, unknown>)
+    .map(record)
     .filter((item) =>
       typeof item.activity === "string" && item.activity.trim() &&
       Number.isInteger(item.day) && Number(item.day) >= 0 && Number(item.day) <= 6 &&
       typeof item.start === "string" && CLOCK.test(item.start) &&
       typeof item.end === "string" && CLOCK.test(item.end) && item.start !== item.end,
     )
-    .map((item) => ({
-      activity: String(item.activity).trim().slice(0, 40),
-      day: Number(item.day),
-      start: String(item.start),
-      end: String(item.end),
-      phase: PHASES.includes(item.phase as Phase) ? (item.phase as Phase) : phaseOf(String(item.start)),
-    }));
+    .map((item): PlannedBlock => {
+      const free = item.free === true;
+      return {
+        activity: free ? FREE_TIME : String(item.activity).trim().slice(0, 40),
+        day: Number(item.day),
+        start: String(item.start),
+        end: String(item.end),
+        phase: PHASES.includes(item.phase as Phase) ? (item.phase as Phase) : phaseOf(String(item.start)),
+        ...(free ? { free: true } : {}),
+      };
+    });
   const perActivity = (Array.isArray(source.perActivity) ? source.perActivity : [])
-    .map((item) => (item && typeof item === "object" ? item : {}) as Record<string, unknown>)
+    .map(record)
     .filter((item) => typeof item.activity === "string")
     .map((item) => ({
       activity: String(item.activity),
@@ -278,13 +282,57 @@ export async function planWeek(request: PlanWeekRequest, token: string | null, s
   const data = (await response.json().catch(() => null)) as { error?: { code?: string } } | null;
   if (!response.ok) throw friendlyError(response.status, data?.error?.code ?? "");
   const plan = cleanResponse(data);
-  if (plan.blocks.length === 0) throw new PlanError("That plan came back empty. Try again?", response.status, "empty", true);
+  if (!plan.blocks.some((block) => !block.free)) throw new PlanError("That plan came back empty. Try again?", response.status, "empty", true);
   return plan;
+}
+
+/** The plan being tweaked, as sent back: real blocks only, never free time. */
+export function previousOf(plan: PlanWeekResponse): PlannedBlock[] {
+  return plan.blocks.filter((block) => !block.free).map(({ activity, day, start, end, phase }) => ({ activity, day, start, end, phase }));
+}
+
+/* --------------------------------------------------------------- drafts */
+
+/**
+ * The week state from a saved draft, whatever version wrote it. Older drafts
+ * rated importance 1-5 (and had a frequency); that becomes points × 2.
+ */
+export function normalizeWeek(raw: unknown): WeekState {
+  const source = record(raw);
+  const activities = (Array.isArray(source.activities) ? source.activities : [])
+    .map(record)
+    .map((item) => ({
+      name: typeof item.name === "string" ? item.name.trim().replace(/\s+/g, " ").slice(0, 40) : "",
+      points: clampPoints(typeof item.points === "number" ? item.points : typeof item.importance === "number" ? item.importance * 2 : DEFAULT_POINTS),
+    }))
+    .filter((item) => item.name && item.name.toLocaleLowerCase() !== FREE_TIME.toLocaleLowerCase())
+    .slice(0, MAX_ACTIVITIES);
+  const hoursSource = source.hours ? record(source.hours) : null;
+  const hours =
+    hoursSource && Array.isArray(hoursSource.days) && typeof hoursSource.start === "string" && typeof hoursSource.end === "string"
+      ? {
+          off: hoursSource.off === true,
+          days: hoursSource.days.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6),
+          start: hoursSource.start,
+          end: hoursSource.end,
+        }
+      : null;
+  const plan = source.plan ? cleanResponse(source.plan) : null;
+  return {
+    mode: source.mode === "manual" ? "manual" : "auto",
+    hours,
+    activities,
+    freeTime: typeof source.freeTime === "boolean" ? source.freeTime : null,
+    plan: plan && plan.blocks.length ? plan : null,
+    tweaks: Number.isInteger(source.tweaks) ? Math.min(MAX_TWEAKS, Math.max(0, Number(source.tweaks))) : 0,
+    saved: source.saved === true,
+  };
 }
 
 /* ------------------------------------------------------------- the plan */
 
 export function toneFor(name: string, activities: PlanActivity[]): Tone {
+  if (name.toLocaleLowerCase() === FREE_TIME.toLocaleLowerCase()) return "mint";
   const index = activities.findIndex((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
   if (index >= 0) return TONES[index % TONES.length];
   let hash = 0;
@@ -295,7 +343,8 @@ export function toneFor(name: string, activities: PlanActivity[]): Tone {
 /**
  * The plan as schedule entries: fixed hours first, then one group per
  * (activity, start, end) with every day it falls on. Each group becomes one
- * weekly entry per day, and one row in the Lock-in step.
+ * weekly entry per day. Free time is saved too (as "Free time"), but its
+ * groups are marked so the Lock-in step never offers them.
  */
 export function planGroups(plan: PlanWeekResponse, busy: Busy | null, stage: LifeStage | null, activities: PlanActivity[]): BlockSpec[] {
   const groups: BlockSpec[] = [];
@@ -313,10 +362,13 @@ export function planGroups(plan: PlanWeekResponse, busy: Busy | null, stage: Lif
   }
   const byKey = new Map<string, BlockSpec>();
   for (const block of [...plan.blocks].sort((a, b) => a.day - b.day || minutesOf(a.start) - minutesOf(b.start))) {
-    const key = `${block.activity.toLocaleLowerCase()}|${block.start}|${block.end}`;
+    const name = block.free ? FREE_TIME : block.activity;
+    const key = `${block.free ? "free" : "plan"}|${name.toLocaleLowerCase()}|${block.start}|${block.end}`;
     let group = byKey.get(key);
     if (!group) {
-      group = { template: "planned", name: block.activity, emoji: emojiFor(block.activity), tone: toneFor(block.activity, activities), kind: "ROUTINE", days: [], start: block.start, end: block.end };
+      group = block.free
+        ? { template: "free", name: FREE_TIME, emoji: emojiFor(FREE_TIME), tone: "mint", kind: "ROUTINE", days: [], start: block.start, end: block.end }
+        : { template: "planned", name, emoji: emojiFor(name), tone: toneFor(name, activities), kind: "ROUTINE", days: [], start: block.start, end: block.end };
       byKey.set(key, group);
       groups.push(group);
     }
@@ -330,16 +382,20 @@ export function groupKey(spec: { name: string; kind: string; start: string; end:
   return `${spec.name.toLocaleLowerCase()}|${spec.kind}|${spec.start}|${spec.end}`;
 }
 
-/** Per-activity totals: the planner's own numbers, or counted from the blocks. */
+function minutesLong(block: PlannedBlock): number {
+  const length = minutesOf(block.end) - minutesOf(block.start);
+  return length <= 0 ? length + 1440 : length;
+}
+
+/** Per-activity totals (free time left out): the planner's numbers, or counted. */
 export function activityTotals(plan: PlanWeekResponse): Array<{ activity: string; timesPerWeek: number; minutesPerSession: number }> {
   const counted = new Map<string, { activity: string; count: number; minutes: number }>();
   for (const block of plan.blocks) {
+    if (block.free) continue;
     const key = block.activity.toLocaleLowerCase();
-    let length = minutesOf(block.end) - minutesOf(block.start);
-    if (length <= 0) length += 1440;
     const entry = counted.get(key) ?? { activity: block.activity, count: 0, minutes: 0 };
     entry.count += 1;
-    entry.minutes += length;
+    entry.minutes += minutesLong(block);
     counted.set(key, entry);
   }
   return [...counted.values()].map((entry) => {
@@ -350,4 +406,11 @@ export function activityTotals(plan: PlanWeekResponse): Array<{ activity: string
       minutesPerSession: reported?.minutesPerSession || Math.round(entry.minutes / entry.count),
     };
   });
+}
+
+/** How much free time the plan leaves: blocks and hours per week. */
+export function freeTotals(plan: PlanWeekResponse): { blocks: number; hours: number } {
+  const free = plan.blocks.filter((block) => block.free);
+  const minutes = free.reduce((sum, block) => sum + minutesLong(block), 0);
+  return { blocks: free.length, hours: Math.round((minutes / 60) * 10) / 10 };
 }

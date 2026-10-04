@@ -128,6 +128,55 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-04 (later) · Claude Code · Plans that bend, Lock-in nudges, black-and-red Lock-in, simpler week planner
+
+- **Product direction:** the owner agreed it (README entry, docs/public-edition.md
+  "The product answer"). The app helps people stick to their week. This round
+  covers catch-up after misses, JARVIS reaching out first, and a more serious
+  Lock-in.
+- **Backend:**
+  - `services/replan.py` and the `/api/focus/missed`, `/catchup` and
+    `/catchup/settle` routes, in `api/focus.py`.
+  - `openrouter.complete_json`, the strict JSON-schema completion.
+  - `focus.block_window`, made public.
+  - Focus events gained the statuses `moved` and `dropped`. There is no schema
+    change, and the stats ignore them.
+  - Notification policy key `serious`, in `services/notification_policy.py`
+    and `api/announcements.py`.
+  - Tests: `catchup_test` (26) and `notification_policy_test` (16).
+- **`configure_notifications` in `tools.py`** (Codex's file) cannot toggle
+  `serious` yet, and its description still says "deadline tasks only".
+  - The stored value is kept; I did not touch the file.
+  - **Codex:** please add `serious` when you next work there.
+- **Android:**
+  - `lockin:` and `checkin:` alarms.
+  - LOCKIN and CHECKIN card kinds, in crimson, with Start/Done/Check in
+    buttons.
+  - `JarvisPendingAction`, plus `takeAction` and `syncLockins`/`syncCheckins`
+    on the bridge.
+  - `MainActivity` handles the tap intents.
+  - Built by a subagent and reviewed by me.
+- **Frontend:**
+  - `serious/` gained:
+    - `CatchUpSheet`, `CheckInSheet`, `SlippedCard`;
+    - `SeriousSheets`, mounted in `PhoneApp`;
+    - `NotificationActions`;
+    - `Pulse`;
+    - `catchUp.ts`.
+  - `embers.ts` gained `lockinStamp`.
+  - `phone.css`: the black-and-red Lock-in, the stamp, the Lock-in screen and
+    the catch-up/check-in styles.
+  - `lib/nativeNotifications.ts` plans the Lock-in and check-in alarms. This
+    was the subagent's work; its `syncNativeNotifications` now collapses
+    overlapping runs.
+  - `lib/notificationActions.ts`.
+- **Onboarding** (subagent, reviewed): `PointsMeter.tsx`, the minimal ask
+  screen, the free-blocks question, and the black-and-red `LockinStep`.
+- **Gateway:** `planner.py` accepts `points` (11 = MAX) and `freeTime`, and
+  returns `free` blocks. Deployed to the VPS.
+- **Preview fixture** (`frontend/tests/phone-fixture.mjs`): it now serves
+  sample Lock-in data and the catch-up routes, and allows PUT.
+
 ### 2026-10-04 · Claude Code · AI week planner (gateway and onboarding)
 
 - **Gateway:** `gateway/app/planner.py` serves `POST /v1/plan/week` (commit

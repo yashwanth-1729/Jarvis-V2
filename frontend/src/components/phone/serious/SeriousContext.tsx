@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 
-import { FOCUS_CHANGED, fetchFocus, type FocusEvent, type FocusItem } from "@/lib/focus";
+import { FOCUS_CHANGED, fetchFocus, fetchMissed, type FocusEvent, type FocusItem, type MissedBlock } from "@/lib/focus";
 import { setFxTheme } from "../fx/fxBus";
 
 export interface SeriousState {
@@ -17,6 +17,8 @@ export interface SeriousState {
   /** The session in progress, if any (the newest one started). */
   running: { item: FocusItem; event: FocusEvent } | null;
   eventFor: (uid: string, occurrence: string) => FocusEvent | undefined;
+  /** Serious blocks that slipped this week and weren't caught up or let go. */
+  missed: MissedBlock[];
   reload: () => void;
 }
 
@@ -31,6 +33,7 @@ export function dayKey(date: Date): string {
 export function SeriousProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<ReadonlyMap<string, FocusItem>>(() => new Map());
   const [events, setEvents] = React.useState<FocusEvent[]>([]);
+  const [missed, setMissed] = React.useState<MissedBlock[]>([]);
 
   const reload = React.useCallback(() => {
     fetchFocus()
@@ -41,6 +44,10 @@ export function SeriousProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {
         // The backend may still be starting; the next change or poll retries.
       });
+    // Separate, so a backend without catch-up yet costs only this list.
+    fetchMissed()
+      .then((next) => setMissed(next.missed))
+      .catch(() => undefined);
   }, []);
 
   React.useEffect(() => {
@@ -88,8 +95,9 @@ export function SeriousProvider({ children }: { children: React.ReactNode }) {
       }
       return found;
     },
+    missed,
     reload,
-  }), [items, running, events, reload]);
+  }), [items, running, events, missed, reload]);
 
   return <SeriousContext.Provider value={value}>{children}</SeriousContext.Provider>;
 }

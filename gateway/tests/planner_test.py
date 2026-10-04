@@ -130,5 +130,74 @@ async def test_signed_in_plan_costs_aura() -> None:
         check("usage row on the user", rows[-1]["user_id"] == "u-plan" and rows[-1]["endpoint"] == "plan", rows[-1])
 
 
+POINTS_REQUEST = {
+    "wake": "07:00", "sleep": "23:30",
+    "activities": [
+        {"name": "DSA", "points": 11},
+        {"name": "Gym", "points": 3},
+        {"name": "Free time", "points": 9},  # not an activity: asked for with freeTime
+    ],
+    "freeTime": True,
+    "previous": [{"activity": "Free time", "day": 0, "start": "20:00", "end": "21:00"},
+                 {"activity": "DSA", "day": 0, "start": "08:00", "end": "10:00"}],
+}
+
+FREE_PLAN = {
+    "summary": "Grind with room to breathe.",
+    "blocks": [
+        {"activity": "DSA", "day": 0, "start": "08:00", "end": "10:00"},
+        {"activity": "Free time", "day": 0, "start": "09:30", "end": "10:30"},   # clashes with DSA: free time yields
+        {"activity": "Free time", "day": 0, "start": "20:00", "end": "21:00"},   # kept, marked free
+        {"activity": "Free time", "day": 1, "start": "18:00", "end": "21:00"},   # 3 h of "free time": dropped
+        {"activity": "Gym", "day": 2, "start": "18:00", "end": "19:00"},
+    ],
+}
+
+
+async def test_points_and_free_time() -> None:
+    planner._anon_counts.clear()
+    async with Harness() as h:
+        h.upstream.handler = lambda r: answer(FREE_PLAN)
+        r = await h.client.post("/v1/plan/week", json=POINTS_REQUEST)
+        check("points request answers 200", r.status_code == 200, r.text)
+        prompt = json.loads(h.upstream.json()["messages"][1]["content"])
+        acts = {a["name"]: a for a in prompt["activities"]}
+        check("points reach the model, 11 as MAX, no internal fields",
+              acts["DSA"]["points"] == "MAX" and acts["Gym"]["points"] == 3 and "rank" not in acts["DSA"], acts)
+        check("'Free time' is not taken as an activity", "Free time" not in acts, acts)
+        check("freeTime reaches the model", prompt["freeTime"] is True)
+        check("free blocks are kept out of the previous plan",
+              [b["activity"] for b in prompt["previous"]] == ["DSA"], prompt["previous"])
+        blocks = r.json()["blocks"]
+        key = {(b["activity"], b["day"], b["start"], b.get("free", False)) for b in blocks}
+        check("a free block is kept and marked free", ("Free time", 0, "20:00", True) in key, key)
+        check("free time yields to an activity", ("Free time", 0, "09:30", True) not in key and ("DSA", 0, "08:00", False) in key, key)
+        check("an overlong free block is dropped", not any(b["day"] == 1 for b in blocks), key)
+        per = {p["activity"] for p in r.json()["perActivity"]}
+        check("per-activity counts leave free time out", per == {"DSA", "Gym"}, per)
+
+        h.upstream.handler = lambda r: answer(FREE_PLAN)
+        r = await h.client.post("/v1/plan/week", json={**POINTS_REQUEST, "freeTime": False})
+        blocks = r.json()["blocks"]
+        check("strict timetable: free blocks are dropped",
+              r.status_code == 200 and not any(b["activity"] == "Free time" for b in blocks), blocks)
+        prompt = json.loads(h.upstream.json()["messages"][1]["content"])
+        check("strict reaches the model as freeTime false", prompt["freeTime"] is False)
+
+        h.upstream.handler = lambda r: answer({"summary": "x", "blocks": [
+            {"activity": "Free time", "day": 3, "start": "18:00", "end": "19:00"}]})
+        r = await h.client.post("/v1/plan/week", json=POINTS_REQUEST)
+        check("only free time is not a plan -> 502", r.status_code == 502 and r.json()["error"]["code"] == "plan_failed", r.text)
+
+        h.upstream.handler = lambda r: answer(MODEL_PLAN)
+        r = await h.client.post("/v1/plan/week", json={**REQUEST, "activities": [
+            {"name": "Gym", "importance": 4}, {"name": "DSA", "points": True}]})
+        prompt = json.loads(h.upstream.json()["messages"][1]["content"])
+        acts = {a["name"]: a for a in prompt["activities"]}
+        check("old importance maps to points x2; a bogus value falls back to 5",
+              acts["Gym"]["points"] == 8 and acts["DSA"]["points"] == 5, acts)
+
+
 if __name__ == "__main__":
-    run([test_anonymous_plan_is_checked, test_feedback_reaches_the_model, test_limits_and_errors, test_signed_in_plan_costs_aura])
+    run([test_anonymous_plan_is_checked, test_feedback_reaches_the_model, test_limits_and_errors, test_signed_in_plan_costs_aura,
+         test_points_and_free_time])

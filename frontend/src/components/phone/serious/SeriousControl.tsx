@@ -3,12 +3,13 @@
 /**
  * The serious-mode button that lives on a task row or a timeline block:
  * Start → (live timer) Stop for a session item, one-tap Done for a quick one,
- * a burnt-in "Locked" once finished. Starting ignites (orange shockwave,
- * embers, a screen-edge flash); finishing forges (gold sparks). A serious task
+ * a "Locked" chip once finished. Starting slams a "LOCKED IN" stamp over a
+ * black-red flash with crimson sparks; finishing stamps "NO SKIP." with
+ * white-hot sparks. A serious task
  * finished here is finished on the board too, with the board's Undo.
  */
 import * as React from "react";
-import { Check, Fire, LockSimple, Stop } from "@phosphor-icons/react";
+import { ArrowBendUpRight, Check, LockSimple, Stop } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { finishFocus, startFocus } from "@/lib/focus";
@@ -19,18 +20,26 @@ import { emitFx } from "../fx/fxBus";
 import { haptic } from "../lib/haptics";
 import { useFinishAction, useNav, useNow } from "../PhoneContext";
 import { Tap } from "../ui/Tap";
-import { emberBurst } from "./embers";
+import { emberBurst, lockinStamp } from "./embers";
 import { useSerious } from "./SeriousContext";
 
-/** "missed": its time ended (or the task is overdue) with no Done. */
-export type SeriousRowState = "pending" | "running" | "done" | "missed";
+/**
+ * "missed": its time ended (or the task is overdue) with no Done.
+ * "moved": it slipped, and a catch-up session now covers it.
+ */
+export type SeriousRowState = "pending" | "running" | "done" | "missed" | "moved";
+
+/** One occurrence's state from its latest event (and whether its time is over). */
+export function seriousStateOf(status: string | undefined, ended: boolean): SeriousRowState {
+  if (status === "done" || status === "running" || status === "moved") return status;
+  return ended ? "missed" : "pending";
+}
 
 /** The serious state of one occurrence, or null when it is not serious. */
 export function useSeriousState(uid: string | null | undefined, occurrence: string, ended = false): SeriousRowState | null {
   const serious = useSerious();
   if (!serious || !uid || !serious.items.has(uid)) return null;
-  const event = serious.eventFor(uid, occurrence);
-  return event?.status === "done" ? "done" : event?.status === "running" ? "running" : ended ? "missed" : "pending";
+  return seriousStateOf(serious.eventFor(uid, occurrence)?.status, ended);
 }
 
 export function Elapsed({ since }: { since: string | null }) {
@@ -51,7 +60,7 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
   const item = serious?.items.get(uid);
   if (!serious || !item) return null;
   const event = serious.eventFor(uid, occurrence);
-  const state: SeriousRowState = event?.status === "done" ? "done" : event?.status === "running" ? "running" : ended ? "missed" : "pending";
+  const state = seriousStateOf(event?.status, ended);
 
   if (pub && !pub.has("lockin")) {
     return (
@@ -70,6 +79,7 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
       haptic("heavy");
       emitFx("ignite", origin);
       emberBurst(origin, "ignite");
+      lockinStamp("start", item.title);
     } catch {
       haptic("warning");
       toast.error("Couldn't start", { description: "Is the assistant runtime running?" });
@@ -85,6 +95,7 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
       haptic("success");
       emitFx("forge", origin);
       emberBurst(origin, "forge");
+      lockinStamp("done", item.title);
       if (task) finishTask(task, origin);
       else toast.success("Locked in", { description: `${item.title}: done, no skip.` });
     } catch {
@@ -99,6 +110,9 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
     <span className="ph-serious-ctl" data-state={state}>
       {state === "done" ? (
         <span className="ph-serious-done"><Check size={14} weight="bold" /> Locked</span>
+      ) : state === "moved" ? (
+        // Caught up elsewhere this week: the catch-up block carries the Start.
+        <span className="ph-serious-moved"><ArrowBendUpRight size={14} weight="bold" /> Moved</span>
       ) : state === "running" ? (
         <>
           <Elapsed since={event?.started_at ?? null} />
@@ -113,7 +127,7 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
         </Tap>
       ) : item.mode === "session" ? (
         <Tap className="ph-serious-btn" data-kind="start" disabled={busy} onClick={(e) => void start(e.currentTarget)} feel={false} squish={0.9} aria-label={`Start: ${item.title}`}>
-          <Fire size={15} weight="fill" /> Start
+          <LockSimple size={15} weight="fill" /> Start
         </Tap>
       ) : (
         <Tap className="ph-serious-btn" data-kind="done" disabled={busy} onClick={(e) => void finish(e.currentTarget)} feel={false} squish={0.9} aria-label={`Done: ${item.title}`}>

@@ -1,6 +1,7 @@
 package builds.yashwanth.jarvis
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
@@ -18,6 +19,9 @@ import com.chaquo.python.android.AndroidPlatform
 class MainActivity : TauriActivity() {
   private var server: PyObject? = null
 
+  /** Tauri's WebView once the bridges are on it, to announce notification taps. */
+  private var bridgedWebView: WebView? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     // JARVIS always paints a dark canvas, including when Android uses light mode.
@@ -25,6 +29,15 @@ class MainActivity : TauriActivity() {
       statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
       navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
     )
+    // A notification's Start, Done or Check in may have launched JARVIS (cold
+    // start). Not when Android re-creates the activity or reopens it from
+    // Recents: those replay the original intent, and that tap was handled.
+    if (
+      savedInstanceState == null &&
+      (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
+    ) {
+      JarvisPendingAction.capture(applicationContext, intent)
+    }
     attachNotificationBridge()
     // Create the current notification channel (and retire the old one) now,
     // so it shows in system Settings before the first alarm rings.
@@ -37,6 +50,28 @@ class MainActivity : TauriActivity() {
     // (window.JarvisNotifications.requestPermission()); JARVIS asks at launch.
     if (BuildConfig.JARVIS_EDITION != "public") requestNotificationPermission()
     startBackend()
+  }
+
+  /**
+   * MainActivity is singleTask, so a notification tap while JARVIS is running
+   * (foreground or background) arrives here instead of a new activity.
+   */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    if (JarvisPendingAction.capture(applicationContext, intent)) announceNotificationAction()
+  }
+
+  /**
+   * Tell the page a notification action may be waiting; it collects it with
+   * `JarvisNotifications.takeAction()` (lib/notificationActions.ts). Before the
+   * bridge is attached there is no page to tell: attaching announces it then.
+   */
+  private fun announceNotificationAction() {
+    bridgedWebView?.evaluateJavascript(
+      "window.dispatchEvent(new Event('jarvis-notification-action'))",
+      null,
+    )
   }
 
   private fun requestNotificationPermission() {
@@ -65,6 +100,10 @@ class MainActivity : TauriActivity() {
       "window.dispatchEvent(new Event('jarvis-native-notifications-ready'))",
       null,
     )
+    bridgedWebView = webView
+    // A cold-start tap is waiting in JarvisPendingAction. The page also asks
+    // when it subscribes, so whichever of the two comes later delivers it.
+    announceNotificationAction()
     Log.i(TAG, "native notification bridge ready")
     // The on-device Piper/sherpa-onnx voice (JarvisTts.kt) was removed
     // 2026-09-18: speech runs in the cloud, and it added ~206 MB to the APK
@@ -128,6 +167,7 @@ class MainActivity : TauriActivity() {
    * database open in the background.
    */
   override fun onDestroy() {
+    bridgedWebView = null
     try {
       server?.callAttr("stop")?.let { Log.i(TAG, "backend: $it") }
     } catch (error: Throwable) {

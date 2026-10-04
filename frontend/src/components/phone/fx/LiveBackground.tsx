@@ -24,8 +24,8 @@ const PALETTES: Record<FxScene, string[]> = {
   memory: ["#B69CFF", "#FF7AC6", "#7CC7FF", "#FFB23D"],
 };
 
-/** Lock-in: the whole flow turns to embers while a serious session runs. */
-const EMBER = ["#FF4D1F", "#FF8A1F", "#C8102E", "#FFB21F"];
+/** Lock-in: the whole flow goes black and blood-red while a serious session runs. */
+const EMBER = ["#FF1F3D", "#5A0010", "#C8102E", "#1A0004"];
 
 function paletteNow(): string[] {
   return fxTheme() === "lockin" ? EMBER : PALETTES[fxScene()];
@@ -45,9 +45,9 @@ const REACTION: Record<FxKind, { strength: number; energy: number; color: string
   close: { strength: 0.3, energy: 0.06, color: 2 },
   tab: { strength: 0, energy: 0.28, color: 0 },
   touch: { strength: 0.32, energy: 0.08, color: 1 },
-  ignite: { strength: 1, energy: 0.75, color: "#FF5A1F" },
-  forge: { strength: 1, energy: 0.85, color: "#FFB21F" },
-  beat: { strength: 0.24, energy: 0.07, color: "#FF3B30" },
+  ignite: { strength: 1, energy: 0.8, color: "#FF1F3D" },
+  forge: { strength: 1, energy: 0.85, color: "#FFE8EA" },
+  beat: { strength: 0.28, energy: 0.08, color: "#C8102E" },
 };
 
 const MODE_VALUE: Record<Exclude<FxMode, "off">, number> = { calm: 0, vivid: 1, wild: 2 };

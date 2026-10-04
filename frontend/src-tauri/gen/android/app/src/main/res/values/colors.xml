@@ -22,6 +22,8 @@
     <color name="jarvis_n_pink">#FFFF7AC6</color>
     <color name="jarvis_n_orange">#FFFF9A3D</color>
     <color name="jarvis_n_amber">#FFFFC53D</color>
+    <!-- Serious mode ("Lock-in"): the black-and-red theme of phone.css (crimson). -->
+    <color name="jarvis_n_ember">#FFFF1F3D</color>
     <color name="jarvis_n_ink">#FF0B0B0E</color>
     <color name="jarvis_n_chip_edge">#290B0B0E</color>
     <color name="jarvis_n_chip_soft">#140B0B0E</color>
@@ -31,4 +33,5 @@
     <color name="jarvis_n_pink_text">#FFB3186E</color>
     <color name="jarvis_n_orange_text">#FFA64B00</color>
     <color name="jarvis_n_amber_text">#FF8A5D00</color>
+    <color name="jarvis_n_ember_text">#FFC8102E</color>
 </resources>

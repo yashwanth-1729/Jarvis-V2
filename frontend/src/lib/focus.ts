@@ -32,7 +32,8 @@ export interface FocusEvent {
   title: string;
   /** A date (YYYY-MM-DD) for a block, "once" for a task. */
   occurrence: string;
-  status: "running" | "done";
+  /** "moved": a catch-up session covers this missed one; "dropped": let go. */
+  status: "running" | "done" | "moved" | "dropped";
   started_at: string | null;
   finished_at: string | null;
   minutes: number | null;
@@ -62,6 +63,63 @@ export interface FocusStats {
 
 export function fetchFocus(): Promise<{ items: FocusItem[]; events: FocusEvent[] }> {
   return apiGet("/api/focus");
+}
+
+/** A serious block whose time passed this week with no Done (services/replan.py). */
+export interface MissedBlock {
+  uid: string;
+  title: string;
+  mode: FocusMode;
+  occurrence: string;
+  /** 0 = Monday. */
+  weekday: number;
+  start: string | null;
+  end: string | null;
+  minutes: number;
+}
+
+export interface CatchUpSession {
+  title: string;
+  date: string;
+  start: string;
+  end: string;
+  minutes: number;
+  /** The missed occurrence this session makes up for. */
+  covers: { uid: string; occurrence: string; mode: FocusMode } | null;
+}
+
+export interface CatchUpPlan {
+  missed: MissedBlock[];
+  sessions: CatchUpSession[];
+  /** Missed ones nothing could be fitted for. */
+  left: MissedBlock[];
+  message: string;
+  /** "ai": GPT-6 Luna's plan, checked; "basic": the plain placer; "none": nothing to place. */
+  source: "ai" | "basic" | "none";
+}
+
+/** Already booked on a coming day, so catch-ups land in free time. */
+export interface BusySlot {
+  date: string;
+  start: string;
+  end: string | null;
+}
+
+export interface OccurrenceRef {
+  uid: string;
+  occurrence: string;
+}
+
+export function fetchMissed(): Promise<{ missed: MissedBlock[] }> {
+  return apiGet("/api/focus/missed");
+}
+
+export function proposeCatchUp(busy: BusySlot[]): Promise<CatchUpPlan> {
+  return apiPost("/api/focus/catchup", { busy });
+}
+
+export function settleCatchUp(moved: OccurrenceRef[], dropped: OccurrenceRef[]): Promise<{ recorded: number }> {
+  return apiPost<{ recorded: number }>("/api/focus/catchup/settle", { moved, dropped }).then(announce);
 }
 
 export function fetchFocusStats(days = 30): Promise<FocusStats> {

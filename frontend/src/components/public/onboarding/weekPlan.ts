@@ -17,8 +17,8 @@ import type { LifeStage } from "@/lib/profile";
 import type { GroupedSchedule, ScheduleEvent } from "@/types";
 import type { Tone } from "./content";
 
-/** "planned" is a block from HOLO's generated timetable (planWeek.ts). */
-export type TemplateId = "college" | "gym" | "study" | "coaching" | "work" | "sleep" | "custom" | "planned";
+/** "planned" is a block of HOLO's timetable and "free" its free time (planWeek.ts); free time is never offered for Lock-in. */
+export type TemplateId = "college" | "gym" | "study" | "coaching" | "work" | "sleep" | "custom" | "planned" | "free";
 export type WeeklyKind = "COLLEGE" | "ROUTINE";
 
 export interface BlockSpec {
@@ -54,7 +54,7 @@ const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
 export function templatesFor(stage: LifeStage | null, rhythm: { wake: string; sleep: string; night: boolean }): Template[] {
   const school = stage === "school";
   const creator = stage === "creator";
-  const all: Record<Exclude<TemplateId, "planned">, Template> = {
+  const all: Record<Exclude<TemplateId, "planned" | "free">, Template> = {
     college: { template: "college", label: school ? "School" : "College", name: school ? "School" : "College", emoji: school ? "🎒" : "🎓", tone: "sky", kind: "COLLEGE", days: WEEKDAYS, start: school ? "08:30" : "09:00", end: school ? "15:30" : "16:00" },
     gym: { template: "gym", label: "Gym", name: "Gym", emoji: "🏋️", tone: "lime", kind: "ROUTINE", days: [0, 2, 4], start: rhythm.night ? "18:30" : "07:00", end: rhythm.night ? "19:30" : "08:00" },
     study: { template: "study", label: "Study", name: "Study", emoji: "📚", tone: "mint", kind: "ROUTINE", days: [0, 1, 2, 3, 4, 5], start: rhythm.night ? "20:00" : "18:00", end: rhythm.night ? "22:00" : "20:00" },
@@ -63,7 +63,7 @@ export function templatesFor(stage: LifeStage | null, rhythm: { wake: string; sl
     sleep: { template: "sleep", label: "Sleep", name: "Sleep", emoji: "😴", tone: "lilac", kind: "ROUTINE", days: EVERY_DAY, start: rhythm.sleep, end: rhythm.wake },
     custom: { template: "custom", label: "Custom", name: "", emoji: "✨", tone: "pink", kind: "ROUTINE", days: [], start: "17:00", end: "18:00" },
   };
-  const order: Record<LifeStage | "none", Array<Exclude<TemplateId, "planned">>> = {
+  const order: Record<LifeStage | "none", Array<Exclude<TemplateId, "planned" | "free">>> = {
     school: ["college", "coaching", "study", "gym", "sleep", "work", "custom"],
     college: ["college", "study", "gym", "coaching", "work", "sleep", "custom"],
     working: ["work", "gym", "study", "sleep", "college", "coaching", "custom"],

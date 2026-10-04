@@ -1,9 +1,15 @@
 """``POST /v1/plan/week``: the onboarding's AI timetable (docs/public-edition.md).
 
-The user says what they want in their week (activities, an importance of 1-5,
-an optional frequency), plus their wake/sleep times and any fixed hours
-(college, work). GPT-6 Luna lays out ONE weekly timetable; they can push back
-("gym too often", "more DSA", a free comment) and get a revised plan.
+The user says what they want in their week: activities, each with points on a
+meter of 1-10 plus MAX (11) for how much of the week it should get. They also
+give their wake/sleep times, any fixed hours (college, work), and whether they
+want free blocks or a strict timetable. GPT-6 Luna lays out ONE weekly
+timetable. They can push back ("gym too often", "more DSA", a free comment)
+and get a revised plan.
+
+Older clients still send importance (1-5) and an optional frequency. Both
+are still accepted: importance maps to points x2, and a frequency, when
+given, still wins.
 
 Why it lives here and not in the app:
 
@@ -42,6 +48,10 @@ logger = logging.getLogger("holo.gateway.planner")
 router = APIRouter()
 
 MODEL = "openai/gpt-6-luna"
+#: The points meter: 1-10, then MAX.
+MAX_POINTS = 11
+#: The free-time blocks a "leave me free time" plan includes.
+FREE_NAME = "Free time"
 FREQUENCIES = {"daily": 7, "6x": 6, "5x": 5, "4x": 4, "3x": 3, "2x": 2, "1x": 1}
 PHASES = (("morning", 12 * 60), ("afternoon", 17 * 60), ("evening", 21 * 60), ("night", 24 * 60))
 
@@ -49,9 +59,10 @@ SYSTEM = """You build ONE weekly timetable for a young person in India. Answer w
 
 Rules:
 - Use only the activities given, by their exact names.
-- Times per week: the given frequency (daily = 7). When frequency is null, choose from importance: 5 -> 5-7, 4 -> 4-5, 3 -> 3, 2 -> 2, 1 -> 1.
+- Each activity has points (1-10, or "MAX") saying how much of the week it should get compared with the others. Turn points into times per week and session length: 1-2 -> once, 3-4 -> twice, 5-6 -> 3 times, 7-8 -> 4-5 times, 9-10 -> 5-6 times, MAX -> daily or nearly, with the best slots. More points also means longer sessions within the sensible range. If an activity has a frequency, it wins (daily = 7).
 - Pick sensible session lengths (gym ~60 min, deep study 60-120, coding 60-90, reading 30, meditation 15-20, a language 30, walk 30, practice 30-60).
-- Everything between wake and sleep, never during the busy hours on busy days, no overlaps, at least 15 minutes between blocks, at most 4 blocks a day.
+- Everything between wake and sleep, never during the busy hours on busy days, no overlaps, at least 15 minutes between blocks, at most 5 activity blocks a day.
+- freeTime true: also add blocks named exactly "Free time", 1-2 a day of 30-90 minutes (mostly evenings, more on weekends), so the week has breathing room. freeTime false: a strict timetable with no free-time blocks; the activities fill the week tightly but realistically.
 - Leave ~30 minutes free after waking and before sleep.
 - Keep the same activity at a consistent time across days. Put demanding focus work when energy is high (early birds: morning; night owls: evening). Spread repeats across the week and keep one lighter day.
 - Days are 0=Monday ... 6=Sunday; times are 24h "HH:MM", start before end, inside one day.
@@ -120,10 +131,17 @@ def _clean_request(body: dict[str, Any]) -> dict[str, Any]:
         if not name or name.lower() in seen:
             continue
         seen.add(name.lower())
-        importance = raw.get("importance")
-        importance = importance if isinstance(importance, int) and 1 <= importance <= 5 else 3
-        frequency = raw.get("frequency") if raw.get("frequency") in FREQUENCIES else None
-        activities.append({"name": name, "importance": importance, "frequency": frequency})
+        if name.lower() == FREE_NAME.lower():
+            continue  # free time is asked for with freeTime, not as an activity
+        points = raw.get("points")
+        if not (isinstance(points, int) and not isinstance(points, bool) and 1 <= points <= MAX_POINTS):
+            importance = raw.get("importance")
+            valid = isinstance(importance, int) and not isinstance(importance, bool) and 1 <= importance <= 5
+            points = importance * 2 if valid else 5
+        activity: dict[str, Any] = {"name": name, "points": "MAX" if points == MAX_POINTS else points, "rank": points}
+        if raw.get("frequency") in FREQUENCIES:
+            activity["frequency"] = raw["frequency"]
+        activities.append(activity)
     if not activities:
         raise GatewayError(400, "invalid_request", "Add at least one activity.")
     activities = activities[:12]
@@ -140,7 +158,10 @@ def _clean_request(body: dict[str, Any]) -> dict[str, Any]:
         for f in body.get("feedback") or []
         if isinstance(f, dict) and f.get("change") in ("less", "more")
     ][:12]
-    previous = [b for b in body.get("previous") or [] if isinstance(b, dict)][:40]
+    previous = [
+        b for b in body.get("previous") or []
+        if isinstance(b, dict) and str(b.get("activity") or "").strip().lower() != FREE_NAME.lower()
+    ][:40]
     return {
         "wake": _clock(wake), "sleep": _clock(sleep),
         "chronotype": body.get("chronotype") if body.get("chronotype") in ("early", "night") else None,
@@ -149,6 +170,7 @@ def _clean_request(body: dict[str, Any]) -> dict[str, Any]:
         "goals": [str(g)[:40] for g in (body.get("goals") or [])][:3],
         "interests": [str(i)[:30] for i in (body.get("interests") or [])][:12],
         "busy": clean_busy,
+        "freeTime": body.get("freeTime") is True,
         "activities": activities,
         "previous": [{k: b.get(k) for k in ("activity", "day", "start", "end")} for b in previous] or None,
         "feedback": feedback or None,
@@ -156,9 +178,19 @@ def _clean_request(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _prompt_view(clean: dict[str, Any]) -> dict[str, Any]:
+    """What the model sees: the request without internal fields."""
+    view = dict(clean)
+    view["activities"] = [{k: v for k, v in a.items() if k != "rank"} for a in clean["activities"]]
+    return view
+
+
 def _repair(plan: dict[str, Any], request: dict[str, Any]) -> list[dict[str, Any]]:
     """Make the model's blocks safe to save, whatever it returned."""
     names = {a["name"].lower(): a for a in request["activities"]}
+    if request.get("freeTime"):
+        # Free time loses every overlap and never runs long.
+        names[FREE_NAME.lower()] = {"name": FREE_NAME, "rank": 0, "free": True}
     wake = _minutes(request["wake"]) or 0
     sleep = _minutes(request["sleep"]) or 24 * 60
     if sleep <= wake:  # asleep after midnight: the day runs to its end
@@ -179,25 +211,31 @@ def _repair(plan: dict[str, Any], request: dict[str, Any]) -> list[dict[str, Any
             continue
         start, end = round(start / 5) * 5, round(end / 5) * 5
         start, end = max(start, wake), min(end, sleep)
-        if end - start < 10 or end - start > 240:
+        free = bool(activity.get("free"))
+        if end - start < (20 if free else 10) or end - start > (120 if free else 240):
             continue
         if day in busy_days and busy_start is not None and start < busy_end and end > busy_start:
             continue
-        candidates.append({"activity": activity["name"], "importance": activity["importance"],
+        candidates.append({"activity": activity["name"], "rank": activity["rank"], "free": free,
                            "day": day, "start": start, "end": end})
 
-    # Overlaps: the more important activity keeps its slot.
+    # Overlaps: more points keeps the slot; free time always yields, 3 a day at most.
     kept: list[dict[str, Any]] = []
-    for block in sorted(candidates, key=lambda b: (-b["importance"], b["day"], b["start"])):
+    for block in sorted(candidates, key=lambda b: (-b["rank"], b["day"], b["start"])):
         if any(k["day"] == block["day"] and block["start"] < k["end"] and block["end"] > k["start"] for k in kept):
+            continue
+        if block["free"] and sum(1 for k in kept if k["free"] and k["day"] == block["day"]) >= 3:
             continue
         kept.append(block)
     kept.sort(key=lambda b: (b["day"], b["start"]))
-    return [
-        {"activity": b["activity"], "day": b["day"], "start": _clock(b["start"]),
-         "end": _clock(b["end"]), "phase": _phase(b["start"])}
-        for b in kept
-    ]
+    out = []
+    for b in kept:
+        block = {"activity": b["activity"], "day": b["day"], "start": _clock(b["start"]),
+                 "end": _clock(b["end"]), "phase": _phase(b["start"])}
+        if b["free"]:
+            block["free"] = True
+        out.append(block)
+    return out
 
 
 def _per_activity(blocks: list[dict[str, Any]], request: dict[str, Any]) -> list[dict[str, Any]]:
@@ -265,7 +303,7 @@ async def plan_week(request: Request) -> dict[str, Any]:
         "model": MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": json.dumps(clean, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps(_prompt_view(clean), ensure_ascii=False)},
         ],
         "response_format": {"type": "json_schema", "json_schema": {"name": "week_plan", "strict": True, "schema": SCHEMA}},
         "reasoning": {"effort": "low"},
@@ -315,7 +353,7 @@ async def plan_week(request: Request) -> dict[str, Any]:
     if not isinstance(plan, dict):
         raise GatewayError(502, "plan_failed", "The planner returned something unreadable. Try again.")
     blocks = _repair(plan, clean)
-    if not blocks:
+    if not any(not b.get("free") for b in blocks):
         raise GatewayError(502, "plan_failed", "Couldn't fit that week. Try fewer activities or wider hours.")
     summary = " ".join(str(plan.get("summary") or "").split())[:160] or "Your week, balanced."
     logger.info("plan: %d blocks for %d activities in %.1fs", len(blocks), len(clean["activities"]),

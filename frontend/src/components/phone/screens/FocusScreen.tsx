@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowCounterClockwise, CaretLeft, ChartLineUp, Check, LockSimple, Play, Plus, Timer } from "@phosphor-icons/react";
+import { ArrowBendUpRight, ArrowCounterClockwise, CaretLeft, ChartLineUp, Check, LockSimple, Plus, Timer } from "@phosphor-icons/react";
 
 import {
   FOCUS_CHANGED,
@@ -22,6 +22,8 @@ import { usePublicOptional } from "@/components/public/PublicContext";
 import { parseLocal } from "@/lib/utils";
 import type { ScheduleEvent, Task } from "@/types";
 import { emitFx } from "../fx/fxBus";
+import { emberBurst, lockinStamp } from "../serious/embers";
+import { Pulse } from "../serious/Pulse";
 import { haptic } from "../lib/haptics";
 import { clock, mondayIndex, when } from "../lib/time";
 import { useAppData, useFinishAction, useNav, useNow } from "../PhoneContext";
@@ -31,7 +33,14 @@ import { Segmented } from "../ui/Segmented";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
 
-type State = "pending" | "running" | "done" | "skipped";
+/** "moved": it slipped and a catch-up session covers it (services/replan.py). */
+type State = "pending" | "running" | "done" | "skipped" | "moved";
+
+/** A row's state from its event; one that was let go is still a skip. */
+function stateOf(status: FocusEvent["status"] | undefined, missed: boolean): State {
+  if (status === "done" || status === "running" || status === "moved") return status;
+  return status === "dropped" || missed ? "skipped" : "pending";
+}
 
 interface Row {
   item: FocusItem;
@@ -176,7 +185,7 @@ function FocusBody() {
         // marked serious was never committed to, so it cannot be skipped.
         const committed = !window.start || window.start.getTime() >= (parseLocal(item.created_at)?.getTime() ?? 0);
         if (!event && ended && !committed) continue;
-        const state: State = event ? event.status : ended ? "skipped" : "pending";
+        const state = stateOf(event?.status, ended);
         out.push({ item, title: block?.event_name ?? item.title, occurrence: today, state, event, start: window.start, end: window.end });
       } else {
         const task = tasks.find((t) => t.uid === item.uid);
@@ -188,12 +197,12 @@ function FocusBody() {
           continue;
         }
         const markedAt = parseLocal(item.created_at)?.getTime() ?? 0;
-        const state: State = event ? event.status : due && due.getTime() <= now.getTime() && due.getTime() >= markedAt ? "skipped" : "pending";
+        const state = stateOf(event?.status, Boolean(due && due.getTime() <= now.getTime() && due.getTime() >= markedAt));
         if (event?.status === "done" && event.finished_at && !event.finished_at.startsWith(today)) continue;
         out.push({ item, title: task?.title ?? item.title, occurrence: "once", state, event, task, due });
       }
     }
-    const order: Record<State, number> = { running: 0, pending: 1, skipped: 2, done: 3 };
+    const order: Record<State, number> = { running: 0, pending: 1, skipped: 2, moved: 3, done: 4 };
     out.sort((a, b) => order[a.state] - order[b.state] || (a.start?.getTime() ?? a.due?.getTime() ?? 0) - (b.start?.getTime() ?? b.due?.getTime() ?? 0));
     return { rows: out, later: rest };
   }, [items, events, blocks, tasks, now, today]);
@@ -207,11 +216,15 @@ function FocusBody() {
       if (action === "start") {
         await startFocus(row.item.uid, row.occurrence);
         haptic("heavy");
-        emitFx("heavy", origin ?? null);
+        emitFx("ignite", origin ?? null);
+        emberBurst(origin ?? null, "ignite");
+        lockinStamp("start", row.title);
       } else if (action === "done") {
         await finishFocus(row.item.uid, row.occurrence);
         haptic("success");
-        emitFx("success", origin ?? null);
+        emitFx("forge", origin ?? null);
+        emberBurst(origin ?? null, "forge");
+        lockinStamp("done", row.title);
         // A serious task done here is done on the board too.
         if (row.task) finishTask(row.task, origin ?? null);
       } else {
@@ -244,10 +257,16 @@ function FocusBody() {
         }
         hero={
           <div className="ph-focus-hero">
+            <span className="ph-focus-aura" aria-hidden="true" />
             <p className="ph-focus-tally">
-              <strong>{done}</strong>/{rows.length} done today
-              {skipped > 0 && <span className="ph-focus-missed"> · {skipped} skipped</span>}
+              <strong>{done}</strong>
+              <span className="ph-focus-of">/{rows.length}</span>
+              <span className="ph-focus-tally-label">
+                locked today
+                {skipped > 0 && <span className="ph-focus-missed"> · {skipped} skipped</span>}
+              </span>
             </p>
+            <Pulse className="ph-focus-pulse" live={rows.some((row) => row.state === "running")} />
             <Tap className="ph-focus-stats-btn" onClick={() => push({ kind: "focusStats" })} feel="heavy" squish={0.94}>
               <ChartLineUp size={20} weight="bold" />
               <span>How am I doing?</span>
@@ -336,7 +355,7 @@ function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolea
   return (
     <div className="ph-focus-row" data-state={row.state}>
       <span className="ph-focus-mark" aria-hidden="true">
-        {row.state === "done" ? <Check size={18} weight="bold" /> : row.state === "running" ? <Timer size={18} weight="fill" /> : <LockSimple size={16} weight="fill" />}
+        {row.state === "done" ? <Check size={18} weight="bold" /> : row.state === "running" ? <Timer size={18} weight="fill" /> : row.state === "moved" ? <ArrowBendUpRight size={16} weight="bold" /> : <LockSimple size={16} weight="fill" />}
       </span>
       <span className="ph-focus-body">
         <strong>{row.title}</strong>
@@ -344,11 +363,12 @@ function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolea
           {meta}
           <span className="ph-focus-mode">{session ? "Start → Done" : "One tap"}</span>
           {row.state === "skipped" && <span className="ph-focus-flag">Skipped</span>}
+          {row.state === "moved" && <span className="ph-focus-flag" data-kind="moved">Moved</span>}
         </span>
       </span>
       <span className="ph-focus-act">
         {row.state === "running" && <Elapsed since={row.event?.started_at ?? null} />}
-        {row.state === "done" ? (
+        {row.state === "moved" ? null : row.state === "done" ? (
           // A task's Done also finished it on the board, so it is taken back
           // with the board's Undo toast; a block's is taken back here.
           row.item.kind === "task" ? null : <Tap className="ph-focus-undo" aria-label={`Undo ${row.title}`} onClick={() => onAct(row, "undo")} disabled={busy} feel="select">
@@ -360,7 +380,7 @@ function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolea
           </Tap>
         ) : (
           <Tap className="ph-focus-btn" data-kind="start" onClick={(event) => onAct(row, "start", event.currentTarget)} disabled={busy} feel={false} squish={0.9}>
-            <Play size={16} weight="fill" /> Start
+            <LockSimple size={16} weight="fill" /> Start
           </Tap>
         )}
       </span>

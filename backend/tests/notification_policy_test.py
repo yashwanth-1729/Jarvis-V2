@@ -26,6 +26,7 @@ dbmod.db = dbmod.Database(get_settings().db_file, 2)
 import app.db.crud as crud  # noqa: E402
 
 crud.db = dbmod.db
+from app.api.announcements import patch_notification_policy  # noqa: E402
 from app.core.timeutil import now, to_iso  # noqa: E402
 from app.llm.tools import execute_tool  # noqa: E402
 from app.services import notification_policy  # noqa: E402
@@ -37,6 +38,9 @@ async def main() -> None:
         default = await notification_policy.load()
         assert default["enabled"] and default["deadline_tasks"]
         assert not any(default[key] for key in ("college", "routine", "blocks", "reminders"))
+        # Lock-in nudges and the evening check-in are on unless switched off.
+        assert default["serious"] is True
+        assert notification_policy.permits(default, "lockin:any", "serious")
 
         result = await execute_tool("configure_notifications", {
             "enabled": True,
@@ -85,9 +89,24 @@ async def main() -> None:
         reminder_ref = f"reminder:{reminder.display['id']}"
         assert explicit["enabled"]
         assert notification_policy.permits(explicit, reminder_ref, "reminders")
+
+        # `serious` through the PATCH endpoint, booleans only, like the rest.
+        switched = await patch_notification_policy({"serious": False})
+        assert switched["serious"] is False
+        assert not notification_policy.permits(switched, "lockin:any", "serious")
+        assert (await notification_policy.load())["serious"] is False
+        ignored = await patch_notification_policy({"serious": "yes", "reminders": True})
+        assert ignored["serious"] is False and ignored["reminders"] is True
+        assert notification_policy.normalize({"serious": 1})["serious"] is True
+        # The assistant's tool rewrites other switches without dropping it.
+        await execute_tool("configure_notifications", {"blocks": True})
+        assert (await notification_policy.load())["serious"] is False
+        restored = await patch_notification_policy({"serious": True})
+        assert notification_policy.permits(restored, "checkin:2026-10-04", "serious")
+        assert "Lock-in" in notification_policy.describe(restored)
     finally:
         await dbmod.db.disconnect()
 
 
 asyncio.run(main())
-print("notification policy: 7 checks passed")
+print("notification policy: 16 checks passed")

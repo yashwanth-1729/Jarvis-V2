@@ -7,7 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services import focus
+from app.services import focus, replan
 
 router = APIRouter(prefix="/focus", tags=["focus"])
 
@@ -70,3 +70,48 @@ async def reset(uid: str, payload: OccurrenceIn | None = None) -> dict[str, int]
 @router.get("/stats")
 async def stats(days: int = 30) -> dict[str, Any]:
     return await focus.stats(days)
+
+
+# --------------------------------------------------- catch-up (services/replan.py)
+
+class BusyIn(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+    start: str = Field(min_length=1, max_length=8)
+    end: str | None = Field(default=None, max_length=8)
+
+
+class CatchUpIn(BaseModel):
+    #: What is already booked on the coming days (the client owns the schedule).
+    busy: list[BusyIn] = Field(default_factory=list, max_length=400)
+
+
+class OccurrenceRef(BaseModel):
+    uid: str = Field(min_length=1, max_length=200)
+    occurrence: str = Field(min_length=10, max_length=10)
+
+
+class SettleIn(BaseModel):
+    moved: list[OccurrenceRef] = Field(default_factory=list, max_length=60)
+    dropped: list[OccurrenceRef] = Field(default_factory=list, max_length=60)
+
+
+@router.get("/missed")
+async def missed() -> dict[str, Any]:
+    """Serious blocks that slipped this week and haven't been dealt with."""
+    return {"missed": await replan.missed()}
+
+
+@router.post("/catchup")
+async def catch_up(payload: CatchUpIn) -> dict[str, Any]:
+    """Catch-up sessions for what slipped: GPT-6 Luna's, checked, or the plain placer's."""
+    return await replan.propose([entry.model_dump() for entry in payload.busy])
+
+
+@router.post("/catchup/settle")
+async def settle(payload: SettleIn) -> dict[str, int]:
+    """Moved (a catch-up covers it) or let go: either way, off the missed list."""
+    return {
+        "recorded": await replan.settle(
+            [ref.model_dump() for ref in payload.moved], [ref.model_dump() for ref in payload.dropped],
+        )
+    }

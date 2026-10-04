@@ -54,11 +54,28 @@ let events = [
     time_start: at(1, 16), time_end: at(1, 18), location: null, notes: null, created_at: stamp },
 ];
 
+// Lock-in (serious mode): Gym done this morning, the side project ahead
+// tonight, and Wednesday-style "Long run" that slipped two days ago.
+const dayOf = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const focusItem = (event, mode) => ({
+  uid: event.uid, kind: "block", mode, title: event.event_name, block_kind: event.kind, day_of_week: event.day_of_week,
+  start_time: event.start_time, end_time: event.end_time, time_start: event.time_start, time_end: event.time_end,
+  due_date: null, created_at: at(-14, 9),
+});
+let focusEvents = [];
+let focusItems = [];
+let missedList = [];
+let focusId = 1;
+
 let reminders = [
   { id: 1, text: "Drink water and stretch", due_at: at(0, Math.min(nowHour + 1, 23), 15), target_at: null, created_at: stamp, fired_at: null },
   { id: 2, text: "Pay the hostel fee", due_at: at(1, 10), target_at: null, created_at: stamp, fired_at: null },
   { id: 3, text: "Call the bank about the loan", due_at: at(-1, 17), target_at: null, created_at: stamp, fired_at: at(-1, 17) },
 ];
+
+focusItems = [focusItem(events[3], "quick"), focusItem(events[4], "session"), focusItem(events[7], "session")];
+focusEvents = [{ id: focusId++, item_uid: "event-13", title: "Gym", occurrence: dayOf(0), status: "done", started_at: null, finished_at: at(0, 7, 20), minutes: null }];
+missedList = [{ uid: "event-17", title: "Long run", mode: "session", occurrence: dayOf(-2), weekday: (todayIndex + 5) % 7, start: "06:00", end: "07:00", minutes: 60 }];
 
 let ideas = [
   { id: 1, uid: "idea-1", title: "Voice-first habit tracker", description: "Say what you did, JARVIS logs it. Weekly streak recap on Sunday nights.", tags: "", status: "ACTIVE", page_uid: null, created_at: stamp, updated_at: stamp },
@@ -148,7 +165,7 @@ const byId = (list, ref) => list.find((row) => String(row.id) === ref || row.uid
 createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
   const path = new URL(req.url, "http://localhost").pathname;
   let raw = "";
@@ -232,6 +249,49 @@ createServer(async (req, res) => {
     const uid = idFrom(path);
     pages = pages.filter((page) => page.uid !== uid);
     ideas = ideas.map((idea) => (idea.page_uid === uid ? { ...idea, page_uid: null } : idea));
+  }
+  else if (path === "/api/focus" && method === "GET") result = { items: focusItems, events: focusEvents };
+  else if (path === "/api/focus/missed") result = { missed: missedList };
+  else if (path === "/api/focus/stats") result = {
+    days: 7, done: 9, skipped: 2, rate: 0.818, minutes: 640, streak: 3, best_streak: 5, perfect_days: 3,
+    today: { done: focusEvents.filter((e) => e.status === "done").length, skipped: 0, pending: 1 },
+    series: Array.from({ length: 7 }, (_, i) => ({ date: dayOf(i - 6), done: i % 3 ? 1 : 2, skipped: i === 2 ? 1 : 0, minutes: 60 + i * 10 })),
+    items: [], running: focusEvents.find((e) => e.status === "running") ?? null,
+  };
+  else if (path === "/api/focus/catchup" && method === "POST") {
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    const miss = missedList[0];
+    result = miss ? {
+      missed: missedList,
+      sessions: [{ title: miss.title, date: dayOf(1), start: "06:15", end: "07:00", minutes: 45, covers: { uid: miss.uid, occurrence: miss.occurrence, mode: miss.mode } }],
+      left: missedList.slice(1),
+      message: "Your long run slipped. Tomorrow 6:15 AM, 45 minutes. Short, sharp, no excuses.",
+      source: "ai",
+    } : { missed: [], sessions: [], left: [], message: "Nothing slipped. Clean week so far.", source: "none" };
+  }
+  else if (path === "/api/focus/catchup/settle" && method === "POST") {
+    const settled = [...(body.moved ?? []), ...(body.dropped ?? [])];
+    missedList = missedList.filter((miss) => !settled.some((ref) => ref.uid === miss.uid && ref.occurrence === miss.occurrence));
+    result = { recorded: settled.length };
+  }
+  else if (/^\/api\/focus\/items\/[\w-]+$/.test(path) && method === "PUT") {
+    const uid = idFrom(path);
+    focusItems = [...focusItems.filter((item) => item.uid !== uid), { ...body, uid, created_at: stamp }];
+    result = focusItems.at(-1);
+  }
+  else if (/^\/api\/focus\/items\/[\w-]+\/(start|done|reset)$/.test(path)) {
+    const parts = path.split("/");
+    const uid = parts[4];
+    const verb = parts[5];
+    const occurrence = body.occurrence ?? dayOf(0);
+    const item = focusItems.find((row) => row.uid === uid);
+    if (verb === "reset") { focusEvents = focusEvents.filter((e) => !(e.item_uid === uid && e.occurrence === occurrence)); result = { removed: 1 }; }
+    else if (verb === "start") { const row = { id: focusId++, item_uid: uid, title: item?.title ?? "Lock-in", occurrence, status: "running", started_at: iso(new Date()), finished_at: null, minutes: null }; focusEvents.push(row); result = row; }
+    else {
+      const running = focusEvents.find((e) => e.item_uid === uid && e.occurrence === occurrence && e.status === "running");
+      if (running) { running.status = "done"; running.finished_at = iso(new Date()); running.minutes = 25; result = running; }
+      else { const row = { id: focusId++, item_uid: uid, title: item?.title ?? "Lock-in", occurrence, status: "done", started_at: null, finished_at: iso(new Date()), minutes: null }; focusEvents.push(row); result = row; }
+    }
   }
   else if (path === "/api/connectors") result = [];
   else if (path === "/api/location") result = { ok: true };

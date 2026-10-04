@@ -544,6 +544,44 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-04 (second): Plans that bend, Lock-in nudges, a black-and-red Lock-in, a simpler week planner
+
+- **Why:** the owner asked what the app is really for. The answer agreed on is a real use: help people actually stick to the week they planned. They asked to start with a plan that bends when you slip, and with JARVIS reaching out first.
+- **Catch-up ("Fit it back in")** (`backend/app/services/replan.py`, `components/phone/serious/`):
+  - **Endpoints:**
+    - `GET /api/focus/missed` lists this week's serious blocks that ended with no Done.
+    - `POST /api/focus/catchup` asks GPT-6 Luna (strict JSON, via the new `openrouter.complete_json`) for catch-up sessions in the free time left. The backend checks each one: waking hours, after now, clear of booked time, one per activity per day, at most 3 h a day, never more than was missed. Without the model, a plain placer does it.
+    - `POST /api/focus/catchup/settle` records each miss as `moved` or `dropped`. The stats still count the skip.
+  - **On the phone:**
+    - Today shows a black-and-red "slipped" card, with "Fit it back in" or "Let go".
+    - The sheet shows JARVIS's line and the catch-ups to keep.
+    - "Lock it in" saves each one as a serious dated block.
+- **JARVIS reaches out first** (Android):
+  - A serious block now rings as a crimson Lock-in card with **Start** (or **Done**), and one tap opens the app straight into the session.
+  - Days with Lock-ins get an evening **check-in** card at 21:30, or 30 min after the last serious block. "Check in" opens a sheet: today's score, the honest line (read aloud when voice is on) and "Fit it back in".
+  - The policy key is `serious`, on by default. The alarm ids are `lockin:` and `checkin:`.
+  - The bridge gained `syncLockins`, `syncCheckins` and `takeAction`, and `MainActivity` hands taps to the page.
+- **Lock-in, black and red:** the owner said "not serious enough... more aura... more animations... more black and red".
+  - The whole serious theme is now black and crimson.
+  - Start slams a "LOCKED IN" stamp (a glitch slam, a red flash and a shake). Done stamps "NO SKIP.".
+  - An ECG pulse runs through the Lock-in bar and screen.
+  - The Lock-in screen is its own black world: scanlines, a breathing red aura and a big red tally.
+  - Notification chips are crimson.
+- **Week planner, simpler** (JARVIS Public onboarding): the owner said it was "very hard to add or understand".
+  - The ask screen is now one input ("what you want or need to do"), plus one line saying JARVIS turns it into the timetable.
+  - Each item has a draggable **points meter** (1–10, then MAX), replacing the flames and the daily/5×/3× chips.
+  - A required question: free blocks, or a strict timetable.
+  - The gateway now takes `points` and `freeTime` and returns free blocks marked `free`. Older clients' `importance` still works.
+  - The onboarding Lock-in step is black and red too, with slams and a "LOCKED IN" stamp.
+- **Validation:**
+  - **Backend:** `catchup_test` (26), `serious_mode_test` (20), `notification_policy_test` (16), `public_edition_test`, `openrouter_transport_test` (41), `profile_test`, `scheduler_test` (37).
+  - **Gateway:** 8 of 8 suites, `planner_test` 38.
+  - **Frontend:** tsc and ESLint are clean; `tests/nativeNotifications.test.ts` gives 42/42.
+  - **Kotlin:** compiles.
+  - **Preview:** in the design preview (fixture data), the slipped card → catch-up sheet → "Lock it in" saved a serious session and settled the miss. The Lock-in screen, stamp, running bar and check-in rendered as designed.
+  - **Live:** one points-plus-free-time plan through the VPS tunnel (11.5 s, sensible).
+  - **Built:** both APKs, JARVIS and JARVIS Public (with the tunnel as gateway). They are **not yet installed**, because the phone wasn't connected, and nothing has been tried on the device. Desktop was not rebuilt.
+
 ### 2026-10-04: AI week planner in the JARVIS Public onboarding
 
 - **What the user asked for:** one timetable instead of entering blocks one by one. People list what they want in their week, say how much each thing matters and, optionally, how often. The AI works out the rest, and they then say what's too much or too little. The analysis runs on GPT-6 Luna through OpenRouter.

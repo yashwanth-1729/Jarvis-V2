@@ -54,6 +54,8 @@ import { PlansScreen } from "@/components/public/PlansScreen";
 import { PublicProvider, usePublicOptional } from "@/components/public/PublicContext";
 import { PublicStage } from "@/components/public/PublicStage";
 import { LockinBar } from "./serious/LockinBar";
+import { NotificationActions } from "./serious/NotificationActions";
+import { SeriousSheets } from "./serious/SeriousSheets";
 import { SeriousProvider, useSerious } from "./serious/SeriousContext";
 
 // Development only: `?instant` skips JS animations, for checking layouts in
@@ -290,7 +292,7 @@ function Shell() {
   const pub = usePublicOptional();
   // JARVIS Public: onboarding, sign-in and the first plans view come first.
   const gated = pub !== null && pub.stage !== "app";
-  // A serious session running turns the whole app to Lock-in's ember theme.
+  // A serious session running turns the whole app to Lock-in's black and red.
   const serious = useSerious();
   const lockin = !gated && Boolean(serious?.running);
 
@@ -319,6 +321,8 @@ function Shell() {
             <div className="ph-dock-glass" aria-hidden="true" />
             <LockinBar hidden={covered} />
             <Dock hidden={covered} />
+            <SeriousSheets />
+            <NotificationActions />
             <AnimatePresence>
               {layers.map((layer, index) => (
                 <LayerView key={`${layer.kind}-${index}`} layer={layer} covered={index < layers.length - 1} />

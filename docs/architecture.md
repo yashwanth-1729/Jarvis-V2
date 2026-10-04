@@ -347,6 +347,38 @@ after reboot; stale ones remain quiet. Native-fired reminder IDs contain no text
 and are reconciled into SQLite on the next launch, preventing a second in-app
 announcement. Remote edits become native alarms only after the phone pulls them.
 
+### Lock-in nudges and the evening check-in (2026-10-04)
+
+These come from the owner's direction, "JARVIS reaches out first". Two more
+alarm prefixes ride the same native plan:
+
+- **`lockin:<uid>`: a serious (Lock-in) block starting.**
+  - The WebView reads the serious items from `/api/focus`. It falls back to a
+    localStorage cache when Python is not up yet.
+  - A serious block's row leaves the `schedule:` list, so it never rings
+    twice.
+  - The card (`JarvisAlarmKind.LOCKIN`, crimson) carries Start, or Done for a
+    one-tap item, and Snooze.
+- **`checkin:<YYYY-MM-DD>`: one evening check-in per coming day that has a
+  serious block.**
+  - It rings at 21:30, or 30 minutes after that day's last serious block ends,
+    and never after 23:30.
+  - The card carries "Check in" and "Later".
+- **Gating:** both follow the notification policy's new `serious` key, which
+  defaults to on. When it is off, or on an APK without `syncLockins`, a
+  serious row falls back to its normal category.
+- **The buttons open `MainActivity`** with `jarvis_action`/`jarvis_uid`/
+  `jarvis_occurrence`.
+  - The activity is `singleTask`, so `onNewIntent` handles taps while it is
+    running.
+  - It keeps the tap in `JarvisPendingAction` and dispatches
+    `jarvis-notification-action`. The page collects it once through
+    `JarvisNotifications.takeAction()` (`lib/notificationActions.ts`).
+  - `serious/NotificationActions.tsx` then starts or finishes the session,
+    retrying while a cold-started backend boots, or opens the check-in sheet,
+    which reads its line aloud when voice is available.
+  - `syncNativeNotifications` also re-runs, debounced, on `FOCUS_CHANGED`.
+
 Reading the reminder list (`crud.list_reminders`, used by the API and the
 agent's tool) first deletes fired reminder rows, and unfired ones more than a
 day past their moment (`purge_finished_reminders`). An unfired one younger
@@ -554,6 +586,53 @@ The user asked for serious items to feel like "a whole different theme"
     screen-edge flash (`serious/embers.ts`);
   - finishing emits `forge` (a gold bloom and gold sparks).
   - Reduced motion turns all of it off.
+
+**Black and red (2026-10-04).** The owner said "lock in is not serious
+enough... more aura... more animations... more black and red".
+- **Palette:** the whole serious theme moved from orange-gold to black and
+  crimson (#050505, #ff1f3d, #c8102e, #4a0610):
+  - the cards' ring is a crimson comet on black;
+  - the running accent is red, and the vignette is black edges with a red
+    heartbeat;
+  - the live background's Lock-in palette is blood-red;
+  - sparks are crimson for Start and white-hot for Done.
+- **`lockinStamp`:** Start now also slams a "LOCKED IN" stamp. It is a glitch
+  slam over a black-red flash, with red lines and a short shake of the app.
+  Done stamps "NO SKIP.".
+- **`Pulse`:** an ECG line that runs through the Lock-in bar, the Lock-in
+  screen's hero and Today's slipped card.
+- **The Lock-in screen** (`FocusScreen`) is its own black world: scanlines, a
+  breathing red aura, a big red tally, and a red scan sweeping across the
+  running row.
+
+### Catch-up: plans that bend (2026-10-04)
+
+A serious block whose time passed with no Done no longer just turns red.
+- **`services/replan.py`:**
+  - **`GET /api/focus/missed`:** this week's misses (plus yesterday on a
+    Monday). It leaves out anything done, running, moved or dropped.
+  - **`POST /api/focus/catchup`:** catch-up sessions for those misses. The
+    client sends what is already booked on the coming days (`busy`), because
+    it owns the schedule.
+    - GPT-6 Luna proposes sessions through a strict JSON schema
+      (`openrouter.complete_json`). In the public edition that call goes
+      through the gateway, with the session.
+    - The backend then checks every one: waking hours from the profile, after
+      now, clear of booked time and of each other, one per activity per day,
+      at most 180 minutes of catch-up a day, never more than was missed.
+    - Without the model (no key, not signed in, out of Aura, a bad answer), a
+      greedy placer does the same job.
+  - **`POST /api/focus/catchup/settle`:** records the misses as `moved` or
+    `dropped` focus events. These are new statuses with no schema change, and
+    the stats ignore them, so the skip still counts.
+- **Phone:**
+  - Today shows a "slipped" card (`SlippedCard`), from `SeriousProvider`'s new
+    `missed` list.
+  - "Fit it back in" opens `CatchUpSheet`.
+  - "Lock it in" saves each kept session as a dated SESSION block, marked
+    serious in the missed one's mode, then settles the plan: covered misses
+    are moved, the rest let go.
+  - A moved occurrence shows "Moved" on its row.
 
 ## Voice session protocol
 

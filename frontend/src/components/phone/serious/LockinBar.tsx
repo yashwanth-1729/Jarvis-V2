@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Fire, Stop } from "@phosphor-icons/react";
+import { LockSimple, Stop } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { finishFocus } from "@/lib/focus";
@@ -15,7 +15,8 @@ import { emitFx } from "../fx/fxBus";
 import { haptic } from "../lib/haptics";
 import { useAppData, useFinishAction, useNav } from "../PhoneContext";
 import { Tap } from "../ui/Tap";
-import { emberBurst } from "./embers";
+import { emberBurst, lockinStamp } from "./embers";
+import { Pulse } from "./Pulse";
 import { Elapsed } from "./SeriousControl";
 import { useSerious } from "./SeriousContext";
 
@@ -47,6 +48,7 @@ export function LockinBar({ hidden }: { hidden: boolean }) {
       haptic("success");
       emitFx("forge", origin);
       emberBurst(origin, "forge");
+      lockinStamp("done", item.title);
       const task = item.kind === "task" ? app.state?.tasks.find((candidate) => candidate.uid === item.uid) : undefined;
       if (task) finishTask(task, origin);
       else toast.success("Locked in", { description: `${item.title}: done, no skip.` });
@@ -69,7 +71,8 @@ export function LockinBar({ hidden }: { hidden: boolean }) {
       role="status"
       aria-live="polite"
     >
-      <span className="ph-lockin-bar-flame" aria-hidden="true"><Fire size={22} weight="fill" /></span>
+      <Pulse className="ph-lockin-bar-pulse" />
+      <span className="ph-lockin-bar-flame" aria-hidden="true"><LockSimple size={20} weight="fill" /></span>
       <Tap className="ph-lockin-bar-body" onClick={() => push({ kind: "focus" })} feel="select" aria-label={`Locked in on ${item.title}. Open Lock-in`}>
         <small>LOCKED IN</small>
         <strong>{item.title}</strong>

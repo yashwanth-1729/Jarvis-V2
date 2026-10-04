@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Candy kind chip on a JARVIS notification (dark ink text on top, see
+     JarvisNotificationCard.kt). Ember: a serious "Lock-in" block, the app's
+     serious-mode tone. The thin edge only shows on a light shade. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/jarvis_n_ember" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/jarvis_n_chip_edge" />
+    <corners android:radius="999dp" />
+</shape>

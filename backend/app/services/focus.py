@@ -147,7 +147,7 @@ async def recent_events(days: int = 2) -> list[dict[str, Any]]:
     )
 
 
-def _window(item: dict[str, Any], day: date) -> tuple[datetime, datetime] | None:
+def block_window(item: dict[str, Any], day: date) -> tuple[datetime, datetime] | None:
     """When this block happens on `day`, or None if it does not."""
     kind = (item.get("block_kind") or "").upper()
     if kind == "SESSION":
@@ -217,7 +217,7 @@ async def stats(days: int = 30) -> dict[str, Any]:
             continue
         day = max(first, created.date())
         while day <= today:
-            window = _window(item, day)
+            window = block_window(item, day)
             if window and window[0] >= created and (item["uid"], day.isoformat()) not in done_keys:
                 is_running = bool(running and running["item_uid"] == item["uid"] and running["occurrence"] == day.isoformat())
                 if window[1] <= current and not is_running:
