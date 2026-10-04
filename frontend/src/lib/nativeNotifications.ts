@@ -401,7 +401,8 @@ export function planScheduleAlarms(
   const serious = new Map<string, FocusMode>();
   for (const item of focusItems) {
     if (item?.kind !== "block" || typeof item.uid !== "string" || !item.uid) continue;
-    serious.set(item.uid, item.mode === "quick" ? "quick" : "session");
+    // Every Lock-in is Start, then Stop now (2026-10-04): the card says Start.
+    serious.set(item.uid, "session");
   }
   const schedules: NativeAlarm[] = [];
   const lockins: NativeAlarm[] = [];

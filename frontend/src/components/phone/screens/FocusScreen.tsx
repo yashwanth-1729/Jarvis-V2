@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowBendUpRight, ArrowCounterClockwise, CaretLeft, ChartLineUp, Check, LockSimple, Plus, Timer } from "@phosphor-icons/react";
+import { ArrowBendUpRight, ArrowCounterClockwise, CaretLeft, ChartLineUp, Check, LockSimple, Plus, Stop, Timer } from "@phosphor-icons/react";
 
 import {
   FOCUS_CHANGED,
@@ -15,7 +15,6 @@ import {
   unmarkSerious,
   type FocusEvent,
   type FocusItem,
-  type FocusMode,
 } from "@/lib/focus";
 import { LockedFeature } from "@/components/public/LockedFeature";
 import { usePublicOptional } from "@/components/public/PublicContext";
@@ -345,8 +344,18 @@ function Elapsed({ since }: { since: string | null }) {
   return <span className="ph-focus-timer">{h ? `${h}:` : ""}{p(Math.floor((seconds % 3600) / 60))}:{p(seconds % 60)}</span>;
 }
 
+/** "45 min", "1h 30m". */
+function length(minutes: number): string {
+  const total = Math.round(minutes);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m} min`;
+}
+
 function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolean; onAct: (row: Row, action: "start" | "done" | "undo", origin?: Element | null) => void }) {
-  const session = row.item.mode === "session";
+  // Planned length for a timed block; what was put in once it's done.
+  const planned = row.start && row.end ? (row.end.getTime() - row.start.getTime()) / 60_000 : null;
+  const spent = row.state === "done" && row.event?.minutes != null ? row.event.minutes : null;
   const meta = row.start
     ? `${clock(row.start)}${row.end ? ` – ${clock(row.end)}` : ""}`
     : row.due
@@ -361,7 +370,13 @@ function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolea
         <strong>{row.title}</strong>
         <span className="ph-focus-meta">
           {meta}
-          <span className="ph-focus-mode">{session ? "Start → Done" : "One tap"}</span>
+          {spent !== null && planned ? (
+            <span className="ph-focus-mode" data-share={spent / planned >= 0.9 ? "full" : spent / planned >= 0.5 ? "partial" : "low"}>
+              {length(spent)} of {length(planned)}
+            </span>
+          ) : planned ? (
+            <span className="ph-focus-mode">{length(planned)}</span>
+          ) : null}
           {row.state === "skipped" && <span className="ph-focus-flag">Skipped</span>}
           {row.state === "moved" && <span className="ph-focus-flag" data-kind="moved">Moved</span>}
         </span>
@@ -374,9 +389,14 @@ function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolea
           row.item.kind === "task" ? null : <Tap className="ph-focus-undo" aria-label={`Undo ${row.title}`} onClick={() => onAct(row, "undo")} disabled={busy} feel="select">
             <ArrowCounterClockwise size={16} weight="bold" />
           </Tap>
-        ) : row.state === "running" || !session || row.state === "skipped" ? (
+        ) : row.state === "running" ? (
+          // Stop: a block left running stops itself at its end anyway.
+          <Tap className="ph-focus-btn" data-kind="stop" onClick={(event) => onAct(row, "done", event.currentTarget)} disabled={busy} feel={false} squish={0.9}>
+            <Stop size={16} weight="fill" /> Stop
+          </Tap>
+        ) : row.state === "skipped" ? (
           <Tap className="ph-focus-btn" data-kind="done" onClick={(event) => onAct(row, "done", event.currentTarget)} disabled={busy} feel={false} squish={0.9}>
-            <Check size={16} weight="bold" /> {row.state === "skipped" ? "Did it" : "Done"}
+            <Check size={16} weight="bold" /> Did it
           </Tap>
         ) : (
           <Tap className="ph-focus-btn" data-kind="start" onClick={(event) => onAct(row, "start", event.currentTarget)} disabled={busy} feel={false} squish={0.9}>
@@ -388,9 +408,9 @@ function FocusRow({ row, now, busy, onAct }: { row: Row; now: Date; busy: boolea
   );
 }
 
-type Choice = "off" | FocusMode;
+type Choice = "off" | "on";
 
-/** Choose what is serious: every open task and every block, three-way. */
+/** Choose what is serious: every open task and every block, on or off. */
 function PickSheet({ open, onClose, items, tasks, blocks, onChanged }: {
   open: boolean;
   onClose: () => void;
@@ -399,19 +419,18 @@ function PickSheet({ open, onClose, items, tasks, blocks, onChanged }: {
   blocks: ScheduleEvent[];
   onChanged: () => Promise<void> | void;
 }) {
-  const modeOf = (uid?: string): Choice => items.find((item) => item.uid === uid)?.mode ?? "off";
+  const modeOf = (uid?: string): Choice => (items.some((item) => item.uid === uid) ? "on" : "off");
   const choose = async (choice: Choice, record: { task: Task } | { block: ScheduleEvent }) => {
     const uid = "task" in record ? record.task.uid : record.block.uid;
     if (!uid) return;
     haptic(choice === "off" ? "toggle-off" : "toggle-on");
     if (choice === "off") await unmarkSerious(uid).catch(() => undefined);
-    else await markSerious(uid, snapshotOf(record, choice));
+    else await markSerious(uid, snapshotOf(record, "session"));
     await onChanged();
   };
   const options = [
     { value: "off" as const, label: "Off" },
-    { value: "session" as const, label: "Start → Done" },
-    { value: "quick" as const, label: "One tap" },
+    { value: "on" as const, label: "Lock in" },
   ];
   const sortedBlocks = [...blocks]
     .filter((block) => block.kind !== "SESSION" || (parseLocal(block.time_start)?.getTime() ?? 0) > Date.now() - 86_400_000)

@@ -262,8 +262,14 @@ createServer(async (req, res) => {
   else if (path === "/api/focus/stats") result = {
     days: 7, done: 9, skipped: 2, rate: 0.818, minutes: 640, streak: 3, best_streak: 5, perfect_days: 3,
     today: { done: focusEvents.filter((e) => e.status === "done").length, skipped: 0, pending: 1 },
-    series: Array.from({ length: 7 }, (_, i) => ({ date: dayOf(i - 6), done: i % 3 ? 1 : 2, skipped: i === 2 ? 1 : 0, minutes: 60 + i * 10 })),
-    items: [], running: focusEvents.find((e) => e.status === "running") ?? null,
+    series: Array.from({ length: 7 }, (_, i) => ({ date: dayOf(i - 6), done: i % 3 ? 1 : 2, skipped: i === 2 ? 1 : 0, minutes: 60 + i * 10, planned: 90 + i * 5 })),
+    time_kept: 0.72, planned_minutes: 900,
+    items: [
+      { uid: "event-14", title: "Django side project", done: 5, skipped: 1, full: 3, partial: 2, low: 0, untracked: 0, minutes: 420, planned: 630, average: 0.78 },
+      { uid: "event-13", title: "Gym", done: 4, skipped: 0, full: 4, partial: 0, low: 0, untracked: 0, minutes: 240, planned: 240, average: 1 },
+      { uid: "event-15", title: "Evening reading", done: 3, skipped: 2, full: 0, partial: 1, low: 2, untracked: 0, minutes: 50, planned: 300, average: 0.21 },
+    ],
+    running: focusEvents.find((e) => e.status === "running") ?? null,
   };
   else if (path === "/api/focus/catchup" && method === "POST") {
     await new Promise((resolve) => setTimeout(resolve, 2200));

@@ -544,6 +544,34 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-04 (sixth): Start/Stop on every Lock-in, auto-stop at the block's end, "how fully" stats, the whole app black and red
+
+- **Why:** the owner asked:
+  - "for any task it's showing done only; it should show start/stop";
+  - "if we didn't stop until last, it's counted as stopped at the last second";
+  - "what task I'm not doing fully, what's not even half";
+  - "I want the whole theme red and black during the locked in, for boys".
+- **Start/Stop everywhere:** one-tap "Done" is gone. Every Lock-in item shows Start, then the timer and Stop, on Today's card, the timeline, task rows, the Lock-in screen and the notification card.
+  - Once its time has passed it offers "Did it".
+  - Marking is now just Off or "Lock in", with no mode to pick.
+- **Auto-stop** (`focus.close_overdue`): a block's session still running when the block ends is closed at the block's last second, with the minutes up to it. A Stop tapped later counts the same way.
+  - It runs lazily whenever serious mode is read or changed.
+  - Tasks have no end time, so they run until Stop or until ticked off.
+- **How fully** (`focus.stats`):
+  - Each done timed occurrence is classed by its share of the planned time: full (≥90%), part (50–90%), under half, or untracked.
+  - Per item, the average share counts skips as 0.
+  - `time_kept` is the minutes put in over the minutes planned.
+  - Each day carries planned and done minutes.
+  - On screen:
+    - **Stats** has a "How fully" card: "You put in N% of the time you planned", each thing's bar worst first, and the lists "Not doing fully" and "Not even half".
+    - **Lock-in rows** show "45 min of 1h".
+- **The whole app turns during Lock-in:** while a session runs, every colour token goes black and blood-red, in dark and light theme alike. Candy tiles become crimson with white ink, cards go near-black, and text warms to off-white. For "her" the same takeover is black and rose, including the live background.
+- **Validation:**
+  - **Backend:** `lockin_fully_test` (11, new); `serious_mode_test` 20, `focus_week_test` 9 and `catchup_test` 26 still pass.
+  - **Frontend:** `nativeNotifications.test` 42; tsc and ESLint are clean.
+  - **Design preview (fixture):** an old one-tap item showed Start, and Start turned the whole app black and red. The "How fully" card listed "Not doing fully" and "Not even half".
+  - Not yet on the phone.
+
 ### 2026-10-04 (fifth): Start/Stop on Today's first card; Lock-in actually unlocked in JARVIS Public
 
 - **Why:** the owner asked "where is the start button for locked-in tasks/scheduled blocks? I need start, stop on the starting page where it shows the schedule".

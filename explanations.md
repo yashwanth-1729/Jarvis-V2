@@ -128,6 +128,27 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-05 · Claude Code · Start/Stop everywhere, auto-stop, "how fully", full Lock-in theme
+
+- **`services/focus.py`:**
+  - `close_overdue`: a block's running session closes at the window end. It
+    is called in `start`, `finish`, `recent_events` and `stats`.
+  - `stats` items gained `full`/`partial`/`low`/`untracked`/`minutes`/
+    `planned`/`average` (`FULL` 0.9, `HALF` 0.5).
+  - `stats` also gained `time_kept` and `planned_minutes`, and the series
+    gained `planned`.
+  - Test: `lockin_fully_test`.
+- **Mode:**
+  - `quick` is no longer offered. Existing quick items render as Start/Stop
+    and their notifications offer Start.
+  - FocusScreen's PickSheet is Off / "Lock in".
+- **phone.css:** `.ph[data-lockin]` overrides every colour token (black and
+  red). There is a `html[data-persona="her"]` black-and-rose variant, and
+  `LiveBackground` has a `ROSE` palette.
+- **Running in parallel:** the onboarding agent is adding the girl/guy choice
+  and the "her" persona (`persona.css`, PublicContext sets
+  `html[data-persona]`).
+
 ### 2026-10-04 (late night) · Claude Code · Start/Stop on Today's Now card; local Lock-in trial
 
 - **`PublicContext.has("lockin")`** is also true during `localLockinTrial(profile)`:

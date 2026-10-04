@@ -101,7 +101,7 @@ function planner(): void {
   );
   check("Lock-in body: range and minutes", plain(gym?.body ?? "") === "7:00 PM – 8:30 PM · 90 min", gym?.body);
   const deep = plan.lockins.find((a) => a.id === "lockin:deep");
-  check("dated Lock-in is one-off and keeps its quick mode", deep?.weekly === false && deep.triggerAt === at(7, 21, 30) && deep.mode === "quick");
+  check("dated Lock-in is one-off; an old one-tap item now offers Start too", deep?.weekly === false && deep.triggerAt === at(7, 21, 30) && deep.mode === "session");
   const late = plan.lockins.find((a) => a.id === "lockin:late");
   check("over midnight counts the real length", plain(late?.body ?? "") === "10:00 PM – 1:00 AM · 180 min", late?.body);
 

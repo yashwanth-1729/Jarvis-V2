@@ -44,6 +44,28 @@ export interface FocusDay {
   done: number;
   skipped: number;
   minutes: number;
+  /** Planned minutes of that day's timed blocks that were due. */
+  planned: number;
+}
+
+/** One serious thing's record: how often, and how fully (services/focus.py). */
+export interface FocusItemStats {
+  uid: string;
+  title: string;
+  done: number;
+  skipped: number;
+  /** Done for at least 90% of the planned time. */
+  full: number;
+  /** 50-90% of it. */
+  partial: number;
+  /** Under half. */
+  low: number;
+  /** Done without a timed session (a "Did it", or an untimed block or task). */
+  untracked: number;
+  minutes: number;
+  planned: number;
+  /** Average share of planned time, skips counting 0; null when nothing is timed. */
+  average: number | null;
 }
 
 export interface FocusStats {
@@ -57,7 +79,10 @@ export interface FocusStats {
   perfect_days: number;
   today: { done: number; skipped: number; pending: number };
   series: FocusDay[];
-  items: Array<{ uid: string; title: string; done: number; skipped: number }>;
+  /** Minutes put in / minutes planned over timed blocks; null with none due. */
+  time_kept: number | null;
+  planned_minutes: number;
+  items: FocusItemStats[];
   running: FocusEvent | null;
 }
 

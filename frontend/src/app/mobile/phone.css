@@ -2812,3 +2812,96 @@
 @media (prefers-reduced-motion: reduce) {
   .ph-tile-now[data-serious]::before, .ph-tile-now[data-serious="running"] { animation: none; }
 }
+
+/* Lock-in rows: Stop, and how much of the planned time a done one got. */
+.ph-focus .ph-focus-btn[data-kind="stop"] { background: rgba(5, 5, 5, 0.9); color: #ffd0d6; border: 1.5px solid #ff1f3d; }
+.ph-focus .ph-focus-mode[data-share="full"] { border-color: rgba(255, 255, 255, 0.5); color: #fff; }
+.ph-focus .ph-focus-mode[data-share="partial"] { border-color: rgba(255, 77, 94, 0.6); color: #ff8a95; }
+.ph-focus .ph-focus-mode[data-share="low"] { border-color: #c8102e; color: #ff4d5e; background: rgba(200, 16, 46, 0.14); }
+
+/* --- Stats: how fully (FocusStatsScreen HowFully) ---------------------------- */
+.ph-fully-line { margin: 2px 0 10px; color: var(--fg-2); font-size: 14px; font-weight: 600; }
+.ph-fully-line b { color: var(--fg); font: 900 20px/1 var(--font-head); }
+.ph-fully-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ph-fully-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; }
+.ph-fully-name { overflow: hidden; font-size: 14.5px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.ph-fully-pct { font: 800 14px/1 var(--font-num); }
+.ph-fully-pct[data-level="full"] { color: #d4ff3a; }
+.ph-fully-pct[data-level="partial"] { color: #ffc53d; }
+.ph-fully-pct[data-level="low"] { color: #ff4d5e; }
+.ph-fully-bar { display: flex; grid-column: 1 / -1; gap: 3px; height: 10px; overflow: hidden; border-radius: 6px; transform-origin: 0 50%; transform: scaleX(0); transition: transform 0.8s var(--spring-soft, ease); }
+.ph-fully-bar[data-shown="true"] { transform: scaleX(1); }
+.ph-fully-bar span { flex-basis: 0; min-width: 6px; border-radius: 4px; }
+.ph-fully-bar span[data-k="full"], .ph-fully .ph-stats-legend i[data-k="full"] { background: #d4ff3a; }
+.ph-fully-bar span[data-k="partial"], .ph-fully .ph-stats-legend i[data-k="partial"] { background: #ffc53d; }
+.ph-fully-bar span[data-k="low"], .ph-fully .ph-stats-legend i[data-k="low"] { background: #ff4d5e; }
+.ph-fully-bar span[data-k="skip"] { background: repeating-linear-gradient(135deg, #c8102e 0 4px, #4a0610 4px 7px); }
+.ph-fully-call { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0 0; }
+.ph-fully-call b { width: 100%; font: 400 10.5px/1.2 var(--font-tag); letter-spacing: 0.1em; text-transform: uppercase; }
+.ph-fully-call[data-k="partial"] b { color: #ffc53d; }
+.ph-fully-call[data-k="low"] b { color: #ff4d5e; }
+.ph-fully-call[data-k="full"] b { color: #d4ff3a; }
+.ph-fully-call span { padding: 6px 10px; border-radius: 999px; background: var(--card-2); font-size: 13px; font-weight: 700; }
+
+/* ============================================================================
+   Lock-in takes over the whole app (2026-10-04, the owner: "I want the whole
+   theme to be red and black during the locked in"). While a session runs,
+   every colour token turns black and blood-red: candy tiles become crimson
+   shades with white ink, cards go near-black with a red tint, text warms to
+   off-white, light theme included. "her" gets the same intensity in black
+   and rose (html[data-persona="her"], set by PublicProvider).
+   ========================================================================= */
+.ph[data-lockin],
+.ph[data-lockin][data-theme="light"] {
+  --lime: #ff1f3d;
+  --sky: #b3102a;
+  --lilac: #d4143a;
+  --pink: #e0193a;
+  --orange: #c41e1e;
+  --mint: #9e0f24;
+  --amber: #e8323f;
+  --red: #ff1f3d;
+  --ink-on-candy: #fff;
+  --bg: #050505;
+  --bg-under: #000;
+  --bg-elev: #0d0405;
+  --card: #110405;
+  --card-2: #1a0608;
+  --line: rgba(255, 31, 61, 0.14);
+  --line-2: rgba(255, 31, 61, 0.26);
+  --fg: #ffe8ea;
+  --fg-2: rgba(255, 232, 234, 0.7);
+  --fg-3: rgba(255, 232, 234, 0.45);
+  --scrim: rgba(5, 5, 5, 0.78);
+  --accent-text: #ff4d5e;
+  --lift: 0 18px 40px -18px rgba(255, 31, 61, 0.35);
+  color-scheme: dark;
+}
+.ph[data-lockin] [data-tone],
+.ph[data-lockin][data-theme="light"] [data-tone] { --tone-soft: rgba(255, 31, 61, 0.14); --tone-text: #ff6b79; }
+.ph[data-lockin] .ph-app { background: radial-gradient(120% 70% at 50% 0%, rgba(255, 31, 61, 0.1), transparent 60%), #050505; }
+
+html[data-persona="her"] .ph[data-lockin],
+html[data-persona="her"] .ph[data-lockin][data-theme="light"] {
+  --lime: #ff2d78;
+  --sky: #b0124f;
+  --lilac: #d6186a;
+  --pink: #e81f73;
+  --orange: #c4125a;
+  --mint: #9c0e47;
+  --amber: #f0437f;
+  --red: #ff2d78;
+  --line: rgba(255, 45, 120, 0.14);
+  --line-2: rgba(255, 45, 120, 0.26);
+  --fg: #ffe9f1;
+  --fg-2: rgba(255, 233, 241, 0.7);
+  --fg-3: rgba(255, 233, 241, 0.45);
+  --accent-text: #ff5c96;
+  --card: #110409;
+  --card-2: #1a060e;
+  --lift: 0 18px 40px -18px rgba(255, 45, 120, 0.35);
+}
+html[data-persona="her"] .ph[data-lockin] [data-tone] { --tone-soft: rgba(255, 45, 120, 0.14); --tone-text: #ff7aa8; }
+html[data-persona="her"] .ph[data-lockin] .ph-app { background: radial-gradient(120% 70% at 50% 0%, rgba(255, 45, 120, 0.1), transparent 60%), #050505; }
+.ph-fully header { flex-wrap: wrap; row-gap: 6px; }
+.ph-fully .ph-stats-legend { flex-wrap: wrap; }

@@ -605,6 +605,18 @@ enough... more aura... more animations... more black and red".
   breathing red aura, a big red tally, and a red scan sweeping across the
   running row.
 
+**Start/Stop and how fully (2026-10-05).**
+- **Every item is Start → Stop.** One-tap `quick` is no longer offered;
+  existing quick items render the same way.
+- **Auto-stop:** `focus.close_overdue` closes a block's running session at the
+  block's end, with the minutes up to it. It runs lazily from `start`,
+  `finish`, `recent_events` and `stats`.
+- **How fully:** `stats` classes each done, timed occurrence by its share of
+  the planned time: full ≥ 90%, part ≥ 50%, under half below that. It returns
+  each item's average share (skips count 0) and the overall `time_kept`.
+- **Theme:** while a session runs, `.ph[data-lockin]` re-points every colour
+  token to black and red (black and rose under `html[data-persona="her"]`).
+
 ### Catch-up: plans that bend (2026-10-04)
 
 A serious block whose time passed with no Done no longer just turns red.

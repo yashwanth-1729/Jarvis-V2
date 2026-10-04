@@ -27,8 +27,12 @@ const PALETTES: Record<FxScene, string[]> = {
 /** Lock-in: the whole flow goes black and blood-red while a serious session runs. */
 const EMBER = ["#FF1F3D", "#5A0010", "#C8102E", "#1A0004"];
 
+/** Lock-in for "her" (html[data-persona="her"]): black and rose. */
+const ROSE = ["#FF2D78", "#5A0024", "#C4125A", "#1A0008"];
+
 function paletteNow(): string[] {
-  return fxTheme() === "lockin" ? EMBER : PALETTES[fxScene()];
+  if (fxTheme() !== "lockin") return PALETTES[fxScene()];
+  return typeof document !== "undefined" && document.documentElement.dataset.persona === "her" ? ROSE : EMBER;
 }
 
 /** How loud each kind of event is, and in which colour it answers. */

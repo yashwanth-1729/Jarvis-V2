@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from app.core.timeutil import clock_to_minutes, now, now_iso, parse_datetime
+from app.core.timeutil import clock_to_minutes, now, now_iso, parse_datetime, to_iso
 from app.db import database
 
 MODES = ("session", "quick")
@@ -88,6 +88,7 @@ async def _event(uid: str, occurrence: str, status: str) -> dict[str, Any] | Non
 
 async def start(uid: str, occurrence: str | None = None) -> dict[str, Any] | None:
     """Begin a session. Idempotent: a running or finished one is returned as is."""
+    await close_overdue()
     item = await get_item(uid)
     if item is None:
         return None
@@ -103,8 +104,11 @@ async def start(uid: str, occurrence: str | None = None) -> dict[str, Any] | Non
 
 
 async def finish(uid: str, occurrence: str | None = None) -> dict[str, Any] | None:
-    """Done: closes a running session (recording its minutes) or, for a
-    one-tap item, records the completion directly."""
+    """Done (Stop): closes a running session, recording its minutes, or
+    records a completion directly ("Did it" on a missed block, or a task ticked
+    off without a session). A Stop after the block's time is over counts as
+    stopped at its end."""
+    await close_overdue()
     item = await get_item(uid)
     if item is None:
         return None
@@ -138,8 +142,42 @@ async def reset(uid: str, occurrence: str | None = None) -> int:
     )
 
 
+async def close_overdue(current: datetime | None = None) -> int:
+    """Stop sessions whose block is over, at the block's last second.
+
+    2026-10-04, the owner: "if we didn't stop until last ... it is counted as
+    stopped at last second". A block's session that is still running when
+    its time ends is closed at that end, with the minutes up to it. Tasks
+    have no end time: they run until Stop or until they're ticked off. Done
+    lazily, whenever serious mode is read.
+    """
+    current = current or now()
+    rows = await database.db.fetch_all("SELECT * FROM focus_events WHERE status = 'running'")
+    closed = 0
+    for row in rows:
+        item = await get_item(row["item_uid"])
+        if item is None or item["kind"] != "block":
+            continue
+        try:
+            day = date.fromisoformat(row["occurrence"])
+        except ValueError:
+            continue
+        window = block_window(item, day)
+        if window is None or window[1] > current:
+            continue
+        started = parse_datetime(row["started_at"])
+        minutes = round(max(0.0, (window[1] - started).total_seconds() / 60), 1) if started else None
+        await database.db.execute(
+            "UPDATE focus_events SET status = 'done', finished_at = ?, minutes = ? WHERE id = ? AND status = 'running'",
+            (to_iso(window[1]), minutes, row["id"]),
+        )
+        closed += 1
+    return closed
+
+
 async def recent_events(days: int = 2) -> list[dict[str, Any]]:
     """Events the screen needs to show today's state (plus every task's)."""
+    await close_overdue()
     since = (now().date() - timedelta(days=days - 1)).isoformat()
     return await database.db.fetch_all(
         "SELECT * FROM focus_events WHERE occurrence >= ? OR occurrence = ? ORDER BY id",
@@ -172,17 +210,22 @@ async def stats(days: int = 30, current: datetime | None = None) -> dict[str, An
     """Everything the stats screen draws, for the last `days` days."""
     days = max(7, min(120, days))
     current = current or now()
+    await close_overdue(current)
     today = current.date()
     first = today - timedelta(days=days - 1)
     items = await list_items()
+    by_uid = {item["uid"]: item for item in items}
     events = await database.db.fetch_all("SELECT * FROM focus_events ORDER BY id")
 
     series: dict[date, dict[str, Any]] = {
-        first + timedelta(days=i): {"done": 0, "skipped": 0, "minutes": 0.0} for i in range(days)
+        first + timedelta(days=i): {"done": 0, "skipped": 0, "minutes": 0.0, "planned": 0.0} for i in range(days)
     }
     per_item: dict[str, dict[str, Any]] = {}
     done_keys: set[tuple[str, str]] = set()
     running: dict[str, Any] | None = None
+    # How fully: measured minutes against a timed block's planned length.
+    kept_minutes = 0.0
+    kept_planned = 0.0
 
     for event in events:
         if event["status"] == "running":
@@ -197,13 +240,26 @@ async def stats(days: int = 30, current: datetime | None = None) -> dict[str, An
         bucket = series[when.date()]
         bucket["done"] += 1
         bucket["minutes"] += float(event["minutes"] or 0)
-        stat = per_item.setdefault(event["item_uid"], {"uid": event["item_uid"], "title": event["title"], "done": 0, "skipped": 0})
+        stat = per_item.setdefault(event["item_uid"], _blank_stat(event["item_uid"], event["title"]))
         stat["done"] += 1
+        planned = _planned_minutes(by_uid.get(event["item_uid"]), event["occurrence"])
+        if planned and event["minutes"] is not None:
+            spent = min(float(event["minutes"]), planned)
+            ratio = spent / planned
+            stat["ratios"].append(ratio)
+            stat["minutes"] += spent
+            stat["planned"] += planned
+            stat["full" if ratio >= FULL else "partial" if ratio >= HALF else "low"] += 1
+            bucket["planned"] += planned
+            kept_minutes += spent
+            kept_planned += planned
+        else:
+            stat["untracked"] += 1
 
     pending_today = 0
     for item in items:
         created = parse_datetime(item["created_at"]) or current
-        stat = per_item.setdefault(item["uid"], {"uid": item["uid"], "title": item["title"], "done": 0, "skipped": 0})
+        stat = per_item.setdefault(item["uid"], _blank_stat(item["uid"], item["title"]))
         stat["title"] = item["title"]
         if item["kind"] == "task":
             if (item["uid"], TASK_OCCURRENCE) in done_keys:
@@ -223,11 +279,22 @@ async def stats(days: int = 30, current: datetime | None = None) -> dict[str, An
                 if window[1] <= current and not is_running:
                     series[day]["skipped"] += 1
                     stat["skipped"] += 1
+                    planned = _planned_minutes(item, day.isoformat())
+                    if planned:
+                        series[day]["planned"] += planned
+                        stat["planned"] += planned
+                        kept_planned += planned
                 elif day == today:
                     pending_today += 1
             day += timedelta(days=1)
 
-    ordered = [{**series[first + timedelta(days=i)], "date": (first + timedelta(days=i)).isoformat()} for i in range(days)]
+    ordered = [
+        {**series[first + timedelta(days=i)], "date": (first + timedelta(days=i)).isoformat()}
+        for i in range(days)
+    ]
+    for day in ordered:
+        day["minutes"] = round(day["minutes"])
+        day["planned"] = round(day["planned"])
     done_total = sum(day["done"] for day in ordered)
     skipped_total = sum(day["skipped"] for day in ordered)
 
@@ -258,13 +325,38 @@ async def stats(days: int = 30, current: datetime | None = None) -> dict[str, An
         "perfect_days": sum(1 for day in ordered if day["done"] and not day["skipped"]),
         "today": {**{k: ordered[-1][k] for k in ("done", "skipped")}, "pending": pending_today},
         "series": ordered,
+        # How much of the planned time was actually put in (timed blocks only).
+        "time_kept": round(kept_minutes / kept_planned, 3) if kept_planned else None,
+        "planned_minutes": round(kept_planned),
         # Only items with a record yet: a freshly marked block is not a row of zeros.
         "items": sorted(
-            (stat for stat in per_item.values() if stat["done"] or stat["skipped"]),
+            (_finish_stat(stat) for stat in per_item.values() if stat["done"] or stat["skipped"]),
             key=lambda s: (-s["done"], s["skipped"], s["title"]),
         )[:12],
         "running": running,
     }
+
+
+#: An occurrence done for at least this share of its planned time counts as
+#: done fully; under HALF is "not even half".
+FULL = 0.9
+HALF = 0.5
+
+
+def _blank_stat(uid: str, title: str) -> dict[str, Any]:
+    return {"uid": uid, "title": title, "done": 0, "skipped": 0, "full": 0, "partial": 0, "low": 0,
+            "untracked": 0, "minutes": 0.0, "planned": 0.0, "ratios": []}
+
+
+def _finish_stat(stat: dict[str, Any]) -> dict[str, Any]:
+    """One item's line: counts, and its average share of planned time
+    (skips count as 0), or None when nothing about it was timed."""
+    ratios = stat.pop("ratios")
+    timed = ratios + [0.0] * (stat["skipped"] if stat["planned"] else 0)
+    stat["average"] = round(sum(timed) / len(timed), 3) if timed else None
+    stat["minutes"] = round(stat["minutes"])
+    stat["planned"] = round(stat["planned"])
+    return stat
 
 
 def _planned_minutes(item: dict[str, Any] | None, occurrence: str) -> float:

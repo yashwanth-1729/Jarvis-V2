@@ -2,8 +2,9 @@
 
 /**
  * The serious-mode button that lives on a task row or a timeline block:
- * Start → (live timer) Stop for a session item, one-tap Done for a quick one,
- * a "Locked" chip once finished. Starting slams a "LOCKED IN" stamp over a
+ * Start → (live timer) Stop for every item (one-tap Done is gone; a block's
+ * session left running stops itself at the block's end), "Did it" once its
+ * time has passed, a "Locked" chip once finished. Starting slams a "LOCKED IN" stamp over a
  * black-red flash with crimson sparks; finishing stamps "NO SKIP." with
  * white-hot sparks. A serious task
  * finished here is finished on the board too, with the board's Undo.
@@ -126,13 +127,11 @@ export function SeriousControl({ uid, occurrence, task, ended = false }: { uid: 
         <Tap className="ph-serious-btn" data-kind="done" disabled={busy} onClick={(e) => void finish(e.currentTarget)} feel={false} squish={0.9} aria-label={`Did it: ${item.title}`}>
           <Check size={15} weight="bold" /> Did it
         </Tap>
-      ) : item.mode === "session" ? (
+      ) : (
+        // Every Lock-in item is Start, then Stop (2026-10-04, the owner: "if
+        // it is not started, show start; if it is started, show stop").
         <Tap className="ph-serious-btn" data-kind="start" disabled={busy} onClick={(e) => void start(e.currentTarget)} feel={false} squish={0.9} aria-label={`Start: ${item.title}`}>
           <LockSimple size={15} weight="fill" /> Start
-        </Tap>
-      ) : (
-        <Tap className="ph-serious-btn" data-kind="done" disabled={busy} onClick={(e) => void finish(e.currentTarget)} feel={false} squish={0.9} aria-label={`Done: ${item.title}`}>
-          <Check size={15} weight="bold" /> Done
         </Tap>
       )}
     </span>

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { CaretLeft, CheckCircle, Fire, Lightning, Target, Timer, Trophy, XCircle } from "@phosphor-icons/react";
 
-import { fetchFocusStats, type FocusStats } from "@/lib/focus";
+import { fetchFocusStats, type FocusItemStats, type FocusStats } from "@/lib/focus";
 import { emitFx } from "../fx/fxBus";
 import { haptic } from "../lib/haptics";
 import { duration } from "../lib/time";
@@ -169,6 +169,8 @@ export function FocusStatsScreen() {
               </div>
             </section>
 
+            <HowFully stats={stats} shown={shown} />
+
             {stats.items.length > 0 && (
               <section className="ph-stats-card">
                 <header><strong><Trophy size={16} weight="fill" /> Scoreboard</strong></header>
@@ -196,6 +198,61 @@ export function FocusStatsScreen() {
         )}
       </div>
     </Screen>
+  );
+}
+
+/**
+ * How fully things get done (2026-10-04, the owner: "what task I am not doing
+ * fully, what is not doing even half"): each timed thing's average share of
+ * its planned time (skips count 0), split into full / part / under half /
+ * skipped, worst first, with the two lists called out.
+ */
+function HowFully({ stats, shown }: { stats: FocusStats; shown: boolean }) {
+  const timed = stats.items.filter((item): item is FocusItemStats & { average: number } => item.average !== null);
+  if (timed.length === 0) return null;
+  const worstFirst = [...timed].sort((a, b) => a.average - b.average);
+  const notFully = worstFirst.filter((item) => item.average >= 0.5 && item.average < 0.9);
+  const underHalf = worstFirst.filter((item) => item.average < 0.5);
+  const pct = (value: number) => Math.round(value * 100);
+  return (
+    <section className="ph-stats-card ph-fully">
+      <header>
+        <strong><Target size={16} weight="fill" /> How fully</strong>
+        <span className="ph-stats-legend"><i data-k="full" /> full <i data-k="partial" /> part <i data-k="low" /> &lt;half <i data-k="skip" /> skipped</span>
+      </header>
+      {stats.time_kept !== null && (
+        <p className="ph-fully-line">
+          You put in <b><Num value={shown ? pct(stats.time_kept) : 0} />%</b> of the time you planned.
+        </p>
+      )}
+      <ul className="ph-fully-list">
+        {worstFirst.map((item, index) => (
+          <li key={item.uid} style={{ "--i": index } as React.CSSProperties}>
+            <span className="ph-fully-name">{item.title}</span>
+            <span className="ph-fully-pct" data-level={item.average >= 0.9 ? "full" : item.average >= 0.5 ? "partial" : "low"}>{pct(item.average)}%</span>
+            <span className="ph-fully-bar" data-shown={shown} aria-label={`${item.full} full, ${item.partial} part, ${item.low} under half, ${item.skipped} skipped`}>
+              {item.full > 0 && <span data-k="full" style={{ flexGrow: item.full }} />}
+              {item.partial > 0 && <span data-k="partial" style={{ flexGrow: item.partial }} />}
+              {item.low > 0 && <span data-k="low" style={{ flexGrow: item.low }} />}
+              {item.skipped > 0 && <span data-k="skip" style={{ flexGrow: item.skipped }} />}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {notFully.length > 0 && (
+        <p className="ph-fully-call" data-k="partial">
+          <b>Not doing fully</b>
+          {notFully.map((item) => <span key={item.uid}>{item.title} · {pct(item.average)}%</span>)}
+        </p>
+      )}
+      {underHalf.length > 0 && (
+        <p className="ph-fully-call" data-k="low">
+          <b>Not even half</b>
+          {underHalf.map((item) => <span key={item.uid}>{item.title} · {pct(item.average)}%</span>)}
+        </p>
+      )}
+      {notFully.length === 0 && underHalf.length === 0 && <p className="ph-fully-call" data-k="full"><b>Everything gets your full time.</b></p>}
+    </section>
   );
 }
 
