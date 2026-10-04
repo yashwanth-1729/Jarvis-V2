@@ -91,6 +91,26 @@ export function clampPoints(value: number): number {
   return Math.min(POINTS_MAX, Math.max(POINTS_MIN, Math.round(Number.isFinite(value) ? value : DEFAULT_POINTS)));
 }
 
+/**
+ * What a meter value turns into, in words, so the meter means something.
+ * This is the planner's own rule (gateway/app/planner.py SYSTEM): 1-2 once,
+ * 3-4 twice, 5-6 three times, 7-8 four or five, 9-10 five or six, MAX daily.
+ */
+export function pointsMeaning(points: number): string {
+  const value = clampPoints(points);
+  if (value >= POINTS_MAX) return "Every day, best slots";
+  if (value >= 9) return "5–6 times a week";
+  if (value >= 7) return "4–5 times a week";
+  if (value >= 5) return "3 times a week";
+  if (value >= 3) return "Twice a week";
+  return "Once a week";
+}
+
+/** "DSA / coding" → "DSA": the short form used in examples. */
+export function shortName(name: string): string {
+  return name.split(" / ")[0].trim();
+}
+
 /* -------------------------------------------------------------- names */
 
 const EMOJI: Record<string, string> = {

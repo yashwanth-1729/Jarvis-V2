@@ -300,6 +300,27 @@ createServer(async (req, res) => {
       else { const row = { id: focusId++, item_uid: uid, title: item?.title ?? "Lock-in", occurrence, status: "done", started_at: null, finished_at: iso(new Date()), minutes: null }; focusEvents.push(row); result = row; }
     }
   }
+  else if (path === "/v1/plan/week" && method === "POST") {
+    // A stand-in for the gateway planner (JARVIS Public onboarding previews).
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    const timesFor = (p) => (p >= 11 ? 7 : p >= 9 ? 6 : p >= 7 ? 4 : p >= 5 ? 3 : p >= 3 ? 2 : 1);
+    const starts = ["06:30", "17:30", "19:15", "21:00", "07:45", "16:45"];
+    const plus = (clockText, minutes) => { const [h, m] = clockText.split(":").map(Number); const total = h * 60 + m + minutes; return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`; };
+    const phase = (clockText) => { const h = Number(clockText.slice(0, 2)); return h < 12 ? "morning" : h < 17 ? "afternoon" : h < 21 ? "evening" : "night"; };
+    const blocks = [];
+    (body.activities ?? []).forEach((activity, index) => {
+      const times = timesFor(activity.points ?? 5);
+      const length = (activity.points ?? 5) >= 9 ? 90 : 60;
+      const start = starts[index % starts.length];
+      for (let k = 0; k < times; k += 1) {
+        const day = Math.floor((k * 7) / times + index) % 7;
+        blocks.push({ activity: activity.name, day, start, end: plus(start, length), phase: phase(start) });
+      }
+    });
+    if (body.freeTime) for (let day = 0; day < 7; day += 1) blocks.push({ activity: "Free time", day, start: day >= 5 ? "15:00" : "22:00", end: day >= 5 ? "16:30" : "22:45", phase: day >= 5 ? "afternoon" : "night", free: true });
+    const perActivity = (body.activities ?? []).map((activity) => { const mine = blocks.filter((b) => b.activity === activity.name); return { activity: activity.name, timesPerWeek: mine.length, minutesPerSession: (activity.points ?? 5) >= 9 ? 90 : 60 }; });
+    result = { blocks, summary: "Big rocks in the mornings, the rest after college, Sunday light.", perActivity };
+  }
   else if (path === "/api/connectors") result = [];
   else if (path === "/api/location") result = { ok: true };
   else { res.writeHead(404, { "Content-Type": "application/json" }); res.end(JSON.stringify({ detail: "Not available in the isolated UI fixture" })); return; }

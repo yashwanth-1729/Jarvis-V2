@@ -47,7 +47,15 @@ export const EMPTY: Answers = {
   language: null,
 };
 
-export const STEPS = ["boot", "name", "vibe", "stage", "interests", "goals", "enemy", "rhythm", "language", "week", "weekplan", "lockin", "notify", "reveal"] as const;
+/**
+ * The week is four calm screens before the plan (2026-10-04): hours (only
+ * with school, college or work), week (the list), weight (the meters) and
+ * freetime (then build). The manual builder uses "week" alone.
+ */
+export const STEPS = [
+  "boot", "name", "vibe", "stage", "interests", "goals", "enemy", "rhythm", "language",
+  "hours", "week", "weight", "freetime", "weekplan", "lockin", "notify", "reveal",
+] as const;
 export type StepId = (typeof STEPS)[number];
 
 export interface Draft {

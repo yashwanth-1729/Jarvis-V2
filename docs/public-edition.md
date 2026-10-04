@@ -146,8 +146,16 @@ reads "Building your HOLO… 40%".
 9. Language: English, Telugu or Hinglish. Telugu shows a lock for Main
    Character.
 10. Build your week (owner's change, 2026-10-04: one AI-built timetable, not
-    block-by-block entry; simplified the same day after "very hard to add or
-    understand").
+    block-by-block entry; simplified twice the same day after "very hard to add
+    or understand" and "lots of disturbance").
+    - **Now four calm screens:**
+      1. "When's college?" (only for school, college or work);
+      2. "What do you want to do every week?" (one input; three examples from
+         their own goals in the line under the title);
+      3. "How much of your week?" (meters that say what each value means);
+      4. "Free time in your week?"
+    - **The review:** a donut of the week's split and seven day rings. College
+      never shows. The details below still apply.
     - **Ask:**
       - one compact fixed-hours line;
       - one input for what they want or need to do;

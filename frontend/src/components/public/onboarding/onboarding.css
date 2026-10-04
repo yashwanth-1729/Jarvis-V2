@@ -1986,3 +1986,135 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   Your week, as four calm screens (2026-10-04, PlanSteps.tsx): hours, the
+   list, the meters, free time. The review draws the plan as a donut and day
+   rings (WeekCharts.tsx). College never shows there; only their own time.
+   ========================================================================== */
+
+/* 1. When's college? */
+.ob-hours-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px 16px;
+  border-radius: 24px;
+  background: var(--card);
+  border: 1.5px solid var(--line-2);
+}
+.ob-hours-badge {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(124, 199, 255, 0.16);
+  color: var(--sky);
+}
+.ob-hours-none { color: var(--fg-2); font-size: 15px; font-weight: 600; line-height: 1.4; }
+
+/* 2. The list: one input, plain rows. */
+.ob-adder { display: flex; gap: 8px; margin-top: 6px; }
+.ob-add-input { flex: 1; min-width: 0; height: 58px; font-size: 17px; }
+.ob-add-go {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: var(--lime);
+  color: var(--ob-ink);
+  transition: transform 160ms ease, background 160ms ease;
+}
+.ob-add-go:disabled { background: var(--card-2); color: var(--fg-3); }
+.ob-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+.ob-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 18px;
+  background: var(--card);
+  animation: ob-rise var(--spring-snappy-ms) var(--spring-snappy) backwards;
+}
+.ob-list-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--tone); }
+.ob-list-row strong { flex: 1; min-width: 0; overflow: hidden; font: 800 17px/1.15 var(--font-head); letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
+.ob-list-x { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 12px; color: var(--fg-3); }
+.ob-sub b { color: var(--fg); font-weight: 800; }
+
+/* 3. The meters, each with what it turns into. */
+.ob-weights { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 0; padding: 0; list-style: none; }
+.ob-weight {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-radius: 22px;
+  background: var(--card);
+  animation: ob-rise var(--spring-snappy-ms) var(--spring-snappy) backwards;
+  animation-delay: calc(var(--i, 0) * 50ms);
+}
+.ob-weight-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ob-weight-head strong { min-width: 0; overflow: hidden; font: 800 17px/1.15 var(--font-head); letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
+.ob-weight[data-max] .ob-weight-mean { color: #ff4d5e; }
+.ob-weight-mean { flex: none; color: var(--tone-text, var(--fg-2)); font: 700 13px/1 var(--font-body); animation: ob-fade-in 220ms ease; }
+
+/* 4. Free time or strict: two tall cards. */
+.ob-duo-tall .ob-card { min-height: 168px; }
+
+/* The review: how the week splits. */
+.ob-split { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 4px; }
+.ob-ring { position: relative; display: inline-grid; place-items: center; flex: none; }
+.ob-ring svg { display: block; overflow: visible; }
+.ob-ring-track { fill: none; stroke: var(--card-2); }
+.ob-ring-seg { fill: none; stroke: var(--tone); stroke-linecap: butt; }
+.ob-ring-seg[data-free] { stroke: rgba(92, 242, 181, 0.38); }
+.ob-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.ob-donut .ob-ring-center b { font: 900 44px/0.9 var(--font-head); letter-spacing: -0.05em; }
+.ob-donut .ob-ring-center small { margin-top: 4px; color: var(--fg-3); font: 400 10.5px/1 var(--font-tag); letter-spacing: 0.08em; text-transform: uppercase; }
+.ob-legend { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.ob-legend li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 6px 6px 14px; border-radius: 18px; background: var(--card); }
+.ob-legend-dot { flex: none; width: 12px; height: 12px; border-radius: 4px; background: var(--tone); }
+.ob-legend li[data-free] .ob-legend-dot { background: rgba(92, 242, 181, 0.38); }
+.ob-legend-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.ob-legend-text strong { overflow: hidden; font: 800 16px/1.15 var(--font-head); letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
+.ob-legend-text small { color: var(--fg-2); font: 600 12.5px/1.2 var(--font-num); }
+.ob-legend-text em { color: var(--tone-text, var(--fg)); font-style: normal; font-weight: 800; }
+.ob-legend-btns { display: flex; gap: 6px; flex: none; }
+.ob-legend-btn { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--card-2); color: var(--fg-2); }
+.ob-legend-btn[data-on] { background: var(--tone); color: var(--ob-ink); }
+.ob-legend-btn:disabled { opacity: 0.5; }
+
+/* Day by day: seven small rings, then the chosen day's list. */
+.ob-days-view { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.ob-dials { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.ob-dial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 6px;
+  border-radius: 16px;
+  color: var(--fg-3);
+  transition: background 160ms ease, transform 200ms var(--spring-snappy, ease);
+}
+.ob-dial[data-on] { background: var(--card); color: var(--fg); transform: translateY(-2px); }
+.ob-dial[data-on] .ob-ring { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45)); }
+.ob-dial-day { font: 800 13px/1 var(--font-head); }
+.ob-dial[data-today] .ob-dial-day { color: var(--accent-text); }
+.ob-daylist { padding: 14px 14px 10px; border-radius: 22px; background: var(--card); }
+.ob-daylist-name { margin-bottom: 8px; font: 800 18px/1.1 var(--font-head); letter-spacing: -0.03em; }
+.ob-daylist ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.ob-daylist li { display: grid; grid-template-columns: 118px 10px minmax(0, 1fr); align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.ob-daylist li:first-child { border-top: 0; }
+.ob-daylist time { color: var(--fg-2); font: 600 12.5px/1 var(--font-num); white-space: nowrap; }
+.ob-daylist-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--tone); }
+.ob-daylist li[data-free] .ob-daylist-dot { background: transparent; border: 2px solid rgba(92, 242, 181, 0.6); }
+.ob-daylist li[data-free] strong { color: var(--fg-2); font-weight: 600; }
+.ob-daylist strong { overflow: hidden; font-size: 15px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.ob-step-foot .ob-tweak { margin-bottom: 8px; }
+.ob-quiet:has(svg) { display: inline-flex; align-items: center; gap: 6px; }
+.ob-quiet svg { flex: none; }

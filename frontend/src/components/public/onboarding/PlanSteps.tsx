@@ -1,7 +1,20 @@
 "use client";
 
+/**
+ * "Your week", as four calm screens (2026-10-04, after the owner saw people
+ * not understanding what to type, and "lots of disturbance" on one busy
+ * screen):
+ * 1. **When's college?** Only for school, college or work.
+ * 2. **What do you want to do every week?** One input, a plain list.
+ * 3. **How much of your week?** A meter per item, with what it turns into
+ *    ("3 times a week").
+ * 4. **Free time, or strict?** Then "Build my timetable".
+ *
+ * Then the review draws the plan: a donut of how the week splits, and one
+ * ring per day. College never shows there; only their own time does.
+ */
 import * as React from "react";
-import { Backpack, Briefcase, Coffee, GraduationCap, Lightning, LockSimple, Minus, Plus, Target, X } from "@phosphor-icons/react";
+import { Backpack, Briefcase, ChatCircleText, Coffee, GraduationCap, Lightning, LockSimple, Minus, Plus, Target, X } from "@phosphor-icons/react";
 
 import { usePublicOptional } from "@/components/public/PublicContext";
 import { emitFx } from "@/components/phone/fx/fxBus";
@@ -16,7 +29,6 @@ import {
   busyOf,
   clampPoints,
   DEFAULT_POINTS,
-  emojiFor,
   examples,
   FREE_TIME,
   freeTotals,
@@ -25,16 +37,13 @@ import {
   hoursOf,
   MAX_ACTIVITIES,
   MAX_TWEAKS,
-  needsHours,
-  phaseOf,
   planGroups,
   PlanError,
   planWeek,
-  POINTS_MAX,
+  pointsMeaning,
   previousOf,
+  shortName,
   toneFor,
-  type Phase,
-  type PlannedBlock,
   type PlanWeekRequest,
   type PlanWeekResponse,
   type WeekState,
@@ -42,32 +51,22 @@ import {
 import { PointsMeter } from "./PointsMeter";
 import { examName, type Answers } from "./state";
 import { Cta, DayToggles, OptionCard, Quiet, StepFrame } from "./ui";
-import { clock12, createBlock, DAY_LETTERS, DAY_NAMES, daysLabel, friendlySaveError, minutesOf, newId, weekBars, type AddedBlock } from "./weekPlan";
+import { DayDials, hoursText, WeekDonut, type DayDial, type Slice } from "./WeekCharts";
+import { clock12, createBlock, DAY_LETTERS, DAY_NAMES, friendlySaveError, minutesOf, newId, type AddedBlock } from "./weekPlan";
 
 type SetWeek = (update: (week: WeekState) => WeekState) => void;
+
+const EYEBROW = "09 · Your week";
 
 const COOK_LINES = [
   "Finding your golden hours…",
   "Negotiating with your sleep schedule…",
   "Spacing out the hard stuff…",
   "Balancing grind and chill…",
-  "Moving reels to never o'clock…",
   "Double-checking the math…",
 ];
 
 const TWEAK_LINES = ["Reading your notes…", "Moving things around…", "Rebalancing the week…", "Almost there…"];
-
-const PHASE_LABEL: Record<Phase, string> = { morning: "🌅 Morning", afternoon: "☀️ Afternoon", evening: "🌆 Evening", night: "🌙 Night" };
-const PHASES: Phase[] = ["morning", "afternoon", "evening", "night"];
-
-/** What HOLO says when a meter settles. */
-function pointsLine(name: string, points: number): { mood: Mood; line: string } {
-  if (points >= POINTS_MAX) return { mood: "fierce", line: `${name} at MAX. Everything else bends around it.` };
-  if (points >= 8) return { mood: "excited", line: `${name}: a big chunk of your week.` };
-  if (points >= 5) return { mood: "happy", line: `${name}: a solid slice.` };
-  if (points >= 3) return { mood: "smirk", line: `${name}: a little, regularly.` };
-  return { mood: "calm", line: `${name}: just a sprinkle.` };
-}
 
 /** What the planner is asked: their answers so far, the week's wishes, and any tweak. */
 export function requestFor(answers: Answers, week: WeekState, tweak?: Pick<PlanWeekRequest, "previous" | "feedback" | "comment">): PlanWeekRequest {
@@ -152,64 +151,60 @@ function PlanErrorCard({ error, onManual }: { error: PlanError; onManual: () => 
   );
 }
 
-/** College/school/work hours as one line; Edit opens the days and times. */
-function HoursLine({ stage, week, setWeek, react }: { stage: Answers["stage"]; week: WeekState; setWeek: SetWeek; react: (mood: Mood, line: string) => void }) {
-  const [open, setOpen] = React.useState(false);
-  const hours = hoursOf(week, stage);
+/** "5:30–6:30 PM", or "11:30 AM–1 PM" across noon. */
+function range12(start: string, end: string): string {
+  const from = clock12(start);
+  const to = clock12(end);
+  const suffix = (text: string) => text.slice(-2);
+  return suffix(from) === suffix(to) ? `${from.slice(0, -3)}–${to}` : `${from}–${to}`;
+}
+
+/* ------------------------------------------------- 1. when's college? */
+
+export function HoursStep({ answers, week, setWeek, next }: { answers: Answers; week: WeekState; setWeek: SetWeek; next: () => void }) {
+  const stage = answers.stage;
   const label = hoursLabel(stage);
+  const hours = hoursOf(week, stage);
   const Icon = stage === "working" ? Briefcase : stage === "school" ? Backpack : GraduationCap;
-  const setHours = (change: Partial<NonNullable<WeekState["hours"]>>) => setWeek((current) => ({ ...current, hours: { ...hoursOf(current, stage), ...change } }));
-  const summary = hours.off
-    ? `No fixed ${label.toLocaleLowerCase()} hours`
-    : hours.days.length === 0
-      ? `${label} · no days picked`
-      : `${label} · ${daysLabel(hours.days)} · ${clock12(hours.start)}–${clock12(hours.end)}`;
+  const setHours = (change: Partial<NonNullable<WeekState["hours"]>>) =>
+    setWeek((current) => ({ ...current, hours: { ...hoursOf(current, stage), ...change } }));
+  const ready = hours.off || (hours.days.length > 0 && minutesOf(hours.end) > minutesOf(hours.start));
   return (
-    <div className="ob-hours-wrap" data-open={open || undefined}>
-      <div className="ob-hours-line">
-        <span className="ob-hours-icon" aria-hidden="true"><Icon size={17} weight="fill" /></span>
-        <span className="ob-hours-text">{summary}</span>
-        <Tap className="ob-hours-edit" aria-expanded={open} feel="select" squish={0.9} onClick={() => setOpen((current) => !current)}>
-          {open ? "Done" : "Edit"}
-        </Tap>
-      </div>
-      {open && (
-        <div className="ob-hours ob-rise">
-          <Tap
-            className="ob-toggle-chip"
-            data-on={hours.off || undefined}
-            aria-pressed={hours.off}
-            feel={hours.off ? "toggle-off" : "toggle-on"}
-            squish={0.92}
-            onClick={() => {
-              setHours({ off: !hours.off });
-              if (!hours.off) react("cool", "No fixed hours. I'll plan around you.");
-            }}
-          >
-            No fixed hours
-          </Tap>
-          {!hours.off && (
-            <>
-              <DayToggles value={hours.days} tone="sky" onChange={(days) => setHours({ days })} />
-              <div className="ob-times">
-                <div>
-                  <span className="ob-label">From</span>
-                  <TimeInput label={`${label} starts`} value={hours.start} onChange={(start) => setHours({ start })} />
-                </div>
-                <div>
-                  <span className="ob-label">To</span>
-                  <TimeInput label={`${label} ends`} value={hours.end} onChange={(end) => setHours({ end })} />
-                </div>
+    <StepFrame
+      eyebrow={EYEBROW}
+      title={`When's ${label.toLocaleLowerCase()}?`}
+      sub="JARVIS plans only the time around it."
+      footer={<Cta disabled={!ready} onClick={next}>Next</Cta>}
+    >
+      <div className="ob-hours-card" data-off={hours.off || undefined}>
+        <span className="ob-hours-badge" aria-hidden="true"><Icon size={22} weight="fill" /></span>
+        {hours.off ? (
+          <p className="ob-hours-none">No fixed {label.toLocaleLowerCase()} hours. Your whole day is yours to plan.</p>
+        ) : (
+          <>
+            <span className="ob-label">Days</span>
+            <DayToggles value={hours.days} tone="sky" onChange={(days) => setHours({ days })} />
+            <div className="ob-times">
+              <div>
+                <span className="ob-label">From</span>
+                <TimeInput label={`${label} starts`} value={hours.start} onChange={(start) => setHours({ start })} />
               </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+              <div>
+                <span className="ob-label">To</span>
+                <TimeInput label={`${label} ends`} value={hours.end} onChange={(end) => setHours({ end })} />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      <Quiet onClick={() => setHours({ off: !hours.off })}>
+        {hours.off ? `I do have ${label.toLocaleLowerCase()} hours` : `I don't have fixed ${label.toLocaleLowerCase()} hours`}
+      </Quiet>
+    </StepFrame>
   );
 }
 
-/* ------------------------------------------------------------ the ask */
+/* ------------------------------------- 2. what do you want to do weekly? */
 
 export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
   answers: Answers;
@@ -220,20 +215,9 @@ export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
   onManual: () => void;
 }) {
   const items = week.activities;
-  const hints = React.useMemo(() => examples(answers.goals, answers.interests), [answers.goals, answers.interests]);
-  const [hint, setHint] = React.useState(0);
   const [draft, setDraft] = React.useState("");
-  const [error, setError] = React.useState<PlanError | null>(null);
   const input = React.useRef<HTMLInputElement>(null);
-  const { cooking, cook } = useCook();
-
-  // The placeholder quietly cycles through a few of their own examples.
-  React.useEffect(() => {
-    if (hints.length < 2) return;
-    const timer = window.setInterval(() => setHint((current) => (current + 1) % hints.length), 2600);
-    return () => window.clearInterval(timer);
-  }, [hints.length]);
-
+  const ideas = React.useMemo(() => examples(answers.goals, answers.interests).map(shortName), [answers.goals, answers.interests]);
   const same = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
 
   const add = () => {
@@ -241,12 +225,13 @@ export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
     if (!name) return;
     setDraft("");
     input.current?.focus();
+    // Quiet on purpose: HOLO only speaks up when something needs fixing.
     if (same(name, FREE_TIME)) {
-      react("smirk", "Free time is its own question. Just below.");
+      react("smirk", "Free time gets its own question in a moment.");
       return;
     }
     if (items.some((item) => same(item.name, name))) {
-      react("think", `${name}'s already in.`);
+      react("think", `${name}'s already on the list.`);
       return;
     }
     if (items.length >= MAX_ACTIVITIES) {
@@ -256,20 +241,125 @@ export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
     }
     haptic("toggle-on");
     setWeek((current) => ({ ...current, activities: [...current.activities, { name, points: DEFAULT_POINTS }] }));
-    react("excited", `${name}, in. Drag how much of your week it gets.`);
   };
 
   const remove = (name: string) => setWeek((current) => ({ ...current, activities: current.activities.filter((item) => !same(item.name, name)) }));
+
+  if (week.saved) {
+    return (
+      <StepFrame eyebrow={EYEBROW} title="Your week's locked in." sub="It's already in your Plan. Change anything there, anytime." footer={<Cta onClick={next}>See it</Cta>}>
+        <span />
+      </StepFrame>
+    );
+  }
+
+  const [a, b, c] = ideas.length >= 3 ? ideas : ["Gym", "DSA", "Guitar"];
+  return (
+    <StepFrame
+      eyebrow={EYEBROW}
+      title="What do you want to do every week?"
+      sub={
+        <>
+          Type one thing at a time, like <b>{a}</b>, <b>{b}</b> or <b>{c}</b>. JARVIS fits them into your free time.
+        </>
+      }
+      footer={
+        <>
+          <Cta disabled={items.length === 0} arrow={items.length > 0} onClick={next}>
+            {items.length === 0 ? "Add at least one" : "Next"}
+          </Cta>
+          <Quiet onClick={onManual}>I&apos;ll set it up myself</Quiet>
+        </>
+      }
+    >
+      <form
+        className="ob-adder"
+        onSubmit={(event) => {
+          event.preventDefault();
+          add();
+        }}
+      >
+        <input
+          ref={input}
+          className="ob-input ob-add-input"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value.slice(0, 40))}
+          placeholder="Type one thing…"
+          aria-label="Something you want or need to do every week"
+          maxLength={40}
+          enterKeyHint="done"
+          autoCapitalize="sentences"
+        />
+        <Tap type="submit" className="ob-add-go" feel={false} squish={0.9} disabled={!draft.trim()} aria-label="Add">
+          <Plus size={20} weight="bold" aria-hidden="true" />
+        </Tap>
+      </form>
+
+      {items.length > 0 && (
+        <ul className="ob-list" aria-label="Your list">
+          {items.map((item, index) => (
+            <li key={item.name} className="ob-list-row" data-tone={toneFor(item.name, items)} style={{ "--i": index } as React.CSSProperties}>
+              <span className="ob-list-dot" aria-hidden="true" />
+              <strong>{item.name}</strong>
+              <Tap className="ob-list-x" aria-label={`Remove ${item.name}`} feel="toggle-off" squish={0.85} onClick={() => remove(item.name)}>
+                <X size={14} weight="bold" />
+              </Tap>
+            </li>
+          ))}
+        </ul>
+      )}
+    </StepFrame>
+  );
+}
+
+/* ------------------------------------------- 3. how much of your week? */
+
+export function WeightStep({ week, setWeek, next }: { week: WeekState; setWeek: SetWeek; next: () => void }) {
+  const items = week.activities;
   const setPoints = (name: string, points: number) =>
     setWeek((current) => ({ ...current, activities: current.activities.map((item) => (item.name === name ? { ...item, points } : item)) }));
-  const chooseFree = (freeTime: boolean) => {
-    setWeek((current) => ({ ...current, freeTime }));
-    react(freeTime ? "calm" : "fierce", freeTime ? "Breathing room it is. I'll leave gaps that are just yours." : "Strict it is. Every hour gets a job.");
-  };
+  return (
+    <StepFrame
+      eyebrow={EYEBROW}
+      title="How much of your week?"
+      sub="Drag each one. MAX means as much as possible."
+      footer={<Cta disabled={items.length === 0} onClick={next}>Next</Cta>}
+    >
+      <ul className="ob-weights">
+        {items.map((item, index) => {
+          const tone = toneFor(item.name, items);
+          const points = clampPoints(item.points);
+          return (
+            <li key={item.name} className="ob-weight" data-tone={tone} data-max={points >= 11 || undefined} style={{ "--i": index } as React.CSSProperties}>
+              <div className="ob-weight-head">
+                <strong>{item.name}</strong>
+                <span key={pointsMeaning(points)} className="ob-weight-mean">{pointsMeaning(points)}</span>
+              </div>
+              <PointsMeter value={points} label={item.name} tone={tone} onChange={(value) => setPoints(item.name, value)} />
+            </li>
+          );
+        })}
+      </ul>
+    </StepFrame>
+  );
+}
 
-  const ready = items.length > 0 && week.freeTime !== null;
+/* ------------------------------------------- 4. free time, or strict? */
+
+export function FreeTimeStep({ answers, week, setWeek, react, next, onManual }: {
+  answers: Answers;
+  week: WeekState;
+  setWeek: SetWeek;
+  react: (mood: Mood, line: string) => void;
+  next: () => void;
+  onManual: () => void;
+}) {
+  const [error, setError] = React.useState<PlanError | null>(null);
+  const { cooking, cook } = useCook();
+  const choose = (freeTime: boolean) => setWeek((current) => ({ ...current, freeTime }));
+
   const build = async () => {
-    if (cooking || !ready) return;
+    if (cooking || week.freeTime === null || week.activities.length === 0) return;
     setError(null);
     react("think", "Building it. Give me a few seconds.");
     const result = await cook(requestFor(answers, week));
@@ -287,113 +377,37 @@ export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
     }
   };
 
-  if (week.saved) {
-    return (
-      <StepFrame
-        eyebrow="09 · Your week"
-        title="Your week's locked in."
-        sub="It's already in your Plan. Change anything there, anytime."
-        footer={<Cta onClick={next}>See it</Cta>}
-      >
-        <span />
-      </StepFrame>
-    );
-  }
-
   return (
     <div className="ob-step">
       <StepFrame
-        eyebrow="09 · Your week"
-        title="What goes in your week?"
-        sub="Add what you want or need to do. JARVIS turns it into your timetable."
+        eyebrow={EYEBROW}
+        title="Free time in your week?"
+        sub="Gaps that are just yours, or every hour planned."
         footer={
-          <>
-            <Cta disabled={!ready} busy={cooking} arrow={ready} onClick={() => void build()}>
-              {cooking ? "Building…" : items.length === 0 ? "Add at least one thing" : week.freeTime === null ? "Free blocks or strict?" : "Build my timetable"}
-            </Cta>
-            {!cooking && <Quiet onClick={onManual}>I&apos;ll set it up myself</Quiet>}
-          </>
+          <Cta disabled={week.freeTime === null} busy={cooking} arrow={week.freeTime !== null} onClick={() => void build()}>
+            {cooking ? "Building…" : "Build my timetable"}
+          </Cta>
         }
       >
-        {needsHours(answers.stage) && <HoursLine stage={answers.stage} week={week} setWeek={setWeek} react={react} />}
-
-        <form
-          className="ob-own ob-add-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            add();
-          }}
-        >
-          <input
-            ref={input}
-            className="ob-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value.slice(0, 40))}
-            placeholder={hints.length ? `e.g. ${hints[hint % hints.length]}` : "e.g. Gym"}
-            aria-label="Something you want or need to do each week"
-            maxLength={40}
-            enterKeyHint="done"
-            autoCapitalize="sentences"
+        <div className="ob-duo ob-duo-tall" role="radiogroup" aria-label="Free time in your week">
+          <OptionCard
+            on={week.freeTime === true}
+            tone="mint"
+            emoji={<Coffee size={30} weight="duotone" />}
+            title="Yes, leave me free time"
+            line="Breathing room between things"
+            onClick={() => choose(true)}
           />
-          <Tap type="submit" className="ob-add-btn" feel={false} squish={0.9} disabled={!draft.trim()}>
-            <Plus size={18} weight="bold" aria-hidden="true" /> Add
-          </Tap>
-        </form>
-
-        {items.length > 0 && (
-          <section className="ob-section ob-items">
-            <span className="ob-caption">How much of your week?</span>
-            <ul className="ob-acts">
-              {items.map((item, index) => {
-                const tone = toneFor(item.name, items);
-                return (
-                  <li key={item.name} className="ob-act ob-rise" data-tone={tone} style={{ "--i": index } as React.CSSProperties}>
-                    <div className="ob-act-head">
-                      <span className="ob-act-dot" aria-hidden="true" />
-                      <strong>{item.name}</strong>
-                      <Tap className="ob-act-x" aria-label={`Remove ${item.name}`} feel="toggle-off" squish={0.85} onClick={() => remove(item.name)}>
-                        <X size={14} weight="bold" />
-                      </Tap>
-                    </div>
-                    <PointsMeter
-                      value={clampPoints(item.points)}
-                      label={item.name}
-                      tone={tone}
-                      onChange={(points) => setPoints(item.name, points)}
-                      onCommit={(points) => {
-                        const said = pointsLine(item.name, points);
-                        react(said.mood, said.line);
-                      }}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        <section className="ob-section">
-          <h3 className="ob-q">Free blocks in your week?</h3>
-          <div className="ob-duo" role="radiogroup" aria-label="Free blocks in your week">
-            <OptionCard
-              on={week.freeTime === true}
-              tone="mint"
-              emoji={<Coffee size={30} weight="duotone" />}
-              title="Yes, leave me free time"
-              line="Breathing room between things"
-              onClick={() => chooseFree(true)}
-            />
-            <OptionCard
-              on={week.freeTime === false}
-              tone="red"
-              emoji={<Target size={30} weight="duotone" />}
-              title="No, strict timetable"
-              line="Every hour gets a job"
-              index={1}
-              onClick={() => chooseFree(false)}
-            />
-          </div>
-        </section>
+          <OptionCard
+            on={week.freeTime === false}
+            tone="red"
+            emoji={<Target size={30} weight="duotone" />}
+            title="No, keep it strict"
+            line="Every hour has a job"
+            index={1}
+            onClick={() => choose(false)}
+          />
+        </div>
         {error && <PlanErrorCard error={error} onManual={onManual} />}
       </StepFrame>
       {cooking && <Cooking title="Building your week…" lines={COOK_LINES} />}
@@ -416,40 +430,77 @@ export function PlanReviewStep({ answers, week, setWeek, blocks, onAdded, react,
   const { app, mode } = useAppData();
   const plan = week.plan;
   const busy = busyOf(week, answers.stage);
-  const [day, setDay] = React.useState(() => (new Date().getDay() + 6) % 7);
+  const today = (new Date().getDay() + 6) % 7;
+  const [day, setDay] = React.useState(today);
   const [feedback, setFeedback] = React.useState<Record<string, "less" | "more">>({});
   const [comment, setComment] = React.useState("");
+  const [talking, setTalking] = React.useState(false);
   const [error, setError] = React.useState<PlanError | null>(null);
   const [saving, setSaving] = React.useState<{ done: number; total: number } | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  const grid = React.useRef<HTMLDivElement>(null);
+  const chart = React.useRef<HTMLDivElement>(null);
   const alive = React.useRef(true);
-  React.useEffect(() => () => {
-    alive.current = false;
+  React.useEffect(() => {
+    // Set here too: a development remount (StrictMode) runs the cleanup once.
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
   }, []);
   const { cooking, cook } = useCook();
 
   if (!plan) {
     return (
-      <StepFrame eyebrow="09 · Your week" title="No plan yet." sub="Go back and tell me what goes in your week." footer={<Cta onClick={onManual}>Set it up myself</Cta>}>
+      <StepFrame eyebrow={EYEBROW} title="No plan yet." sub="Go back and tell me what goes in your week." footer={<Cta onClick={onManual}>Set it up myself</Cta>}>
         <span />
       </StepFrame>
     );
   }
 
-  const groups = planGroups(plan, busy, answers.stage, week.activities);
-  const bars = weekBars(
-    groups.map((group, index) => ({ ...group, id: group.template === "planned" ? `plan-${index}` : group.template === "free" ? `free-${index}` : "busy" })),
-  );
-  const today = (new Date().getDay() + 6) % 7;
+  const activities = week.activities;
   const totals = activityTotals(plan);
   const free = freeTotals(plan);
   const tweaksLeft = MAX_TWEAKS - week.tweaks;
   const changes = Object.keys(feedback).length > 0 || comment.trim().length > 0;
   const locked = week.saved;
 
-  const slots: Array<PlannedBlock & { busy?: boolean }> = plan.blocks.filter((block) => block.day === day);
-  if (busy && busy.days.includes(day)) slots.push({ activity: busy.label, day, start: busy.start, end: busy.end, phase: phaseOf(busy.start), busy: true });
+  // The waking day, which each day's ring goes round.
+  const wake = minutesOf(answers.wake || "07:00");
+  let sleep = minutesOf(answers.sleep || "23:00");
+  if (sleep <= wake) sleep = 24 * 60;
+  const span = Math.max(60, sleep - wake);
+  const at = (clock: string) => Math.min(1, Math.max(0, (minutesOf(clock) - wake) / span));
+
+  const minutesOfBlock = (start: string, end: string) => {
+    const length = minutesOf(end) - minutesOf(start);
+    return length <= 0 ? length + 1440 : length;
+  };
+  const freeMinutes = plan.blocks.filter((block) => block.free).reduce((sum, block) => sum + minutesOfBlock(block.start, block.end), 0);
+  const slices: Slice[] = [
+    ...totals.map((total) => ({
+      key: total.activity,
+      minutes: plan.blocks.filter((block) => !block.free && block.activity === total.activity).reduce((sum, block) => sum + minutesOfBlock(block.start, block.end), 0),
+      tone: toneFor(total.activity, activities),
+    })),
+    ...(free.blocks > 0 ? [{ key: FREE_TIME, minutes: freeMinutes, tone: "mint" as const, free: true }] : []),
+  ].filter((slice) => slice.minutes > 0);
+
+  const dials: DayDial[] = DAY_LETTERS.map((letter, index) => ({
+    index,
+    letter,
+    label: `${DAY_NAMES[index]}: ${plan.blocks.filter((block) => block.day === index && !block.free).length} things`,
+    segments: plan.blocks
+      .filter((block) => block.day === index)
+      .sort((x, y) => minutesOf(x.start) - minutesOf(y.start))
+      .map((block, order) => ({
+        key: `${block.activity}-${block.start}-${order}`,
+        from: at(block.start),
+        to: Math.max(at(block.start) + 0.012, at(block.end)),
+        tone: toneFor(block.activity, activities),
+        free: block.free,
+      })),
+  }));
+  const slots = plan.blocks.filter((block) => block.day === day).sort((x, y) => minutesOf(x.start) - minutesOf(y.start));
 
   const nudge = (activity: string, change: "less" | "more") => {
     setFeedback((current) => {
@@ -458,7 +509,6 @@ export function PlanReviewStep({ answers, week, setWeek, blocks, onAdded, react,
       else nextFeedback[activity] = change;
       return nextFeedback;
     });
-    react(change === "less" ? "calm" : "fierce", change === "less" ? `Less ${activity}. Noted.` : `More ${activity}. Love the ambition.`);
   };
 
   const tweak = async () => {
@@ -477,8 +527,9 @@ export function PlanReviewStep({ answers, week, setWeek, blocks, onAdded, react,
       setWeek((current) => ({ ...current, plan: fresh, tweaks: current.tweaks + 1 }));
       setFeedback({});
       setComment("");
+      setTalking(false);
       haptic("success");
-      emitFx("success", grid.current);
+      emitFx("success", chart.current);
       react("excited", fresh.summary ? `Remixed. ${fresh.summary}`.slice(0, 160) : "Remixed. Better?");
       return;
     }
@@ -490,9 +541,11 @@ export function PlanReviewStep({ answers, week, setWeek, blocks, onAdded, react,
   };
 
   // Save what is not saved yet, entry by entry, so a retry never doubles up.
+  // Fixed hours are saved too (they're their real week); they just aren't drawn here.
   const save = async () => {
     if (saving || cooking) return;
     setSaveError(null);
+    const groups = planGroups(plan, busy, answers.stage, activities);
     const todo = groups
       .map((group) => {
         const done = blocks.filter((block) => groupKey(block) === groupKey(group)).flatMap((block) => block.days);
@@ -524,158 +577,125 @@ export function PlanReviewStep({ answers, week, setWeek, blocks, onAdded, react,
     setWeek((current) => ({ ...current, saved: true }));
     haptic("heavy");
     react("fierce", "Locked into your Plan. Now we make it real.");
-    // Only move on if they are still here (back mid-save keeps them where they went).
     if (alive.current) next();
   };
 
   return (
     <div className="ob-step">
       <StepFrame
-        eyebrow="09 · Your week"
+        eyebrow={EYEBROW}
         title="Here's your week."
-        sub={locked ? "It's in your Plan. Change anything there, anytime." : "Tap a day to peek. Too much of something? Tell me."}
+        sub={locked ? "It's in your Plan. Change anything there, anytime." : "Too much or too little of something? Tap − or +."}
         footer={
           locked ? (
             <Cta onClick={next}>Next</Cta>
           ) : (
-            <Cta variant="lock" icon={<LockSimple size={19} weight="fill" />} busy={Boolean(saving)} disabled={cooking} onClick={() => void save()}>
-              {saving ? `Saving… ${saving.done}/${saving.total}` : "Lock it in"}
-            </Cta>
+            <>
+              {changes && (
+                <Tap className="ob-tweak" feel="heavy" squish={0.95} disabled={tweaksLeft <= 0 || cooking} onClick={() => void tweak()}>
+                  <Lightning size={18} weight="fill" aria-hidden="true" />
+                  {tweaksLeft <= 0 ? "No tweaks left. Edit it later in Plan." : `Rebuild with my changes · ${tweaksLeft} left`}
+                </Tap>
+              )}
+              <Cta variant="lock" icon={<LockSimple size={19} weight="fill" />} busy={Boolean(saving)} disabled={cooking} onClick={() => void save()}>
+                {saving ? `Saving… ${saving.done}/${saving.total}` : "Lock it in"}
+              </Cta>
+            </>
           )
         }
       >
-        <div ref={grid} className="ob-week ob-week-pick" role="tablist" aria-label="Days">
-          <div className="ob-week-hours" aria-hidden="true">
-            <span style={{ top: "25%" }}>6a</span>
-            <span style={{ top: "50%" }}>12p</span>
-            <span style={{ top: "75%" }}>6p</span>
-          </div>
-          {DAY_LETTERS.map((letter, index) => (
-            <button
-              key={index}
-              type="button"
-              role="tab"
-              aria-selected={day === index}
-              aria-label={`${DAY_NAMES[index]}, ${plan.blocks.filter((block) => block.day === index && !block.free).length} blocks`}
-              className="ob-week-col"
-              data-today={index === today || undefined}
-              data-on={day === index || undefined}
-              onClick={() => {
-                haptic("select");
-                setDay(index);
-              }}
-            >
-              <span className="ob-week-day">{letter}</span>
-              <span className="ob-week-track">
-                {bars.filter((bar) => bar.day === index).map((bar) => (
-                  <span
-                    key={`${bar.key}-${week.tweaks}`}
-                    className="ob-bar"
-                    data-tone={bar.tone}
-                    data-busy={bar.block === "busy" || undefined}
-                    data-free={bar.block.startsWith("free-") || undefined}
-                    style={{ top: `${bar.top}%`, height: `${bar.height}%`, "--i": bar.from } as React.CSSProperties}
-                  />
-                ))}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="ob-dayplan" role="tabpanel" aria-label={DAY_NAMES[day]}>
-          <h3 className="ob-q">{DAY_NAMES[day]}</h3>
-          {slots.length === 0 && <p className="ob-hint">Rest day. Nothing planned.</p>}
-          {PHASES.map((phase) => {
-            const items = slots.filter((slot) => slot.phase === phase).sort((a, b) => minutesOf(a.start) - minutesOf(b.start));
-            if (items.length === 0) return null;
-            return (
-              <section key={phase} className="ob-phase">
-                <span className="ob-label">{PHASE_LABEL[phase]}</span>
-                <ul>
-                  {items.map((slot) => (
-                    <li
-                      key={`${slot.activity}-${slot.start}`}
-                      className="ob-slot"
-                      data-busy={slot.busy || undefined}
-                      data-free={slot.free || undefined}
-                      data-tone={slot.busy || slot.free ? undefined : toneFor(slot.activity, week.activities)}
-                    >
-                      <span className="ob-slot-time">{clock12(slot.start)}–{clock12(slot.end)}</span>
-                      <span className="ob-slot-name">
-                        <span className="ob-slot-icon" aria-hidden="true">
-                          {slot.busy ? <LockSimple size={14} weight="fill" /> : slot.free ? <Coffee size={15} weight="duotone" /> : emojiFor(slot.activity)}
-                        </span>{" "}
-                        {slot.activity}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
-
-        <section className="ob-section">
-          <h3 className="ob-q">Per week</h3>
-          <ul className="ob-tally">
+        <section ref={chart} className="ob-split" aria-label="How your week splits">
+          <WeekDonut key={`donut-${week.tweaks}`} slices={slices} />
+          <ul className="ob-legend">
             {totals.map((total) => {
               const said = feedback[total.activity];
               return (
-                <li key={total.activity} data-tone={toneFor(total.activity, week.activities)} data-said={said}>
-                  <span className="ob-tally-emoji" aria-hidden="true">{emojiFor(total.activity)}</span>
-                  <span className="ob-tally-text">
+                <li key={total.activity} data-tone={toneFor(total.activity, activities)} data-said={said}>
+                  <span className="ob-legend-dot" aria-hidden="true" />
+                  <span className="ob-legend-text">
                     <strong>{total.activity}</strong>
                     <small>
-                      {total.timesPerWeek}×/week · {total.minutesPerSession} min
-                      {said && <em> · {said === "less" ? "less, please" : "more, please"}</em>}
+                      {total.timesPerWeek}× · {hoursText(total.minutesPerSession)}
+                      {said && <em> · {said === "less" ? "less" : "more"}</em>}
                     </small>
                   </span>
                   {!locked && (
-                    <>
-                      <Tap className="ob-tally-btn" aria-label={`Too much ${total.activity}`} aria-pressed={said === "less"} data-on={said === "less" || undefined} feel="select" squish={0.85} disabled={cooking} onClick={() => nudge(total.activity, "less")}>
-                        <Minus size={16} weight="bold" />
+                    <span className="ob-legend-btns">
+                      <Tap className="ob-legend-btn" aria-label={`Less ${total.activity}`} aria-pressed={said === "less"} data-on={said === "less" || undefined} feel="select" squish={0.85} disabled={cooking} onClick={() => nudge(total.activity, "less")}>
+                        <Minus size={15} weight="bold" />
                       </Tap>
-                      <Tap className="ob-tally-btn" aria-label={`Too little ${total.activity}`} aria-pressed={said === "more"} data-on={said === "more" || undefined} feel="select" squish={0.85} disabled={cooking} onClick={() => nudge(total.activity, "more")}>
-                        <Plus size={16} weight="bold" />
+                      <Tap className="ob-legend-btn" aria-label={`More ${total.activity}`} aria-pressed={said === "more"} data-on={said === "more" || undefined} feel="select" squish={0.85} disabled={cooking} onClick={() => nudge(total.activity, "more")}>
+                        <Plus size={15} weight="bold" />
                       </Tap>
-                    </>
+                    </span>
                   )}
                 </li>
               );
             })}
             {free.blocks > 0 && (
               <li data-free>
-                <span className="ob-tally-emoji" aria-hidden="true"><Coffee size={18} weight="duotone" /></span>
-                <span className="ob-tally-text">
+                <span className="ob-legend-dot" aria-hidden="true" />
+                <span className="ob-legend-text">
                   <strong>{FREE_TIME}</strong>
-                  <small>{free.blocks} block{free.blocks === 1 ? "" : "s"} · {free.hours} h/week, just yours</small>
+                  <small>{hoursText(freeMinutes)} a week, just yours</small>
                 </span>
               </li>
             )}
           </ul>
         </section>
 
-        {!locked && (
-          <section className="ob-section ob-tweak-box">
-            <textarea
-              className="ob-input ob-comment"
-              value={comment}
-              onChange={(event) => setComment(event.target.value.slice(0, 300))}
-              placeholder="Anything off? e.g. no gym on Sundays, DSA earlier"
-              aria-label="Comments for HOLO"
-              maxLength={300}
-              rows={2}
-            />
-            <Tap className="ob-tweak" feel="heavy" squish={0.95} disabled={!changes || tweaksLeft <= 0 || cooking} onClick={() => void tweak()}>
-              <Lightning size={18} weight="fill" aria-hidden="true" />
-              {tweaksLeft <= 0 ? "No tweaks left. Edit it later in Plan." : `Tweak it · ${tweaksLeft} left`}
-            </Tap>
-            {error && <PlanErrorCard error={error} onManual={onManual} />}
-          </section>
-        )}
+        <section className="ob-days-view" aria-label="Day by day">
+          <DayDials
+            key={`dials-${week.tweaks}`}
+            days={dials}
+            selected={day}
+            today={today}
+            onSelect={(index) => {
+              haptic("select");
+              setDay(index);
+            }}
+          />
+          <div className="ob-daylist" role="tabpanel" aria-label={DAY_NAMES[day]}>
+            <h3 className="ob-daylist-name">{DAY_NAMES[day]}</h3>
+            {slots.length === 0 ? (
+              <p className="ob-hint">Nothing planned. A rest day.</p>
+            ) : (
+              <ul>
+                {slots.map((slot) => (
+                  <li key={`${slot.activity}-${slot.start}`} data-tone={slot.free ? undefined : toneFor(slot.activity, activities)} data-free={slot.free || undefined}>
+                    <time>{range12(slot.start, slot.end)}</time>
+                    <span className="ob-daylist-dot" aria-hidden="true" />
+                    <strong>{slot.free ? FREE_TIME : slot.activity}</strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {!locked &&
+          (talking ? (
+            <section className="ob-section ob-tweak-box">
+              <textarea
+                className="ob-input ob-comment"
+                value={comment}
+                onChange={(event) => setComment(event.target.value.slice(0, 300))}
+                placeholder="e.g. no gym on Sundays, DSA in the mornings"
+                aria-label="What should change"
+                maxLength={300}
+                rows={2}
+                autoFocus
+              />
+            </section>
+          ) : (
+            <Quiet onClick={() => setTalking(true)}>
+              <ChatCircleText size={16} weight="bold" aria-hidden="true" /> Something else off? Tell JARVIS
+            </Quiet>
+          ))}
+        {error && <PlanErrorCard error={error} onManual={onManual} />}
         {saveError && <p className="ob-error" role="alert">{saveError}</p>}
       </StepFrame>
-      {cooking && <Cooking title="Tweaking your week…" lines={TWEAK_LINES} />}
+      {cooking && <Cooking title="Rebuilding your week…" lines={TWEAK_LINES} />}
     </div>
   );
 }

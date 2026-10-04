@@ -58,6 +58,25 @@
         "NEXT_PUBLIC_API_BASE": "http://127.0.0.1:8101",
         "NODE_OPTIONS": "--max-old-space-size=3072"
       }
+    },
+    {
+      "name": "public-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3200"
+      ],
+      "cwd": "frontend",
+      "port": 3200,
+      "env": {
+        "NEXT_PUBLIC_JARVIS_EDITION": "public",
+        "NEXT_PUBLIC_API_BASE": "http://127.0.0.1:8101",
+        "NEXT_PUBLIC_HOLO_GATEWAY_URL": "http://127.0.0.1:8101",
+        "NODE_OPTIONS": "--max-old-space-size=3072"
+      }
     }
   ]
 }

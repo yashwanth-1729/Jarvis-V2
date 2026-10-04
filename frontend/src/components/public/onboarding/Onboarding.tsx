@@ -38,8 +38,8 @@ import type { Mood } from "./content";
 import { Bubble, Holo } from "./Holo";
 import { LockinStep } from "./LockinStep";
 import { NotifyStep } from "./NotifyStep";
-import { EMPTY_WEEK, type WeekState } from "./planWeek";
-import { PlanAskStep, PlanReviewStep } from "./PlanSteps";
+import { EMPTY_WEEK, needsHours, type WeekState } from "./planWeek";
+import { FreeTimeStep, HoursStep, PlanAskStep, PlanReviewStep, WeightStep } from "./PlanSteps";
 import { RevealStep } from "./RevealStep";
 import { buildProfile, clearDraft, EMPTY, loadDraft, saveDraft, STEPS, type Answers, type StepId } from "./state";
 import { WeekStep } from "./WeekStep";
@@ -59,7 +59,10 @@ const SCENES: Record<StepId, FxScene> = {
   enemy: "tasks",
   rhythm: "plan",
   language: "plan",
+  hours: "plan",
   week: "plan",
+  weight: "plan",
+  freetime: "plan",
   weekplan: "plan",
   lockin: "tasks",
   notify: "today",
@@ -88,10 +91,16 @@ function opener(step: StepId, answers: Answers, week: WeekState): { mood: Mood; 
       return { mood: "sleepy", line: "Drag the sliders. No lying about the 2 a.m. thing." };
     case "language":
       return { mood: "happy", line: "Pick the one that feels like home." };
+    case "hours":
+      return { mood: "think", line: "So I only plan around it." };
     case "week":
       if (week.mode === "manual") return { mood: "excited", line: "Add your regulars. Real entries, straight into your Plan." };
       if (week.saved) return { mood: "happy", line: "Already in your Plan. Nice." };
-      return { mood: "excited", line: "List your stuff. I'll turn it into a schedule." };
+      return { mood: "happy", line: "Just the list. I'll do the timetable." };
+    case "weight":
+      return { mood: "excited", line: "Drag it. I'll turn it into days and times." };
+    case "freetime":
+      return { mood: "calm", line: "Last one. Then I build it." };
     case "weekplan":
       return { mood: "excited", line: week.plan?.summary ? week.plan.summary.slice(0, 160) : "Fresh out the oven. Tap a day to peek." };
     case "lockin":
@@ -130,8 +139,14 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   const resumed = React.useRef(false);
 
   const flow = React.useMemo(
-    () => STEPS.filter((id) => (id !== "lockin" || lockable(blocks)) && (id !== "weekplan" || week.mode === "auto")),
-    [blocks, week.mode],
+    () =>
+      STEPS.filter((id) => {
+        if (id === "lockin") return lockable(blocks);
+        // The planner's screens belong to the AI week; the manual builder is "week" alone.
+        if (AUTO_ONLY.includes(id)) return week.mode === "auto" && (id !== "hours" || needsHours(answers.stage));
+        return true;
+      }),
+    [blocks, week.mode, answers.stage],
   );
   const index = Math.max(0, flow.indexOf(step));
   const latest = React.useRef({ flow, step, answers, mustDo, week });
@@ -141,8 +156,13 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   useClientLayoutEffect(() => {
     const draft = loadDraft();
     if (draft) {
-      const step =
-        (draft.step === "lockin" && !lockable(draft.blocks)) || (draft.step === "weekplan" && (draft.week.mode !== "auto" || !draft.week.plan)) ? "week" : draft.step;
+      const auto = draft.week.mode === "auto";
+      const stale =
+        (draft.step === "lockin" && !lockable(draft.blocks)) ||
+        (AUTO_ONLY.includes(draft.step) && !auto) ||
+        ((draft.step === "weight" || draft.step === "freetime") && draft.week.activities.length === 0) ||
+        (draft.step === "weekplan" && !draft.week.plan);
+      const step = stale ? "week" : draft.step;
       resumed.current = step !== "boot";
       setStep(step);
       setAnswers(draft.answers);
@@ -261,6 +281,12 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
         return <RhythmStep {...props} />;
       case "language":
         return <LanguageStep {...props} />;
+      case "hours":
+        return <HoursStep answers={answers} week={week} setWeek={setWeek} next={next} />;
+      case "weight":
+        return <WeightStep week={week} setWeek={setWeek} next={next} />;
+      case "freetime":
+        return <FreeTimeStep answers={answers} week={week} setWeek={setWeek} react={react} next={next} onManual={manualWeek} />;
       case "week":
         return week.mode === "manual" ? (
           <WeekStep answers={answers} blocks={blocks} onAdded={addBlock} react={react} next={next} onAuto={blocks.length === 0 ? autoWeek : undefined} />
@@ -325,6 +351,9 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
     </div>
   );
 }
+
+/** Screens that only the AI-built week has. */
+const AUTO_ONLY: readonly StepId[] = ["hours", "weight", "freetime", "weekplan"];
 
 /** Blocks the Lock-in step can offer: anything but free time. */
 function lockable(blocks: AddedBlock[]): boolean {

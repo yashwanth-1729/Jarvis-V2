@@ -128,6 +128,28 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-04 (evening) · Claude Code · Week planner: four calm screens, donut and day rings
+
+- **Steps:** `state.ts` STEPS gained `hours`, `weight` and `freetime`, around
+  `week` and `weekplan`.
+  - `Onboarding.tsx` shows them only in auto mode (`AUTO_ONLY`), and `hours`
+    only when `needsHours(stage)`.
+  - Stale drafts fall back to `week`.
+- **Screens:** `PlanSteps.tsx` was rewritten as `HoursStep`, `PlanAskStep` (the
+  list), `WeightStep`, `FreeTimeStep` and `PlanReviewStep`. The save logic is
+  unchanged: college is still saved, just never drawn.
+- **Helpers:**
+  - new `WeekCharts.tsx`: `Ring`, `WeekDonut`, `DayDials`;
+  - `planWeek.ts`: `pointsMeaning` (mirrors the gateway prompt's rule) and
+    `shortName`.
+- **CSS:** at the end of `onboarding.css`. The input row is `.ob-adder`, not
+  `.ob-add`, which is WeekStep's button.
+- **Preview:**
+  - `.claude/launch.json` gained `public-preview` (port 3200, public edition,
+    fixture as API and gateway);
+  - `tests/phone-fixture.mjs` gained a stand-in `POST /v1/plan/week`.
+- **Verified** in that preview, end to end. Not yet on the phone.
+
 ### 2026-10-04 (later) · Claude Code · Plans that bend, Lock-in nudges, black-and-red Lock-in, simpler week planner
 
 - **Product direction:** the owner agreed it (README entry, docs/public-edition.md

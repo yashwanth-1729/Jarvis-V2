@@ -544,6 +544,28 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-04 (third): The week planner as four calm screens, drawn as rings
+
+- **Why:** the owner tested it: "lock in is perfect", but people still couldn't tell what to type, the one busy screen felt like "lots of disturbance", the review's per-day bars should be "a pie chart or any good visual", and college shouldn't show at all.
+- **Now four one-question screens** (`PlanSteps.tsx`), so the step machine gained `hours`, `weight` and `freetime`:
+  1. **"When's college?"** (or school/work), only for those stages: days and times, or "I don't have fixed hours".
+  2. **"What do you want to do every week?"** The line under it names three examples taken from their own goals. There's one input and a plain list. HOLO stays quiet unless something needs fixing.
+  3. **"How much of your week?"** A meter per item, showing what it turns into ("3 times a week", "Every day, best slots").
+  4. **"Free time in your week?"** Two big choices, then "Build my timetable".
+- **Review** (`WeekCharts.tsx`):
+  - A **donut** of how the week splits (hours a week in the middle).
+  - A legend with − and +. "Rebuild with my changes" appears only once something was marked.
+  - **Seven day rings** (each the waking day, wake at the top) and the chosen day's list.
+  - College is never drawn; it's still saved into the Plan.
+  - "Something else off? Tell JARVIS" opens the comment box.
+- **Validation:** tsc and ESLint are clean. In the public-edition design preview (fixture data, with a stand-in planner on the fixture's `/v1/plan/week`), these all rendered and worked:
+  - hours → list → meters (MAX, 7, 2 with their meanings) → free time → build;
+  - the donut, legend and day rings;
+  - a −/rebuild;
+  - "Lock it in", which saved the college, planned and free groups.
+
+  This build is not yet on the phone.
+
 ### 2026-10-04 (second): Plans that bend, Lock-in nudges, a black-and-red Lock-in, a simpler week planner
 
 - **Why:** the owner asked what the app is really for. The answer agreed on is a real use: help people actually stick to the week they planned. They asked to start with a plan that bends when you slip, and with JARVIS reaching out first.
