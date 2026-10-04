@@ -252,6 +252,13 @@ createServer(async (req, res) => {
   }
   else if (path === "/api/focus" && method === "GET") result = { items: focusItems, events: focusEvents };
   else if (path === "/api/focus/missed") result = { missed: missedList };
+  else if (path === "/api/focus/week") result = {
+    week_of: dayOf(-todayIndex),
+    this: { minutes: 260, done: focusEvents.filter((e) => e.status === "done").length + 9, skipped: 3, kept: 0.8 },
+    last: { minutes: 340, done: 11, skipped: 5, kept: 0.69, to_date: 190 },
+    today: { done: focusEvents.filter((e) => e.status === "done").length, skipped: 0, pending: 1 },
+    streak: 3, items: focusItems.length,
+  };
   else if (path === "/api/focus/stats") result = {
     days: 7, done: 9, skipped: 2, rate: 0.818, minutes: 640, streak: 3, best_streak: 5, perfect_days: 3,
     today: { done: focusEvents.filter((e) => e.status === "done").length, skipped: 0, pending: 1 },

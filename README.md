@@ -573,14 +573,19 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
   - A required question: free blocks, or a strict timetable.
   - The gateway now takes `points` and `freeTime` and returns free blocks marked `free`. Older clients' `importance` still works.
   - The onboarding Lock-in step is black and red too, with slams and a "LOCKED IN" stamp.
+- **The honest number:** a follow-up the same day, not in the APKs installed today; it ships in the next build.
+  - Today's Lock-in tile now shows the time actually locked in this week, against this same point last week (▲ or ▼), plus "% of the plan kept" and today's tally.
+  - The time is measured Start→Stop sessions, plus done one-tap blocks' planned length.
+  - The source is `GET /api/focus/week` (`focus.week`). The check-in sheet repeats the week's line.
 - **Validation:**
-  - **Backend:** `catchup_test` (26), `serious_mode_test` (20), `notification_policy_test` (16), `public_edition_test`, `openrouter_transport_test` (41), `profile_test`, `scheduler_test` (37).
+  - **Backend:** `catchup_test` (26), `focus_week_test` (9), `serious_mode_test` (20), `notification_policy_test` (16), `public_edition_test`, `openrouter_transport_test` (41), `profile_test`, `scheduler_test` (37).
   - **Gateway:** 8 of 8 suites, `planner_test` 38.
   - **Frontend:** tsc and ESLint are clean; `tests/nativeNotifications.test.ts` gives 42/42.
   - **Kotlin:** compiles.
   - **Preview:** in the design preview (fixture data), the slipped card → catch-up sheet → "Lock it in" saved a serious session and settled the miss. The Lock-in screen, stamp, running bar and check-in rendered as designed.
   - **Live:** one points-plus-free-time plan through the VPS tunnel (11.5 s, sensible).
-  - **Built:** both APKs, JARVIS and JARVIS Public (with the tunnel as gateway). They are **not yet installed**, because the phone wasn't connected, and nothing has been tried on the device. Desktop was not rebuilt.
+  - **Built and installed:** both APKs, JARVIS and JARVIS Public (with the tunnel as gateway), without the honest number. Desktop was not rebuilt.
+  - **On the phone, read-only:** JARVIS Public's bridge exposes `takeAction`, `syncLockins` and `syncCheckins`. The owner was on the new "What goes in your week?" screen with points meters. Notification taps and the new Lock-in look haven't been tried on the device yet.
 
 ### 2026-10-04: AI week planner in the JARVIS Public onboarding
 

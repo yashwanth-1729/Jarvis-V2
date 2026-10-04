@@ -634,6 +634,18 @@ A serious block whose time passed with no Done no longer just turns red.
     are moved, the rest let go.
   - A moved occurrence shows "Moved" on its row.
 
+### The honest number (2026-10-04)
+
+`GET /api/focus/week` (`focus.week`) gives Today's Lock-in tile:
+- **This week** (Monday to now) and **last week:**
+  - time locked in: measured Start→Stop minutes, or the planned length of a
+    done one-tap block (tasks add none);
+  - done, skipped, and kept = done / (done + skipped). The counts come from
+    `stats`.
+- **`last.to_date`:** last week up to this same moment, so "vs last week" is
+  fair midweek.
+- **Also returned:** today's tally and the streak.
+
 ## Voice session protocol
 
 A new client connects to `WS /api/voice/session?audio=pcm16`. Omitting the query

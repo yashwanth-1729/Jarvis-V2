@@ -122,6 +122,32 @@ export function settleCatchUp(moved: OccurrenceRef[], dropped: OccurrenceRef[]):
   return apiPost<{ recorded: number }>("/api/focus/catchup/settle", { moved, dropped }).then(announce);
 }
 
+/** One week's honest numbers (services/focus.py `week`). */
+export interface FocusWeekTally {
+  /** Time locked in: measured sessions, plus done one-tap blocks' planned length. */
+  minutes: number;
+  done: number;
+  skipped: number;
+  /** done / (done + skipped), or null with nothing due yet. */
+  kept: number | null;
+}
+
+export interface FocusWeek {
+  /** This week's Monday, YYYY-MM-DD. */
+  week_of: string;
+  this: FocusWeekTally;
+  /** Last week in full, and `to_date`: last week up to this same moment. */
+  last: FocusWeekTally & { to_date: number };
+  today: { done: number; skipped: number; pending: number };
+  streak: number;
+  /** How many things are marked serious at all. */
+  items: number;
+}
+
+export function fetchFocusWeek(): Promise<FocusWeek> {
+  return apiGet("/api/focus/week");
+}
+
 export function fetchFocusStats(days = 30): Promise<FocusStats> {
   return apiGet(`/api/focus/stats?days=${days}`);
 }

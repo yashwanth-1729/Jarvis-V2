@@ -176,6 +176,13 @@ Medium, worth doing:
   returns `free` blocks. Deployed to the VPS.
 - **Preview fixture** (`frontend/tests/phone-fixture.mjs`): it now serves
   sample Lock-in data and the catch-up routes, and allows PUT.
+- **Follow-up, the honest number:**
+  - `focus.week` and `GET /api/focus/week`; `stats()` takes an optional
+    `current`.
+  - Today's Lock-in tile shows the time locked in this week against the same
+    point last week, plus % kept. The check-in sheet repeats it.
+  - Test: `focus_week_test` (9).
+- **Installed:** both APKs from the first commit, without the tile.
 
 ### 2026-10-04 · Claude Code · AI week planner (gateway and onboarding)
 

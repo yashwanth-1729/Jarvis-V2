@@ -72,6 +72,12 @@ async def stats(days: int = 30) -> dict[str, Any]:
     return await focus.stats(days)
 
 
+@router.get("/week")
+async def week() -> dict[str, Any]:
+    """The honest number: time locked in and the plan kept, this week vs last."""
+    return await focus.week()
+
+
 # --------------------------------------------------- catch-up (services/replan.py)
 
 class BusyIn(BaseModel):

@@ -168,10 +168,10 @@ def block_window(item: dict[str, Any], day: date) -> tuple[datetime, datetime] |
     return start, end
 
 
-async def stats(days: int = 30) -> dict[str, Any]:
+async def stats(days: int = 30, current: datetime | None = None) -> dict[str, Any]:
     """Everything the stats screen draws, for the last `days` days."""
     days = max(7, min(120, days))
-    current = now()
+    current = current or now()
     today = current.date()
     first = today - timedelta(days=days - 1)
     items = await list_items()
@@ -264,4 +264,76 @@ async def stats(days: int = 30) -> dict[str, Any]:
             key=lambda s: (-s["done"], s["skipped"], s["title"]),
         )[:12],
         "running": running,
+    }
+
+
+def _planned_minutes(item: dict[str, Any] | None, occurrence: str) -> float:
+    """A one-tap block's planned length on its day (0 for tasks or untimed blocks)."""
+    if not item or item["kind"] != "block":
+        return 0.0
+    try:
+        day = date.fromisoformat(occurrence)
+    except ValueError:
+        return 0.0
+    window = block_window(item, day)
+    if not window or not (item.get("start_time") or (item.get("block_kind") or "").upper() == "SESSION"):
+        return 0.0
+    return min(240.0, (window[1] - window[0]).total_seconds() / 60)
+
+
+async def week(current: datetime | None = None) -> dict[str, Any]:
+    """The honest number (2026-10-04): time locked in and how much of the plan
+    was kept, this week (Monday to now) against last week.
+
+    Time is what Start -> Stop measured; a one-tap block that was done counts
+    its planned length, since it was done and that is the time it took. A
+    one-tap task counts as kept but adds no time. `last.to_date` is last week
+    up to this same moment, so the comparison is fair on a Tuesday.
+    """
+    current = current or now()
+    today = current.date()
+    this_monday = today - timedelta(days=today.weekday())
+    last_monday = this_monday - timedelta(days=7)
+    same_point = current - timedelta(days=7)
+    items = {item["uid"]: item for item in await list_items()}
+    rows = await database.db.fetch_all(
+        "SELECT * FROM focus_events WHERE status = 'done' AND finished_at >= ?", (last_monday.isoformat(),)
+    )
+    minutes = {"this": 0.0, "last": 0.0, "last_to_date": 0.0}
+    for row in rows:
+        finished = parse_datetime(row["finished_at"])
+        if finished is None or finished > current:
+            continue
+        spent = float(row["minutes"] or 0) or _planned_minutes(items.get(row["item_uid"]), row["occurrence"])
+        if finished.date() >= this_monday:
+            minutes["this"] += spent
+        else:
+            minutes["last"] += spent
+            if finished <= same_point:
+                minutes["last_to_date"] += spent
+
+    daily = await stats(14, current=current)
+    this_week = [d for d in daily["series"] if d["date"] >= this_monday.isoformat()]
+    last_week = [d for d in daily["series"] if last_monday.isoformat() <= d["date"] < this_monday.isoformat()]
+
+    def tally(days: list[dict[str, Any]], spent: float) -> dict[str, Any]:
+        done = sum(d["done"] for d in days)
+        skipped = sum(d["skipped"] for d in days)
+        return {
+            "minutes": round(spent),
+            "done": done,
+            "skipped": skipped,
+            "kept": round(done / (done + skipped), 3) if done + skipped else None,
+        }
+
+    this = tally(this_week, minutes["this"])
+    last = tally(last_week, minutes["last"])
+    last["to_date"] = round(minutes["last_to_date"])
+    return {
+        "week_of": this_monday.isoformat(),
+        "this": this,
+        "last": last,
+        "today": daily["today"],
+        "streak": daily["streak"],
+        "items": len(items),
     }

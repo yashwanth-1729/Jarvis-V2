@@ -10,6 +10,7 @@ import * as React from "react";
 import { ArrowBendUpRight, Check, LockSimple, Moon, SpeakerHigh, Timer, X } from "@phosphor-icons/react";
 
 import { usePublicOptional } from "@/components/public/PublicContext";
+import { fetchFocusWeek, type FocusWeek } from "@/lib/focus";
 import { playAudio, stopAudio, synthesize } from "@/lib/voice";
 import { occurrences } from "../lib/derive";
 import { clock } from "../lib/time";
@@ -49,6 +50,7 @@ export function CheckInSheet({ open, speak, onClose }: { open: boolean; speak: b
   const pub = usePublicOptional();
   const now = useNow(30_000);
   const [playing, setPlaying] = React.useState(false);
+  const [week, setWeek] = React.useState<FocusWeek | null>(null);
   const score = React.useRef<HTMLElement>(null);
   const today = dayKey(now);
 
@@ -95,6 +97,17 @@ export function CheckInSheet({ open, speak, onClose }: { open: boolean; speak: b
     if (open && clean && score.current) emberBurst(score.current, "forge");
   }, [open, clean]);
 
+  React.useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    fetchFocusWeek()
+      .then((next) => alive && setWeek(next))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
   const close = () => {
     stopAudio();
     setPlaying(false);
@@ -124,6 +137,13 @@ export function CheckInSheet({ open, speak, onClose }: { open: boolean; speak: b
           <span>/{rows.length}</span>
           <small>{rows.length ? "locked today" : "nothing serious today"}</small>
         </div>
+
+        {week && week.this.minutes > 0 && (
+          <p className="ph-ci-week">
+            This week <b>{Math.floor(week.this.minutes / 60) ? `${Math.floor(week.this.minutes / 60)}h ` : ""}{week.this.minutes % 60}m</b> locked in
+            {week.this.kept !== null && <> · {Math.round(week.this.kept * 100)}% of the plan kept</>}
+          </p>
+        )}
 
         <p className="ph-cu-say ph-ci-say">
           <Moon size={16} weight="fill" aria-hidden="true" />

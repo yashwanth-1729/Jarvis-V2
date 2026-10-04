@@ -6,7 +6,7 @@ import {
   ArrowRight,
   BellRinging,
   CaretDown,
-  Fire,
+  CaretUp,
   GearSix,
   Lightning,
   LockSimple,
@@ -17,7 +17,7 @@ import {
 
 import { AuraChip } from "@/components/public/AuraChip";
 import { IS_PUBLIC } from "@/lib/edition";
-import { fetchFocusStats, type FocusStats } from "@/lib/focus";
+import { FOCUS_CHANGED, fetchFocusWeek, type FocusWeek } from "@/lib/focus";
 import type { Task } from "@/types";
 import { focusTasks, isOverdueTask, KIND_LABEL, KIND_TONE, nowAndNext, upcomingReminders, type Occurrence } from "../lib/derive";
 import { clock, duration, greeting, minutesUntil, relative } from "../lib/time";
@@ -31,6 +31,7 @@ import { Ticker } from "../ui/Ticker";
 import { TaskRow } from "./TaskRow";
 import { SeriousControl, seriousStateOf } from "../serious/SeriousControl";
 import { dayKey, useSerious } from "../serious/SeriousContext";
+import { Pulse } from "../serious/Pulse";
 import { SlippedCard } from "../serious/SlippedCard";
 import { Num } from "../ui/Num";
 
@@ -212,39 +213,72 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
   );
 }
 
-/** The door to serious mode, with today's tally. Refreshes on returning. */
+/** "4h 20m", "45m", "2h". */
+function span(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
+/**
+ * The door to serious mode, and the honest number (2026-10-04): the time
+ * actually locked in this week against this same point last week, and how
+ * much of the plan was kept. Refreshes on returning and on every Lock-in
+ * change.
+ */
 function LockinTile() {
   const { push } = useNav();
   const { layers } = useNavState();
-  const [stats, setStats] = React.useState<FocusStats | null>(null);
+  const [week, setWeek] = React.useState<FocusWeek | null>(null);
   const covered = layers.length > 0;
   React.useEffect(() => {
     if (covered) return;
     let alive = true;
-    fetchFocusStats(7)
-      .then((next) => alive && setStats(next))
-      .catch(() => undefined);
+    const load = () => {
+      fetchFocusWeek()
+        .then((next) => alive && setWeek(next))
+        .catch(() => undefined);
+    };
+    load();
+    window.addEventListener(FOCUS_CHANGED, load);
     return () => {
       alive = false;
+      window.removeEventListener(FOCUS_CHANGED, load);
     };
   }, [covered]);
-  const today = stats?.today;
-  const total = today ? today.done + today.skipped + today.pending : 0;
+
+  const today = week?.today;
+  const todayTotal = today ? today.done + today.skipped + today.pending : 0;
+  const minutes = week?.this.minutes ?? 0;
+  const delta = week ? minutes - week.last.to_date : 0;
+  const compared = Boolean(week && week.last.minutes > 0);
   return (
     <Tap className="ph-tile ph-tile-lockin" onClick={() => push({ kind: "focus" })} squish={0.96} feel="heavy">
-      <span className="ph-tile-label"><LockSimple size={13} weight="fill" /> Lock-in</span>
-      <span className="ph-lockin-main">
-        {total && today ? (
-          <>
-            <b><Num value={today.done} /></b>
-            <span>/{total} serious done today</span>
-          </>
-        ) : (
-          <span>Make your must-dos serious.</span>
-        )}
+      <Pulse className="ph-lockin-tile-pulse" live={false} />
+      <span className="ph-tile-label">
+        <LockSimple size={13} weight="fill" /> Lock-in · this week
+        {week && week.streak >= 2 && <span className="ph-lockin-streak">{week.streak}-day streak</span>}
       </span>
-      {stats && stats.streak >= 2 && (
-        <span className="ph-lockin-streak"><Fire size={16} weight="fill" /> {stats.streak}</span>
+      {!week || week.items === 0 ? (
+        <span className="ph-lockin-main"><span>Make your must-dos serious.</span></span>
+      ) : (
+        <>
+          <span className="ph-lockin-hours">
+            <b>{span(minutes)}</b>
+            <span>locked in</span>
+          </span>
+          {compared && (
+            <span className="ph-lockin-delta" data-up={delta >= 0}>
+              {delta >= 0 ? <CaretUp size={12} weight="bold" /> : <CaretDown size={12} weight="bold" />}
+              {span(Math.abs(delta))} vs last week
+            </span>
+          )}
+          <span className="ph-lockin-foot">
+            {week.this.kept !== null ? `${Math.round(week.this.kept * 100)}% of the plan kept` : "Nothing due yet this week"}
+            {today && todayTotal > 0 ? ` · ${today.done}/${todayTotal} today` : ""}
+          </span>
+        </>
       )}
     </Tap>
   );
