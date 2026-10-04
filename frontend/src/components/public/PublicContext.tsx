@@ -9,6 +9,7 @@
 import * as React from "react";
 
 import "./public.css";
+import "./persona.css";
 import { API_BASE } from "@/lib/api";
 import { deleteAccount as removeAccount, fetchMe, startLockinTrial, type Feature, type Me } from "@/lib/gateway";
 import { loadProfile, type OnboardingProfile } from "@/lib/profile";
@@ -56,6 +57,24 @@ function setFlag(key: string, on: boolean): void {
     else window.localStorage.removeItem(key);
   } catch {
     // Only costs showing that step again.
+  }
+}
+
+/**
+ * The "her" persona (profile.gender === "female"): `html[data-persona="her"]`
+ * re-tints the app (persona.css), and the Android notification cards swap
+ * their gendered lines (JarvisNotifications.kt `setPersona`). Older APKs have
+ * no `setPersona`; they simply keep the default lines.
+ */
+function applyPersona(her: boolean): void {
+  const root = document.documentElement;
+  if (her) root.dataset.persona = "her";
+  else delete root.dataset.persona;
+  try {
+    const bridge = window.JarvisNotifications as unknown as { setPersona?: (value: string) => unknown } | undefined;
+    if (typeof bridge?.setPersona === "function") bridge.setPersona(her ? "her" : "");
+  } catch {
+    // The look still changes; only the notification copy keeps its default.
   }
 }
 
@@ -154,6 +173,16 @@ export function PublicProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   }, []);
+
+  // Her persona follows the saved profile: the look now, the notification
+  // cards as soon as the native bridge is attached (it can attach after load).
+  const her = profile?.gender === "female";
+  React.useEffect(() => {
+    applyPersona(her);
+    const onBridge = () => applyPersona(her);
+    window.addEventListener("jarvis-native-notifications-ready", onBridge);
+    return () => window.removeEventListener("jarvis-native-notifications-ready", onBridge);
+  }, [her]);
 
   // A user who picked must-dos during onboarding gets the trial on sign-in.
   React.useEffect(() => {

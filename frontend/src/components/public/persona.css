@@ -1,0 +1,47 @@
+/* JARVIS Public, the "her" persona (profile.gender === "female").
+
+   The app's lime accent becomes a soft pink-to-lilac: every --lime and
+   --accent-text, the lime tone, and the few lime glows phone.css hard-codes
+   (pills, accent buttons, the FAB, toasts, the dock HOLO's antenna light).
+
+   Keyed on html[data-persona="her"], which PublicProvider sets
+   (PublicContext.tsx). Lock-in's black-and-red serious theme always wins:
+   every rule skips .ph[data-lockin], so a running session looks exactly as
+   it does for everyone. */
+
+html[data-persona="her"] .ph:not([data-lockin]) {
+  --lime: #ff8fd0;
+  --her-lilac: #c3a6ff;
+  --accent-text: #ffa6dc;
+}
+html[data-persona="her"] .ph[data-theme="light"]:not([data-lockin]) { --accent-text: #a3236f; }
+
+html[data-persona="her"] .ph:not([data-lockin]) [data-tone="lime"] { --tone-soft: rgba(255, 143, 208, 0.16); --tone-text: #ffa6dc; }
+html[data-persona="her"] .ph[data-theme="light"]:not([data-lockin]) [data-tone="lime"] { --tone-soft: rgba(200, 40, 140, 0.12); --tone-text: #a3236f; }
+
+/* Pills and buttons that were lime fills: pink into lilac, with a pink glow. */
+html[data-persona="her"] .ph:not([data-lockin]) .ph-dock-pill,
+html[data-persona="her"] .ph:not([data-lockin]) .ph-seg-pill {
+  background: linear-gradient(100deg, var(--lime), var(--her-lilac));
+  box-shadow: 0 8px 20px -10px rgba(255, 143, 208, 0.85);
+}
+html[data-persona="her"] .ph:not([data-lockin]) .ph-icon-btn-accent { box-shadow: 0 8px 22px -10px rgba(255, 143, 208, 0.8); }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-btn-lime-ghost { border-color: rgba(255, 143, 208, 0.5); }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-fab {
+  background: linear-gradient(135deg, var(--lime), var(--her-lilac));
+  box-shadow: 0 16px 34px -12px rgba(255, 143, 208, 0.75), 0 4px 0 rgba(0, 0, 0, 0.25);
+}
+html[data-persona="her"] .ph:not([data-lockin]) .ph-dock-orb::after { border-color: rgba(255, 143, 208, 0.55); }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-option[data-on="true"] { background: rgba(255, 143, 208, 0.12); }
+html[data-persona="her"] .ph[data-theme="light"]:not([data-lockin]) .ph-option[data-on="true"] { background: rgba(255, 143, 208, 0.3); }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-when-value { background: var(--tone-soft, rgba(255, 143, 208, 0.14)); }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-toast-icon { color: #ff8fd0; }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-toast-action { background: #ff8fd0; }
+html[data-persona="her"] .ph:not([data-lockin]) .ph-holo-antenna::after { background: #ff8fd0; box-shadow: 0 0 calc(var(--s) * 0.1) #ff8fd0; }
+
+/* The public screens' own lime gradients (public.css). */
+html[data-persona="her"] .ph:not([data-lockin]) .pub-cta {
+  background: linear-gradient(100deg, var(--lime), var(--her-lilac));
+  box-shadow: 0 18px 34px -18px rgba(255, 143, 208, 0.85);
+}
+html[data-persona="her"] .ph:not([data-lockin]) .pub-chip:not([data-low]):not([data-state="signin"]) { background: linear-gradient(100deg, var(--lime), var(--her-lilac)); }

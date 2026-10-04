@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { LockSimple, Plus } from "@phosphor-icons/react";
+import { GenderFemale, GenderMale, LockSimple, Plus } from "@phosphor-icons/react";
 
 import { haptic } from "@/components/phone/lib/haptics";
 import { reducedMotion } from "@/components/phone/lib/motion";
 import { Scramble } from "@/components/phone/ui/Scramble";
 import { Tap } from "@/components/phone/ui/Tap";
 import { PLANS, UNLOCKED_BY } from "@/lib/gateway";
+import type { Gender } from "@/lib/profile";
 import {
   CHRONOTYPES,
   ENEMIES,
@@ -24,11 +25,14 @@ import {
   TONES,
   VIBES,
   daysUntil,
+  personaOf,
+  vibeTitle,
   type Mood,
+  type Persona,
 } from "./content";
 import { Holo } from "./Holo";
 import type { Answers } from "./state";
-import { Chip, Cta, OptionCard, StepFrame } from "./ui";
+import { Chip, Cta, OptionCard, Quiet, StepFrame } from "./ui";
 import { clock12, minutesOf } from "./weekPlan";
 
 export interface StepProps {
@@ -95,15 +99,78 @@ export function BootStep({ next }: { next: () => void }) {
   );
 }
 
+/* ---------------------------------------------------------------- gender */
+
+/**
+ * The first question, so HOLO gets the words right ("her": no bro or boss,
+ * best-friend energy, and a pink-to-lilac accent). "Rather not say" keeps
+ * everything neutral. Neutral tones on purpose: no pink-and-blue cliché.
+ */
+export function GenderStep({ answers, patch, react, next }: StepProps) {
+  const choose = (gender: Gender) => {
+    patch({ gender });
+    if (gender === "female") react("love", "Got it. Bestie mode: on.");
+    else react("smirk", "Got it. Let's get to it.");
+  };
+  return (
+    <StepFrame
+      eyebrow="Quick one"
+      title="Who am I talking to?"
+      sub="So I get the words right."
+      footer={
+        <>
+          <Cta disabled={!answers.gender} onClick={next}>{answers.gender ? "That's me" : "Pick one"}</Cta>
+          <Quiet
+            onClick={() => {
+              patch({ gender: null });
+              next();
+            }}
+          >
+            Rather not say
+          </Quiet>
+        </>
+      }
+    >
+      <div className="ob-duo ob-gender" role="radiogroup" aria-label="Who am I talking to?">
+        <OptionCard
+          on={answers.gender === "female"}
+          tone="lilac"
+          emoji={<GenderFemale size={34} weight="bold" />}
+          title="A girl"
+          line="she / her"
+          onClick={() => choose("female")}
+        />
+        <OptionCard
+          on={answers.gender === "male"}
+          tone="orange"
+          emoji={<GenderMale size={34} weight="bold" />}
+          title="A guy"
+          line="he / him"
+          index={1}
+          onClick={() => choose("male")}
+        />
+      </div>
+    </StepFrame>
+  );
+}
+
 /* ------------------------------------------------------------------ name */
 
-const NICKS: Array<{ label: string; reaction: string; mood: Mood }> = [
+type Nick = { label: string; reaction: string; mood: Mood };
+
+const NICKS: Nick[] = [
   { label: "Boss", reaction: "Yes, Boss. 🫡", mood: "smirk" },
   { label: "Legend", reaction: "Legend it is. No pressure.", mood: "excited" },
   { label: "Captain", reaction: "Aye aye, Captain.", mood: "happy" },
   { label: "Champ", reaction: "Champ. Let's earn it.", mood: "fierce" },
   { label: "Chief", reaction: "Chief. Respect.", mood: "cool" },
 ];
+
+/** For her, "Boss" makes way for "Bestie"; the rest were never gendered. */
+function nicksFor(persona: Persona): Nick[] {
+  if (persona !== "her") return NICKS;
+  return [{ label: "Bestie", reaction: "Bestie it is. I'll act like one.", mood: "love" }, ...NICKS.slice(1)];
+}
 
 const NAME_LINES = [
   (name: string) => `${name}! Main character energy already.`,
@@ -118,7 +185,8 @@ export function firstName(name: string): string {
 export function NameStep({ answers, patch, react, next }: StepProps) {
   const name = answers.name;
   const first = firstName(name);
-  const isNick = NICKS.some((nick) => nick.label === answers.callMe);
+  const nicks = nicksFor(personaOf(answers.gender));
+  const isNick = nicks.some((nick) => nick.label === answers.callMe);
   const [custom, setCustom] = React.useState(() => answers.callMe !== "" && answers.callMe !== first && !isNick);
   const reacted = React.useRef(first);
 
@@ -190,7 +258,7 @@ export function NameStep({ answers, patch, react, next }: StepProps) {
                 }}
               />
             )}
-            {NICKS.map((nick, index) => (
+            {nicks.map((nick, index) => (
               <Chip
                 key={nick.label}
                 on={callOn(nick.label)}
@@ -209,7 +277,7 @@ export function NameStep({ answers, patch, react, next }: StepProps) {
               tone="lilac"
               emoji="✏️"
               label="Something else"
-              index={NICKS.length + 1}
+              index={nicks.length + 1}
               onClick={() => {
                 setCustom(true);
                 patch({ callMe: "" });
@@ -239,6 +307,7 @@ export function NameStep({ answers, patch, react, next }: StepProps) {
 
 export function VibeStep({ answers, patch, react, next }: StepProps) {
   const track = React.useRef<HTMLDivElement>(null);
+  const persona = personaOf(answers.gender);
   return (
     <StepFrame
       eyebrow="02 · My vibe"
@@ -254,7 +323,7 @@ export function VibeStep({ answers, patch, react, next }: StepProps) {
               key={vibe.value}
               role="radio"
               aria-checked={on}
-              aria-label={`${vibe.title}. Sounds like: ${vibe.sample}`}
+              aria-label={`${vibeTitle(vibe, persona)}. Sounds like: ${vibe.sample}`}
               className="ob-vibe"
               data-tone={vibe.tone}
               data-on={on}
@@ -271,7 +340,7 @@ export function VibeStep({ answers, patch, react, next }: StepProps) {
                 <span className="ob-vibe-emoji" aria-hidden="true">{vibe.emoji}</span>
                 <span className="ob-tag">{vibe.tag}</span>
               </span>
-              <strong className="ob-vibe-title">{vibe.title}</strong>
+              <strong className="ob-vibe-title">{vibeTitle(vibe, persona)}</strong>
               <span className="ob-vibe-quote">{vibe.sample}</span>
               <span className="ob-vibe-pick">{on ? "Picked ✓" : "Tap to pick"}</span>
             </Tap>
@@ -327,7 +396,7 @@ export function StageStep({ answers, patch, react, next }: StepProps) {
                 index={index}
                 onClick={() => {
                   patch({ exam: item.value });
-                  react(item.value === "Other" ? "think" : "fierce", item.reaction);
+                  react(item.value === "Other" ? "think" : "fierce", personaOf(answers.gender) === "her" && item.her ? item.her : item.reaction);
                 }}
               />
             ))}
@@ -506,7 +575,7 @@ export function EnemyStep({ answers, patch, react, next }: StepProps) {
     <StepFrame
       eyebrow="06 · The villain"
       title="What wrecks your day?"
-      sub="Pick your final boss. I'll nudge you the right way."
+      sub={personaOf(answers.gender) === "her" ? "Pick your villain. I'll nudge you the right way." : "Pick your final boss. I'll nudge you the right way."}
       footer={<Cta disabled={!answers.enemy} onClick={next}>{answers.enemy ? "Let's beat it" : "Pick one"}</Cta>}
     >
       <div className="ob-cards" role="radiogroup" aria-label="What wrecks your day">

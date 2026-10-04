@@ -25,6 +25,7 @@ import {
   BootStep,
   EnemyStep,
   firstName,
+  GenderStep,
   GoalsStep,
   InterestsStep,
   LanguageStep,
@@ -34,8 +35,8 @@ import {
   VibeStep,
   type StepProps,
 } from "./AboutSteps";
-import type { Mood } from "./content";
-import { Bubble, Holo } from "./Holo";
+import { personaOf, type Mood } from "./content";
+import { Bubble, Holo, PersonaContext } from "./Holo";
 import { LockinStep } from "./LockinStep";
 import { NotifyStep } from "./NotifyStep";
 import { EMPTY_WEEK, needsHours, type WeekState } from "./planWeek";
@@ -51,6 +52,7 @@ const useClientLayoutEffect = typeof window === "undefined" ? React.useEffect : 
 /** The live background's palette per screen. */
 const SCENES: Record<StepId, FxScene> = {
   boot: "today",
+  gender: "today",
   name: "today",
   vibe: "memory",
   stage: "memory",
@@ -72,13 +74,20 @@ const SCENES: Record<StepId, FxScene> = {
 /** What HOLO says when a screen opens. */
 function opener(step: StepId, answers: Answers, week: WeekState): { mood: Mood; line: string } {
   const call = answers.callMe.trim() || firstName(answers.name) || "friend";
+  const her = personaOf(answers.gender) === "her";
   switch (step) {
     case "boot":
       return { mood: "idle", line: "" };
+    case "gender":
+      return { mood: "happy", line: "Quick one, then we're off." };
     case "name":
       return { mood: "happy", line: "Let's start easy." };
     case "vibe":
-      return { mood: "think", line: `Nice to meet you, ${call}. Now, how should I sound?` };
+      // "your bestie" reads oddly right after the nickname "Bestie".
+      return {
+        mood: "think",
+        line: her && call.toLocaleLowerCase() !== "bestie" ? `Nice to meet you, ${call}. So, how should your bestie sound?` : `Nice to meet you, ${call}. Now, how should I sound?`,
+      };
     case "stage":
       return { mood: "idle", line: "Tells me what your week looks like." };
     case "interests":
@@ -106,7 +115,7 @@ function opener(step: StepId, answers: Answers, week: WeekState): { mood: Mood; 
     case "lockin":
       return { mood: "fierce", line: "Serious mode. Choose carefully." };
     case "notify":
-      return { mood: "love", line: "I'll ping you like a friend, not a bank." };
+      return { mood: "love", line: her ? "I'll ping you like a bestie, not a bank." : "I'll ping you like a friend, not a bank." };
     case "reveal":
       return { mood: "excited", line: `Okay ${call}. Look at you.` };
   }
@@ -265,6 +274,8 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
     switch (step) {
       case "boot":
         return <BootStep next={next} />;
+      case "gender":
+        return <GenderStep {...props} />;
       case "name":
         return <NameStep {...props} />;
       case "vibe":
@@ -305,50 +316,55 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
   })();
 
   const percent = Math.round((index / (flow.length - 1)) * 100);
+  // Her persona shows from the moment she answers: copy, HOLO's bow and the
+  // pink-to-lilac accent (onboarding.css keys it on this root).
+  const persona = personaOf(answers.gender);
 
   return (
-    <div ref={rootRef} className="ob" data-step={step}>
-      <span className="ob-scrim" aria-hidden="true" />
-      {/* Lock-in's own world: black, a slow red heartbeat, scanlines and
-          grain. Always mounted so it can fade in; idle unless on Lock-in. */}
-      <span className="ob-lk-backdrop" aria-hidden="true">
-        <i className="ob-lk-beat" />
-        <i className="ob-lk-scan" />
-        <i className="ob-lk-grain" />
-      </span>
-      {step !== "boot" && (
-        <header className="ob-head">
-          <div className="ob-top">
-            <Tap className="ob-back" aria-label="Back" feel="tap" squish={0.85} onClick={back}>
-              <CaretLeft size={20} weight="bold" />
-            </Tap>
-            <Progress percent={percent} done={step === "reveal"} />
-          </div>
-          <div ref={holoRef} className="ob-holo-row">
-            <Holo mood={holo.mood} kick={holo.kick} size={72} />
-            <Bubble line={holo.line} />
-          </div>
-        </header>
-      )}
-      <main className="ob-stage">
-        <AnimatePresence initial={false} custom={direction}>
-          <motion.section
-            key={step}
-            className="ob-pane"
-            data-step={step}
-            custom={direction}
-            variants={PANE}
-            initial="enter"
-            animate="center"
-            exit="exit"
-          >
-            {screen}
-          </motion.section>
-        </AnimatePresence>
-      </main>
-      {/* The red flash a Lock-in slam fires over everything. */}
-      <span className="ob-lk-flash" aria-hidden="true" />
-    </div>
+    <PersonaContext.Provider value={persona}>
+      <div ref={rootRef} className="ob" data-step={step} data-persona={persona ?? undefined}>
+        <span className="ob-scrim" aria-hidden="true" />
+        {/* Lock-in's own world: black, a slow red heartbeat, scanlines and
+            grain. Always mounted so it can fade in; idle unless on Lock-in. */}
+        <span className="ob-lk-backdrop" aria-hidden="true">
+          <i className="ob-lk-beat" />
+          <i className="ob-lk-scan" />
+          <i className="ob-lk-grain" />
+        </span>
+        {step !== "boot" && (
+          <header className="ob-head">
+            <div className="ob-top">
+              <Tap className="ob-back" aria-label="Back" feel="tap" squish={0.85} onClick={back}>
+                <CaretLeft size={20} weight="bold" />
+              </Tap>
+              <Progress percent={percent} done={step === "reveal"} />
+            </div>
+            <div ref={holoRef} className="ob-holo-row">
+              <Holo mood={holo.mood} kick={holo.kick} size={72} />
+              <Bubble line={holo.line} />
+            </div>
+          </header>
+        )}
+        <main className="ob-stage">
+          <AnimatePresence initial={false} custom={direction}>
+            <motion.section
+              key={step}
+              className="ob-pane"
+              data-step={step}
+              custom={direction}
+              variants={PANE}
+              initial="enter"
+              animate="center"
+              exit="exit"
+            >
+              {screen}
+            </motion.section>
+          </AnimatePresence>
+        </main>
+        {/* The red flash a Lock-in slam fires over everything. */}
+        <span className="ob-lk-flash" aria-hidden="true" />
+      </div>
+    </PersonaContext.Provider>
   );
 }
 

@@ -7,7 +7,7 @@ import { emitFx } from "@/components/phone/fx/fxBus";
 import { burstFrom } from "@/components/phone/lib/confetti";
 import { haptic } from "@/components/phone/lib/haptics";
 import { Tap } from "@/components/phone/ui/Tap";
-import { characterTitle, daysUntil, goalOptions, INTERESTS, STAGES, vibeOf, type Mood } from "./content";
+import { characterTitle, daysUntil, goalOptions, INTERESTS, personaOf, STAGES, vibeOf, vibeTitle, type Mood } from "./content";
 import { Holo } from "./Holo";
 import { shareCard, type CardData } from "./shareCard";
 import { examName, type Answers } from "./state";
@@ -46,6 +46,8 @@ export function RevealStep({ answers, react, onGo }: {
   const card = React.useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = React.useState(false);
   const vibe = vibeOf(answers.vibe);
+  const persona = personaOf(answers.gender);
+  const vibeName = vibeTitle(vibe, persona);
   const title = characterTitle(answers.chronotype, answers.enemy);
   const name = answers.name.trim() || "You";
   const goalEmoji = new Map(goalOptions(answers.stage, examName(answers)).map((goal) => [goal.label, goal.emoji]));
@@ -68,7 +70,8 @@ export function RevealStep({ answers, react, onGo }: {
     const data: CardData = {
       name,
       title,
-      vibe: vibe.title,
+      vibe: vibeName,
+      her: persona === "her",
       vibeEmoji: vibe.emoji,
       goals: answers.goals,
       interests: likes,
@@ -90,7 +93,7 @@ export function RevealStep({ answers, react, onGo }: {
           className="ob-char"
           data-vibe={vibe.value}
           role="img"
-          aria-label={`Character card: ${name}, ${title}. Vibe: ${vibe.title}. Main quests: ${answers.goals.join(", ")}. Day 1 streak.`}
+          aria-label={`Character card: ${name}, ${title}. Vibe: ${vibeName}. Main quests: ${answers.goals.join(", ")}. Day 1 streak.`}
         >
           <span className="ob-char-shine" aria-hidden="true" />
           <div className="ob-char-top" aria-hidden="true">
@@ -102,7 +105,7 @@ export function RevealStep({ answers, react, onGo }: {
           </div>
           <p className="ob-char-class" aria-hidden="true">{title}</p>
           <p className="ob-char-name" aria-hidden="true">{name}</p>
-          <span className="ob-char-vibe" aria-hidden="true">{vibe.emoji} {vibe.title}</span>
+          <span className="ob-char-vibe" aria-hidden="true">{vibe.emoji} {vibeName}</span>
           {answers.goals.length > 0 && (
             <div className="ob-char-goals" aria-hidden="true">
               <span className="ob-char-tag">Main quests</span>

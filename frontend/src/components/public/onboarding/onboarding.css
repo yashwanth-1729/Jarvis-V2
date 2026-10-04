@@ -2118,3 +2118,63 @@
 .ob-step-foot .ob-tweak { margin-bottom: 8px; }
 .ob-quiet:has(svg) { display: inline-flex; align-items: center; gap: 6px; }
 .ob-quiet svg { flex: none; }
+
+/* ---------------------------------------------------------------- her */
+/* The "her" persona (she picked "A girl"): from that answer on, onboarding's
+   lime accent becomes a soft pink-to-lilac (the app follows the same palette
+   through components/public/persona.css once the profile is saved). HOLO's
+   own colours stay; it just wears a bow. The Lock-in step and the black-and-
+   red lock button keep their serious theme: every rule here skips them. */
+
+.ob[data-persona="her"] {
+  --lime: #ff8fd0;
+  --her-lilac: #c3a6ff;
+  --accent-text: #ffa6dc;
+}
+.ph[data-theme="light"] .ob[data-persona="her"] { --accent-text: #a3236f; }
+.ob[data-persona="her"] [data-tone="lime"] { --tone-soft: rgba(255, 143, 208, 0.16); --tone-text: #ffa6dc; }
+.ph[data-theme="light"] .ob[data-persona="her"] [data-tone="lime"] { --tone-soft: rgba(200, 40, 140, 0.12); --tone-text: #a3236f; }
+.ob[data-persona="her"] .ob-cta:not([data-variant]):not(:disabled) {
+  background: linear-gradient(100deg, var(--lime), var(--her-lilac));
+  box-shadow: 0 16px 36px -18px rgba(255, 143, 208, 0.9), inset 0 -4px 0 rgba(11, 11, 14, 0.14);
+}
+.ob[data-persona="her"]:not([data-step="lockin"]) .ob-progress-fill,
+.ob[data-persona="her"] .ob-name-line::after,
+.ob[data-persona="her"] .ob-cook-bar i { background: linear-gradient(90deg, var(--lime), var(--her-lilac)); }
+.ob[data-persona="her"] .ob-char-streak { color: #ffb3e0; }
+
+/* HOLO's bow, tied on its antenna (Holo.tsx; only for her). */
+.ob-holo-bow {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  width: calc(var(--s) * 0.32);
+  height: calc(var(--s) * 0.15);
+  margin-left: calc(var(--s) * -0.16);
+  pointer-events: none;
+  transform: rotate(-8deg);
+  filter: drop-shadow(0 0 calc(var(--s) * 0.03) rgba(255, 122, 198, 0.6));
+}
+.ob-holo-bow b {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(180deg, #ff9ad5, #ff6fbf);
+}
+.ob-holo-bow b[data-side="l"] { left: 0; border-radius: 55% 12% 12% 55% / 60% 40% 40% 60%; }
+.ob-holo-bow b[data-side="r"] { right: 0; border-radius: 12% 55% 55% 12% / 40% 60% 60% 40%; }
+.ob-holo-bow em {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--s) * 0.085);
+  height: calc(var(--s) * 0.1);
+  margin: calc(var(--s) * -0.05) 0 0 calc(var(--s) * -0.0425);
+  border-radius: 40%;
+  background: #e0559f;
+}
+/* In Lock-in, the bow goes crimson with everything else. */
+.ob[data-step="lockin"] .ob-holo-row .ob-holo-bow { filter: drop-shadow(0 0 calc(var(--s) * 0.03) rgba(255, 31, 61, 0.6)); }
+.ob[data-step="lockin"] .ob-holo-row .ob-holo-bow b { background: linear-gradient(180deg, #ff1f3d, #c8102e); }
+.ob[data-step="lockin"] .ob-holo-row .ob-holo-bow em { background: #4a0610; }

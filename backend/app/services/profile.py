@@ -1,7 +1,7 @@
 """Who the user said they are, during the public edition's onboarding.
 
-The app hands over the onboarding answers (name, the vibe they picked, stage,
-interests, goals, rhythm, language; ``frontend/src/lib/profile.ts``) and the
+The app hands over the onboarding answers (gender, name, the vibe they picked,
+stage, interests, goals, rhythm, language; ``frontend/src/lib/profile.ts``) and the
 agent folds a short summary into its persona message, so every reply is
 personal and in the chosen voice. The persona message is the cached half of
 the prompt, and this text only changes when the user edits their profile, so
@@ -59,7 +59,17 @@ LANGUAGES = {
     ),
 }
 
-_TEXT_FIELDS = ("name", "callMe", "vibe", "stage", "exam", "examDate", "enemy", "wake", "sleep",
+#: Asked first in onboarding; anything else (or "Rather not say") is dropped.
+GENDERS = ("female", "male")
+#: How to talk to her (the public app's "her" persona). Male and unset keep
+#: today's note.
+HER_NOTE = (
+    "She's a girl. Talk to her like a warm, bold best friend: never call her bro, "
+    "boss, dude, king or any guy word, skip pet names like babe or sweetie, and "
+    "never guess her interests from her gender."
+)
+
+_TEXT_FIELDS = ("gender", "name", "callMe", "vibe", "stage", "exam", "examDate", "enemy", "wake", "sleep",
                 "chronotype", "language", "completedAt")
 _LIST_FIELDS = ("interests", "goals")
 _cache: dict[str, Any] | None = None
@@ -87,6 +97,8 @@ def _clean(data: dict[str, Any]) -> dict[str, Any]:
         out.pop("vibe", None)
     if out.get("language") not in LANGUAGES:
         out.pop("language", None)
+    if out.get("gender") not in GENDERS:
+        out.pop("gender", None)
     return out
 
 
@@ -150,9 +162,15 @@ def persona_note(profile: dict[str, Any] | None = None) -> str | None:
     if profile.get("wake") and profile.get("sleep"):
         rhythm = {"early": "an early bird", "night": "a night owl"}.get(str(profile.get("chronotype") or ""), "")
         lines.append(f"- Up around {profile['wake']}, asleep by {profile['sleep']}" + (f", {rhythm}" if rhythm else "") + ".")
+    her = profile.get("gender") == "female"
     vibe = VIBES.get(str(profile.get("vibe") or ""))
     if vibe:
+        if her:
+            # The app shows her this vibe as "Chill bestie".
+            vibe = vibe.replace("Chill bro:", "Chill bestie:", 1)
         lines.append(f"Your vibe with them: {vibe}")
+    if her:
+        lines.append(HER_NOTE)
     language = LANGUAGES.get(str(profile.get("language") or ""), "")
     if language:
         lines.append(language)

@@ -128,6 +128,21 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-05 (later) · Claude Code · "Girl or guy?" and the "her" persona (subagent, reviewed)
+
+- **Onboarding:** step `gender` after `boot`. `Answers.gender` and the profile
+  `gender` are "female", "male" or null.
+- **Copy:** persona-aware in `content.ts` and `AboutSteps`. HOLO has a bow for
+  her.
+- **Accent:** `components/public/persona.css` (pink to lilac). Every rule skips
+  `.ph[data-lockin]`. `PublicProvider` sets `html[data-persona]` and calls the
+  bridge's `setPersona`.
+- **Kotlin:** `setPersona` in SharedPreferences; the card swaps "Heads up,
+  boss." and "Bro, it's time." for her.
+- **Backend:** `services/profile.py` accepts `gender`, and `persona_note`
+  addresses her properly; `profile_test` 24.
+- **Open:** the owner will judge the whole "her" look and copy.
+
 ### 2026-10-05 · Claude Code · Start/Stop everywhere, auto-stop, "how fully", full Lock-in theme
 
 - **`services/focus.py`:**

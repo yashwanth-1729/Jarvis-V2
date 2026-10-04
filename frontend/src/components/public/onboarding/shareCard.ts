@@ -19,6 +19,8 @@ export interface CardData {
   stageLine: string;
   /** Three gradient stops. */
   colors: [string, string, string];
+  /** Her persona: HOLO wears its bow on the card too. */
+  her?: boolean;
 }
 
 export type ShareOutcome = "shared" | "downloaded" | "copied" | "cancelled" | "failed";
@@ -63,7 +65,7 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): 
 }
 
 /** HOLO, happy, in flat shapes. */
-function drawHolo(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number) {
+function drawHolo(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, her = false) {
   ctx.save();
   // Projector glow.
   ctx.fillStyle = "rgba(11,11,14,0.14)";
@@ -86,6 +88,27 @@ function drawHolo(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: numb
   ctx.arc(cx, cy - s * 0.53, s * 0.06, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
+
+  // Her bow, tied on the antenna.
+  if (her) {
+    const bx = cx;
+    const by = cy - s * 0.43;
+    const w = s * 0.11;
+    const h = s * 0.07;
+    ctx.fillStyle = "#ff7ac6";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + side * w, by - h);
+      ctx.quadraticCurveTo(bx + side * w * 1.3, by, bx + side * w, by + h);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = "#d94f9f";
+    ctx.beginPath();
+    ctx.arc(bx, by, s * 0.026, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // Ear pods.
   ctx.fillStyle = "#8f7cff";
@@ -184,7 +207,7 @@ export async function renderCard(data: CardData, root: Element | null): Promise<
     ctx.fillText(lvl, W - 92 - lvlWidth / 2, 120);
 
     // HOLO.
-    drawHolo(ctx, W / 2, 330, 300);
+    drawHolo(ctx, W / 2, 330, 300, data.her);
 
     // Title, name, vibe.
     ctx.fillStyle = INK;

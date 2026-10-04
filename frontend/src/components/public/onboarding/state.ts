@@ -7,11 +7,13 @@
  * the blocks they already added, instead of creating them twice. It is
  * removed when onboarding finishes.
  */
-import type { Chronotype, LanguagePref, LifeStage, OnboardingProfile, Vibe } from "@/lib/profile";
+import type { Chronotype, Gender, LanguagePref, LifeStage, OnboardingProfile, Vibe } from "@/lib/profile";
 import { normalizeWeek, type WeekState } from "./planWeek";
 import type { AddedBlock } from "./weekPlan";
 
 export interface Answers {
+  /** The first question; null is "Rather not say" (and every older draft). */
+  gender: Gender | null;
   name: string;
   callMe: string;
   vibe: Vibe | null;
@@ -31,6 +33,7 @@ export interface Answers {
 }
 
 export const EMPTY: Answers = {
+  gender: null,
   name: "",
   callMe: "",
   vibe: null,
@@ -53,7 +56,7 @@ export const EMPTY: Answers = {
  * freetime (then build). The manual builder uses "week" alone.
  */
 export const STEPS = [
-  "boot", "name", "vibe", "stage", "interests", "goals", "enemy", "rhythm", "language",
+  "boot", "gender", "name", "vibe", "stage", "interests", "goals", "enemy", "rhythm", "language",
   "hours", "week", "weight", "freetime", "weekplan", "lockin", "notify", "reveal",
 ] as const;
 export type StepId = (typeof STEPS)[number];
@@ -79,10 +82,13 @@ export function loadDraft(): Draft | null {
     if (!raw) return null;
     const draft = JSON.parse(raw) as Partial<Draft>;
     if (draft.v !== 1 || !draft.step || !STEPS.includes(draft.step) || !draft.answers) return null;
+    const answers = { ...EMPTY, ...draft.answers };
+    // Drafts from before the gender question have none: "Rather not say".
+    if (answers.gender !== "female" && answers.gender !== "male") answers.gender = null;
     return {
       v: 1,
       step: draft.step,
-      answers: { ...EMPTY, ...draft.answers },
+      answers,
       blocks: Array.isArray(draft.blocks) ? draft.blocks : [],
       mustDo: Array.isArray(draft.mustDo) ? draft.mustDo : [],
       marked: Array.isArray(draft.marked) ? draft.marked : [],
@@ -119,6 +125,7 @@ export function examName(answers: Answers): string | null {
 export function buildProfile(answers: Answers, wantsLockinTrial: boolean): OnboardingProfile {
   const name = answers.name.trim();
   return {
+    gender: answers.gender,
     name,
     callMe: answers.callMe.trim() || name,
     vibe: answers.vibe ?? "chill",

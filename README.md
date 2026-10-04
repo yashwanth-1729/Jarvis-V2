@@ -544,6 +544,21 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-05: JARVIS Public asks "girl or guy?" first, and adapts for her (first version, for the owner's review)
+
+- **Why:** the owner: "take into consideration of girls... ask at starting itself... if the user is a girl, the UI changes a bit... the kind of quotes HOLO says, or other stuff... I will say if this is ok".
+- **Onboarding:** a new first question after boot, "Who am I talking to?", with "A girl" / "A guy" and a quiet "Rather not say". It's stored as profile `gender`; old drafts load as `null`.
+- **For her** ("A guy" and "Rather not say" keep today's copy):
+  - **No guy words:** "Boss" becomes "Bestie" and "Chill bro" becomes "Chill bestie". Lines like "final boss" are reworded, and nothing about her interests is assumed.
+  - **HOLO** wears a small pink bow, in onboarding, on the reveal card and on the share image.
+  - **Accent:** pink-to-lilac instead of lime, app-wide (`components/public/persona.css` on `html[data-persona="her"]`). A running Lock-in keeps its own black-and-rose takeover.
+  - **Notifications:** "Heads up, bestie." and "Girl, it's time." (`setPersona` on the Android bridge).
+  - **JARVIS** is told how to address her, through `profile.persona_note`.
+- **Validation:**
+  - `profile_test` 24 (9 new); tsc and ESLint are clean.
+  - The subagent walked the public preview: picking "A girl" turns the accent pink, adds the bow, shows "Bestie" and "Chill bestie", and saves the gender; "A guy" keeps lime and "Boss".
+  - The Kotlin copy is compiled in this build; it has not been seen on the phone.
+
 ### 2026-10-04 (sixth): Start/Stop on every Lock-in, auto-stop at the block's end, "how fully" stats, the whole app black and red
 
 - **Why:** the owner asked:

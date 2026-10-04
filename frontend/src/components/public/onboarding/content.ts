@@ -7,9 +7,20 @@
  * assistant's persona (backend/app/services/profile.py), which trims each to
  * 40-60 characters.
  */
-import type { Chronotype, LanguagePref, LifeStage, Vibe } from "@/lib/profile";
+import type { Chronotype, Gender, LanguagePref, LifeStage, Vibe } from "@/lib/profile";
 
 export type Tone = "lime" | "sky" | "lilac" | "pink" | "orange" | "mint" | "amber" | "red";
+
+/**
+ * Who HOLO is talking to. "her" (she picked "A girl") swaps any gendered word
+ * (bro, boss, king, dude) for warm best-friend energy; the options themselves
+ * (interests, goals) never change with it. Everyone else keeps today's copy.
+ */
+export type Persona = "her" | null;
+
+export function personaOf(gender: Gender | null | undefined): Persona {
+  return gender === "female" ? "her" : null;
+}
 
 /** HOLO's expressions (see Holo.tsx). */
 export type Mood =
@@ -104,10 +115,11 @@ export const STAGES: StageOption[] = [
   { value: "exam", title: "Exam grind", emoji: "📚", line: "Prepping for the big one", tone: "lime", reaction: "Exam grind. Okay, we're getting serious.", mood: "fierce" },
 ];
 
-export const EXAMS: Array<{ value: string; reaction: string }> = [
+/** `her` is the line for the "her" persona where the usual one won't do. */
+export const EXAMS: Array<{ value: string; reaction: string; her?: string }> = [
   { value: "JEE", reaction: "JEE? Physics won't know what hit it." },
   { value: "NEET", reaction: "NEET. Future doctor, noted. 🩺" },
-  { value: "UPSC", reaction: "UPSC. The final boss of exams. Respect." },
+  { value: "UPSC", reaction: "UPSC. The final boss of exams. Respect.", her: "UPSC. The toughest exam there is. Respect." },
   { value: "GATE", reaction: "GATE. Let's go get that rank." },
   { value: "CAT", reaction: "CAT. 99 percentile energy." },
   { value: "Other", reaction: "Name it. We'll crush it." },
@@ -278,6 +290,11 @@ export function samplePings(vibe: Vibe | null, call: string, enemy: string | nul
 
 export function vibeOf(value: Vibe | null): VibeOption {
   return VIBES.find((item) => item.value === value) ?? VIBES[0];
+}
+
+/** A vibe's name as shown: "Chill bro" is "Chill bestie" for her (the stored value stays "chill"). */
+export function vibeTitle(option: VibeOption, persona: Persona): string {
+  return persona === "her" && option.value === "chill" ? "Chill bestie" : option.title;
 }
 
 export function characterTitle(chronotype: Chronotype | null, enemy: string | null): string {

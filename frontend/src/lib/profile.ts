@@ -10,8 +10,15 @@ export type Vibe = "hype" | "coach" | "chill" | "monk";
 export type LifeStage = "school" | "college" | "working" | "creator" | "exam";
 export type Chronotype = "early" | "night";
 export type LanguagePref = "en" | "te" | "hinglish";
+/** Asked first in onboarding; null is "Rather not say". */
+export type Gender = "female" | "male";
 
 export interface OnboardingProfile {
+  /**
+   * "female" switches the public app to the "her" persona (copy, a pink-to-lilac
+   * accent, notification lines); absent or null keeps today's defaults.
+   */
+  gender?: Gender | null;
   /** Their name, as typed. */
   name: string;
   /** What the assistant should call them (nickname); defaults to name. */

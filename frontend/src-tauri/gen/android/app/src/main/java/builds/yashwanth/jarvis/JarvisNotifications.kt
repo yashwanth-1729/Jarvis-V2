@@ -23,6 +23,7 @@ import java.util.Locale
 private const val PREFS = "jarvis_native_notifications"
 private const val PLAN = "alarm_plan"
 private const val FIRED_REMINDERS = "fired_reminders"
+private const val PERSONA = "persona"
 private const val ALARM_ACTION = "builds.yashwanth.jarvis.NOTIFY"
 private const val WEEK_MS = 7L * 24L * 60L * 60L * 1000L
 private const val DAY_MS = 24L * 60L * 60L * 1000L
@@ -260,10 +261,37 @@ object JarvisAlarmScheduler {
   }
 }
 
+/**
+ * Who the cards are talking to, set by the public app through
+ * [JarvisNotificationBridge.setPersona]: "her" swaps the gendered copy lines
+ * for hers ([JarvisNotificationCard]); anything else keeps the defaults. The
+ * personal app never sets it.
+ */
+object JarvisPersona {
+  private const val HER = "her"
+
+  fun set(context: Context, value: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(PERSONA, if (value == HER) HER else "")
+      .apply()
+  }
+
+  fun isHer(context: Context): Boolean =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PERSONA, "") == HER
+}
+
 class JarvisNotificationBridge(
   private val context: Context,
   activity: android.app.Activity? = null,
 ) {
+  /** "her" or "" (PublicContext.tsx); see [JarvisPersona]. */
+  @JavascriptInterface
+  fun setPersona(value: String): Boolean {
+    JarvisPersona.set(context, value)
+    return true
+  }
+
   private val activityRef = java.lang.ref.WeakReference(activity)
 
   /**

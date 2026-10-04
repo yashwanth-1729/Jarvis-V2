@@ -62,6 +62,21 @@ def main() -> None:
     check("and still starts with the same base prompt", with_profile.startswith(base.split("\n\n")[0]))
     check("stable between turns (cache-friendly)", with_profile == agent._build_persona_message()["content"])
 
+    print("gender: only female or male, and her note")
+    check("no gender, no address note", "never call her" not in note, note)
+    her = profile.save({**saved, "gender": "female", "vibe": "chill"})
+    check("female kept", her.get("gender") == "female", her)
+    her_note = profile.persona_note() or ""
+    check("tells JARVIS how to address her", "never call her bro" in her_note and "boss" in her_note, her_note)
+    check("her vibe reads Chill bestie, not Chill bro", "Chill bestie" in her_note and "Chill bro" not in her_note, her_note)
+    him = profile.save({**saved, "gender": "male", "vibe": "chill"})
+    check("male kept", him.get("gender") == "male", him)
+    him_note = profile.persona_note() or ""
+    check("male keeps today's note", "never call her" not in him_note and "Chill bro" in him_note, him_note)
+    odd = profile.save({**saved, "gender": "robot"})
+    check("anything else dropped", "gender" not in odd, odd)
+    check("and nothing about her in the note", "never call her" not in (profile.persona_note() or ""))
+
     profile.clear()
     check("cleared profile leaves the persona as it was", agent._build_persona_message()["content"] == base)
 

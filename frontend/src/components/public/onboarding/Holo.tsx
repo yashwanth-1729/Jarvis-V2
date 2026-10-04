@@ -2,7 +2,10 @@
 
 import * as React from "react";
 
-import type { Mood } from "./content";
+import type { Mood, Persona } from "./content";
+
+/** Who HOLO is talking to; the onboarding root provides it once she answers. */
+export const PersonaContext = React.createContext<Persona>(null);
 
 /**
  * HOLO for onboarding: a bigger, more expressive take on the dock's CSS face
@@ -13,6 +16,8 @@ import type { Mood } from "./content";
  * showing, and they swap with a spring on transform and opacity only. Bumping
  * `kick` restarts the hop (the wrapper is re-keyed). `glitchIn` plays the boot
  * materialisation once. Under reduced motion everything holds still.
+ *
+ * For her (PersonaContext), one small touch: a bow tied on the antenna.
  */
 export function Holo({ mood, kick = 0, size, glitchIn = false, className }: {
   mood: Mood;
@@ -21,11 +26,13 @@ export function Holo({ mood, kick = 0, size, glitchIn = false, className }: {
   glitchIn?: boolean;
   className?: string;
 }) {
+  const persona = React.useContext(PersonaContext);
   return (
     <span
       className={className ? `ob-holo ${className}` : "ob-holo"}
       data-mood={mood}
       data-glitch-in={glitchIn || undefined}
+      data-persona={persona ?? undefined}
       style={{ "--s": `${size}px` } as React.CSSProperties}
       aria-hidden="true"
     >
@@ -33,7 +40,16 @@ export function Holo({ mood, kick = 0, size, glitchIn = false, className }: {
         <span key={kick} className="ob-holo-body" data-kick={kick > 0 || undefined}>
           <span className="ob-holo-ghost" data-c="a" />
           <span className="ob-holo-ghost" data-c="b" />
-          <span className="ob-holo-antenna"><i /></span>
+          <span className="ob-holo-antenna">
+            <i />
+            {persona === "her" && (
+              <span className="ob-holo-bow">
+                <b data-side="l" />
+                <b data-side="r" />
+                <em />
+              </span>
+            )}
+          </span>
           <span className="ob-holo-ear" data-side="l" />
           <span className="ob-holo-ear" data-side="r" />
           <span className="ob-holo-head">

@@ -212,6 +212,14 @@ object JarvisNotificationCard {
     "T-minus {n} min.",
     "{n} min warning.",
   )
+  /**
+   * Her versions of the gendered copy lines, used when the public app set the
+   * "her" persona ([JarvisPersona]). Every other line is already neutral.
+   */
+  private val HER_LINES = mapOf(
+    "Heads up, boss." to "Heads up, bestie.",
+    "Bro, it's time." to "Girl, it's time.",
+  )
   private val SNOOZED_LINES = listOf(
     "Snooze over. For real now.",
     "Round two. No more snoozing.",
@@ -461,11 +469,12 @@ object JarvisNotificationCard {
       }
     }
     val seed = (alarm.id.removePrefix(SNOOZE_PREFIX) + "@" + alarm.triggerAt).hashCode()
-    val line = when {
+    val picked = when {
       snoozed -> pick(SNOOZED_LINES, seed)
       lead > 0 -> pick(EARLY_LINES, seed).replace("{n}", lead.toString())
       else -> pick(kind.lines, seed)
     }
+    val line = if (JarvisPersona.isHer(context)) HER_LINES[picked] ?: picked else picked
     return Card(kind, label, title.ifBlank { kind.noun }, chip, line, details)
   }
 

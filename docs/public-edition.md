@@ -132,6 +132,12 @@ answered with taps and swipes. HOLO reacts to every answer, and a progress bar
 reads "Building your HOLO… 40%".
 
 1. Boot: "yo. I'm your new brain. 60 seconds?"
+   - Then (2026-10-05) "Who am I talking to?": A girl / A guy, or "Rather
+     not say".
+   - For her (the "her" persona) the copy drops guy words ("Bestie", "Chill
+     bestie"), HOLO wears a bow, the accent is pink to lilac, notifications
+     and JARVIS address her properly, and Lock-in turns black and rose.
+   - This is a first version, waiting on the owner's review.
 2. Your name, and what HOLO should call you.
 3. Vibe: Hype friend, Strict coach, Chill bro or Calm monk. Each plays a
    sample line.
