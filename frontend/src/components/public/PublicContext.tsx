@@ -36,6 +36,11 @@ export interface PublicState {
   signOut: () => Promise<void>;
   /** Delete the account on the server, then start over on this phone. */
   deleteAccount: () => Promise<void>;
+  /**
+   * Run onboarding again, keeping everything already on the phone (schedule,
+   * tasks, Lock-in history). Only the answers are asked again.
+   */
+  redoSetup: () => void;
 }
 
 const PublicContext = React.createContext<PublicState | null>(null);
@@ -233,6 +238,15 @@ export function PublicProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setMe(null);
         void handToBackend("", () => true);
+      },
+      redoSetup: () => {
+        try {
+          window.localStorage.removeItem("jarvis.public.profile");
+          window.localStorage.removeItem("jarvis.public.onboarding.draft");
+        } catch {
+          // Storage unavailable: onboarding still opens from the state below.
+        }
+        setProfile(null);
       },
       deleteAccount: async () => {
         const current = sessionRef.current;

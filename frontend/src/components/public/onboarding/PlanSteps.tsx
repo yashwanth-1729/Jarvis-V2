@@ -207,14 +207,19 @@ export function HoursStep({ answers, week, setWeek, next }: { answers: Answers; 
 
 /* ------------------------------------- 2. what do you want to do weekly? */
 
-export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
+export function PlanAskStep({ answers, week, setWeek, react, next, onManual, onKeep }: {
   answers: Answers;
   week: WeekState;
   setWeek: SetWeek;
   react: (mood: Mood, line: string) => void;
   next: () => void;
   onManual: () => void;
+  /** Skip building a week (a redone setup that already has one). */
+  onKeep?: () => void;
 }) {
+  const { app } = useAppData();
+  const schedule = app.state?.schedule;
+  const hasWeek = Boolean(schedule && schedule.college.length + schedule.routine.length + schedule.session.length > 0);
   const items = week.activities;
   const [draft, setDraft] = React.useState("");
   const input = React.useRef<HTMLInputElement>(null);
@@ -269,7 +274,11 @@ export function PlanAskStep({ answers, week, setWeek, react, next, onManual }: {
           <Cta disabled={items.length === 0} arrow={items.length > 0} onClick={next}>
             {items.length === 0 ? "Add at least one" : "Next"}
           </Cta>
-          <Quiet onClick={onManual}>I&apos;ll set it up myself</Quiet>
+          {hasWeek && onKeep ? (
+            <Quiet onClick={onKeep}>Keep my current week</Quiet>
+          ) : (
+            <Quiet onClick={onManual}>I&apos;ll set it up myself</Quiet>
+          )}
         </>
       }
     >

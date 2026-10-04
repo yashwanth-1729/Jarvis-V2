@@ -302,7 +302,7 @@ export function Onboarding({ onFinish }: { onFinish: (profile: OnboardingProfile
         return week.mode === "manual" ? (
           <WeekStep answers={answers} blocks={blocks} onAdded={addBlock} react={react} next={next} onAuto={blocks.length === 0 ? autoWeek : undefined} />
         ) : (
-          <PlanAskStep answers={answers} week={week} setWeek={setWeek} react={react} next={next} onManual={manualWeek} />
+          <PlanAskStep answers={answers} week={week} setWeek={setWeek} react={react} next={next} onManual={manualWeek} onKeep={() => jump("notify", 1)} />
         );
       case "weekplan":
         return <PlanReviewStep answers={answers} week={week} setWeek={setWeek} blocks={blocks} onAdded={addBlock} react={react} next={next} onManual={manualWeek} />;

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Lightning, SignOut, Trash, UserCircle } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Lightning, SignOut, Trash, UserCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { haptic } from "@/components/phone/lib/haptics";
@@ -13,6 +13,41 @@ import { usePublic } from "./PublicContext";
  * Settings → Account in JARVIS Public: who is signed in, the plan, Aura, sign
  * out, and deleting the account (Play requires deletion inside the app).
  */
+/**
+ * Redo setup: onboarding again (gender, vibe, your week...) without losing
+ * anything already on the phone. Two taps, so it can't happen by accident.
+ */
+function RedoSetup() {
+  const pub = usePublic();
+  const [armed, setArmed] = React.useState(false);
+  React.useEffect(() => {
+    if (!armed) return;
+    const timer = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+  return (
+    <div className="pub-card">
+      <span className="pub-eyebrow"><ArrowCounterClockwise size={14} weight="bold" /> Your setup</span>
+      <p>Answer the setup questions again. Your schedule, tasks and Lock-in history all stay.</p>
+      <Tap
+        className="pub-link"
+        onClick={() => {
+          if (!armed) {
+            haptic("warning");
+            setArmed(true);
+            return;
+          }
+          haptic("heavy");
+          pub.redoSetup();
+        }}
+        feel={false}
+      >
+        <ArrowCounterClockwise size={16} weight="bold" /> {armed ? "Tap again to start the setup" : "Redo setup"}
+      </Tap>
+    </div>
+  );
+}
+
 export function AccountPage() {
   const pub = usePublic();
   const { push } = useNav();
@@ -31,6 +66,7 @@ export function AccountPage() {
         <strong>You&apos;re using the planner without an account.</strong>
         <p>Sign in to unlock chat, voice and your plan&apos;s Aura.</p>
         <Tap className="pub-cta" onClick={pub.requestSignIn} feel="heavy" squish={0.94}>Sign in</Tap>
+        <RedoSetup />
       </div>
     );
   }
@@ -72,6 +108,7 @@ export function AccountPage() {
       >
         <SignOut size={16} weight="bold" /> Sign out
       </Tap>
+      <RedoSetup />
       <Tap className="pub-link pub-danger" disabled={deleting} onClick={remove} feel={false}>
         <Trash size={16} weight="bold" /> {deleting ? "Deleting…" : confirming ? "Tap again to delete for good" : "Delete account"}
       </Tap>
