@@ -2942,3 +2942,27 @@ html[data-persona="her"] .ph[data-lockin] .ph-app { background: radial-gradient(
 .ph[data-lockin] .ph-fully-bar span[data-k="full"], .ph[data-lockin] .ph-fully .ph-stats-legend i[data-k="full"] { background: #fff; }
 .ph[data-lockin] .ph-fully-bar span[data-k="partial"], .ph[data-lockin] .ph-fully .ph-stats-legend i[data-k="partial"] { background: #ff8a95; }
 .ph[data-lockin] .ph-fully-bar span[data-k="low"], .ph[data-lockin] .ph-fully .ph-stats-legend i[data-k="low"] { background: #c8102e; }
+
+/* --- Weekly Wrapped (WrappedSheet.tsx) ----------------------------------------- */
+.ph-wrapped { display: grid; place-items: center; padding: 4px 0 8px; }
+.ph-wrapped-card {
+  display: block;
+  /* Fit the sheet on any phone: as tall as half the screen allows. */
+  height: min(52vh, 460px);
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 1080 / 1920;
+  border-radius: 22px;
+  box-shadow: 0 30px 60px -24px rgba(255, 31, 61, 0.55), 0 0 0 1px rgba(255, 31, 61, 0.3);
+  animation: ph-wrapped-in 520ms var(--spring-pop, ease) both;
+}
+.ph-wrapped-loading { display: grid; place-items: center; height: min(52vh, 460px); aspect-ratio: 1080 / 1920; border-radius: 22px; background: #0b0204; color: rgba(255, 232, 234, 0.6); font: 400 11px/1 var(--font-tag); letter-spacing: 0.16em; text-transform: uppercase; }
+@keyframes ph-wrapped-in { from { opacity: 0; transform: translateY(14px) scale(0.96) rotate(-1.5deg); } }
+@media (prefers-reduced-motion: reduce) { .ph-wrapped-card { animation: none; } }
+
+/* --- Exam mode: the countdown under Today's greeting ------------------------- */
+.ph-exam { display: inline-flex; align-items: baseline; gap: 6px; margin-top: 10px; padding: 7px 12px 7px 8px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line-2); color: var(--fg-2); font-size: 14px; font-weight: 600; }
+.ph-exam-name { padding: 3px 8px; border-radius: 999px; background: var(--lime); color: var(--ink-on-candy); font: 400 10.5px/1.2 var(--font-tag); letter-spacing: 0.08em; text-transform: uppercase; }
+.ph-exam b { color: var(--fg); font: 800 16px/1 var(--font-num); }
+.ph-exam[data-close] { box-shadow: inset 0 0 0 1px rgba(255, 77, 94, 0.5); }
+.ph-exam[data-close] b { color: var(--red); }

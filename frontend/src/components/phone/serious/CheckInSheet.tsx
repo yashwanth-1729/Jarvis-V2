@@ -17,9 +17,10 @@ import { clock } from "../lib/time";
 import { useAppData, useNow } from "../PhoneContext";
 import { Sheet } from "../ui/Sheet";
 import { Tap } from "../ui/Tap";
-import { openCatchUp } from "./catchUp";
+import { openCatchUp, openWrapped } from "./catchUp";
 import { emberBurst } from "./embers";
 import { seriousStateOf, type SeriousRowState } from "./SeriousControl";
+import { checkinLine, vibeOrDefault } from "./vibe";
 import { dayKey, useSerious } from "./SeriousContext";
 
 interface Row {
@@ -27,21 +28,6 @@ interface Row {
   title: string;
   start: number;
   state: SeriousRowState;
-}
-
-function lineFor(rows: Row[], weekMissed: number): string {
-  const done = rows.filter((row) => row.state === "done").length;
-  const slipped = rows.filter((row) => row.state === "missed");
-  const ahead = rows.filter((row) => row.state === "pending" || row.state === "running").length;
-  if (!rows.length) {
-    return weekMissed
-      ? `Nothing serious today. ${weekMissed} from this week still slipped. Want to fit ${weekMissed === 1 ? "it" : "them"} back in?`
-      : "No Lock-ins today. Rest counts too.";
-  }
-  if (!slipped.length && !ahead) return `Clean sweep. ${done} of ${rows.length}, no skips. That's how it's done.`;
-  if (!slipped.length) return `${done} of ${rows.length} so far. ${ahead} still ahead tonight. Finish it.`;
-  const names = slipped.slice(0, 2).map((row) => row.title).join(" and ");
-  return `${done} of ${rows.length} locked in. ${names} slipped. No drama: let's fit ${slipped.length === 1 ? "it" : "them"} back in.`;
 }
 
 export function CheckInSheet({ open, speak, onClose }: { open: boolean; speak: boolean; onClose: () => void }) {
@@ -69,7 +55,14 @@ export function CheckInSheet({ open, speak, onClose }: { open: boolean; speak: b
   const weekMissed = serious?.missed.length ?? 0;
   const done = rows.filter((row) => row.state === "done").length;
   const clean = rows.length > 0 && rows.every((row) => row.state === "done" || row.state === "moved");
-  const line = lineFor(rows, weekMissed);
+  // In their vibe: Strict coach roasts a skip, Hype friend hypes a clean day.
+  const line = checkinLine(vibeOrDefault(pub?.profile?.vibe), {
+    done,
+    total: rows.length,
+    slipped: rows.filter((row) => row.state === "missed").map((row) => row.title),
+    ahead: rows.filter((row) => row.state === "pending" || row.state === "running").length,
+    weekMissed,
+  });
   const canSpeak = !pub || pub.has("voice_en");
 
   const hear = React.useCallback(async () => {
@@ -124,6 +117,18 @@ export function CheckInSheet({ open, speak, onClose }: { open: boolean; speak: b
       feel="heavy"
     >
       <ArrowBendUpRight size={18} weight="bold" /> Fit {weekMissed === 1 ? "it" : `${weekMissed}`} back in
+    </Tap>
+  ) : now.getDay() === 0 ? (
+    // Sunday: the week's done, so the check-in ends on Wrapped.
+    <Tap
+      className="ph-btn ph-btn-ember ph-btn-wide"
+      onClick={() => {
+        close();
+        window.setTimeout(openWrapped, 320);
+      }}
+      feel="heavy"
+    >
+      Your week, wrapped
     </Tap>
   ) : (
     <Tap className="ph-btn ph-btn-wide" onClick={close}>Done for today</Tap>

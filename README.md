@@ -544,6 +544,29 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-17 (second): Roadmap features, part 1: Weekly Wrapped, roast/hype voice, exam countdown
+
+- **Why:** the owner: "now implement the extra features of JARVIS Public". These three run on the device. The native ones (Lock-in timer in the notification shade, Focus Guard, home-screen widget) are in a separate change.
+- **Weekly Wrapped** (`serious/wrapped.ts`, `WrappedSheet.tsx`):
+  - A 1080×1920 story card, black and crimson, drawn on a canvas. It shows:
+    - the time locked in this week, with ▲/▼ against this point last week;
+    - % of the plan kept, done and skipped;
+    - the streak, the best day, and the thing that got the most time;
+    - a verdict in their vibe.
+  - The sheet shows the card and shares it (image through the share sheet, falling back to the text).
+  - It opens from Stats (share icon) and from Sunday's check-in ("Your week, wrapped").
+- **Roast/hype voice** (`serious/vibe.ts`): the evening check-in line, Today's "slipped" card and Wrapped's verdict follow the vibe picked in onboarding.
+  - Hype friend hypes.
+  - Strict coach roasts a skip ("Skipped. Excuses don't count.").
+  - Chill keeps it light.
+  - Calm monk keeps it still.
+  - The personal app speaks as Hype.
+- **Exam mode:** the exam named in onboarding ("JEE · 42 days to go") is counted down under Today's greeting. The number turns red in the last 30 days, and the line hides once the day has passed.
+- **Validation:**
+  - tsc and ESLint are clean.
+  - In the design preview, Wrapped rendered its 1080×1920 card in the sheet with Share in view, and the slipped card spoke in the Hype line.
+  - Not yet on the phone. The earlier build stopped on its stale-UI guard, because sources changed mid-build.
+
 ### 2026-10-17: Lock-in mode covers the whole app, for the whole Lock-in time
 
 - **Why:** after installing, the owner asked: "why is the whole app still not in that?".

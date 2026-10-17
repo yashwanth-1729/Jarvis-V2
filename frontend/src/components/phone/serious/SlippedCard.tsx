@@ -16,6 +16,7 @@ import { Tap } from "../ui/Tap";
 import { letGo, missedLabel, openCatchUp } from "./catchUp";
 import { Pulse } from "./Pulse";
 import { useSerious } from "./SeriousContext";
+import { slippedLine, vibeOrDefault } from "./vibe";
 
 export function SlippedCard() {
   const serious = useSerious();
@@ -54,7 +55,7 @@ export function SlippedCard() {
       <Pulse className="ph-slipped-pulse" live={false} />
       <span className="ph-slipped-top"><ArrowBendUpRight size={13} weight="bold" /> Plans bend</span>
       <h3>{title}</h3>
-      <p>Don&apos;t let one miss kill the week. JARVIS will find time for it in the days left.</p>
+      <p>{slippedLine(vibeOrDefault(pub?.profile?.vibe))}</p>
       <div className="ph-slipped-actions">
         <Tap className="ph-btn ph-btn-ember" onClick={openCatchUp} disabled={busy} feel="heavy" squish={0.96}>
           <ArrowBendUpRight size={17} weight="bold" /> Fit it back in

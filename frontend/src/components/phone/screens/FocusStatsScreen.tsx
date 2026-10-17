@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { CaretLeft, CheckCircle, Fire, Lightning, Target, Timer, Trophy, XCircle } from "@phosphor-icons/react";
+import { CaretLeft, CheckCircle, Fire, Lightning, ShareNetwork, Target, Timer, Trophy, XCircle } from "@phosphor-icons/react";
 
 import { fetchFocusStats, type FocusItemStats, type FocusStats } from "@/lib/focus";
 import { emitFx } from "../fx/fxBus";
 import { haptic } from "../lib/haptics";
+import { openWrapped } from "../serious/catchUp";
 import { duration } from "../lib/time";
 import { useNav } from "../PhoneContext";
 import { Skeleton, Sticker } from "../ui/Bits";
@@ -79,6 +80,11 @@ export function FocusStatsScreen() {
         </Tap>
       }
       eyebrow="Lock-in scoreboard"
+      actions={
+        <Tap className="ph-icon-btn" aria-label="Your week, wrapped" onClick={openWrapped} feel="select">
+          <ShareNetwork size={21} weight="bold" />
+        </Tap>
+      }
       hero={
         <Segmented<Range>
           label="Range"

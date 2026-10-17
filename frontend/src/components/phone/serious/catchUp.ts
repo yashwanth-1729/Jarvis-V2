@@ -30,6 +30,12 @@ import { dayKey } from "./SeriousContext";
 
 export const OPEN_CATCH_UP = "jarvis-open-catch-up";
 export const OPEN_CHECK_IN = "jarvis-open-check-in";
+export const OPEN_WRAPPED = "jarvis-open-wrapped";
+
+/** Open Weekly Wrapped (from Stats, or Sunday's check-in). */
+export function openWrapped(): void {
+  window.dispatchEvent(new Event(OPEN_WRAPPED));
+}
 
 /** Open the catch-up sheet from anywhere (Today's card, the check-in). */
 export function openCatchUp(): void {

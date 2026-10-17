@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 
 import { AuraChip } from "@/components/public/AuraChip";
+import { usePublicOptional } from "@/components/public/PublicContext";
 import { IS_PUBLIC } from "@/lib/edition";
 import { FOCUS_CHANGED, fetchFocusWeek, type FocusWeek } from "@/lib/focus";
 import type { Task } from "@/types";
@@ -80,6 +81,7 @@ export function TodayScreen() {
               {overdue > 0 && <> · <span className="ph-hot"><Num value={overdue} /> late</span></>}
             </p>
           )}
+          <ExamCountdown now={now} />
         </div>
       }
     >
@@ -224,6 +226,25 @@ function NowTile({ agenda, now, onOpen }: { agenda: ReturnType<typeof nowAndNext
       {tile}
       <span className="ph-now-serious"><SeriousControl uid={event.uid} occurrence={occurrence} ended={ended} /></span>
     </div>
+  );
+}
+
+/**
+ * Exam mode (roadmap, 2026-10-17): the exam they named in onboarding, counted
+ * down on Today. Hidden without a date, and once the day has passed.
+ */
+function ExamCountdown({ now }: { now: Date }) {
+  const profile = usePublicOptional()?.profile;
+  const date = profile?.examDate ? new Date(`${profile.examDate.slice(0, 10)}T00:00:00`) : null;
+  if (!profile?.exam || !date || Number.isNaN(date.getTime())) return null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((date.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return null;
+  return (
+    <p className="ph-exam" data-close={days <= 30 || undefined}>
+      <span className="ph-exam-name">{profile.exam}</span>
+      {days === 0 ? <b>is today. You&apos;ve got this.</b> : <><b><Num value={days} /></b> {days === 1 ? "day" : "days"} to go</>}
+    </p>
   );
 }
 
