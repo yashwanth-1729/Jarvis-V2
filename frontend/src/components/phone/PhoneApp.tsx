@@ -294,7 +294,7 @@ function Shell() {
   const gated = pub !== null && pub.stage !== "app";
   // A serious session running turns the whole app to Lock-in's black and red.
   const serious = useSerious();
-  const lockin = !gated && Boolean(serious?.running);
+  const lockin = !gated && Boolean(serious?.running || serious?.live);
 
   return (
     <PhoneRootContext.Provider value={root}>

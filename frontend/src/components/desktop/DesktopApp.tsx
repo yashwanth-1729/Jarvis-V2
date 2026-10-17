@@ -69,7 +69,8 @@ function focusComposer(root: HTMLElement | null) {
 
 function DesktopShell() {
   // Lock-in's ember theme while a serious session runs, same as the phone.
-  const lockin = Boolean(useSerious()?.running);
+  const serious = useSerious();
+  const lockin = Boolean(serious?.running || serious?.live);
   const { app } = useAppData();
   const { tab, visited, layers, chatOpen } = useNavState();
   const { go, pop, push, closeChat } = useNav();

@@ -2905,3 +2905,40 @@ html[data-persona="her"] .ph[data-lockin] [data-tone] { --tone-soft: rgba(255, 4
 html[data-persona="her"] .ph[data-lockin] .ph-app { background: radial-gradient(120% 70% at 50% 0%, rgba(255, 45, 120, 0.1), transparent 60%), #050505; }
 .ph-fully header { flex-wrap: wrap; row-gap: 6px; }
 .ph-fully .ph-stats-legend { flex-wrap: wrap; }
+
+/* --- Lock-in takeover, part two (2026-10-17): the colours that were written
+   straight into rules instead of tokens follow along too: glows, the dock
+   orb, HOLO's ring, visor, eyes and antenna, toasts, options, voice aura and
+   every stats graphic. Nothing candy-coloured is left during Lock-in. */
+.ph[data-lockin] .ph-icon-btn-accent { box-shadow: 0 8px 22px -10px rgba(255, 31, 61, 0.8); }
+.ph[data-lockin] .ph-btn-lime-ghost { border-color: rgba(255, 31, 61, 0.5); }
+.ph[data-lockin] .ph-seg-pill { box-shadow: 0 6px 16px -8px rgba(255, 31, 61, 0.8); }
+.ph[data-lockin] .ph-dock-pill { box-shadow: 0 8px 20px -10px rgba(255, 31, 61, 0.85); }
+.ph[data-lockin] .ph-dock-orb { box-shadow: 0 0 0 5px var(--bg), 0 14px 30px -8px rgba(255, 31, 61, 0.6); }
+.ph[data-lockin] .ph-dock-orb::after { border-color: rgba(255, 31, 61, 0.55); }
+.ph[data-lockin] .ph-holo { --holo-eye: #ff4d5e; --holo-glow: rgba(255, 31, 61, 0.6); }
+.ph[data-lockin] .ph-holo[data-state] { --holo-eye: #ff4d5e; --holo-glow: rgba(255, 31, 61, 0.6); }
+.ph[data-lockin] .ph-holo-head::before { background: conic-gradient(from 0deg, #ff1f3d, #4a0610, #c8102e, #ff4d5e, #ff1f3d); }
+.ph[data-lockin] .ph-holo-visor { background: radial-gradient(120% 90% at 30% 10%, rgba(255, 31, 61, 0.22), transparent 55%), #0b0204; }
+.ph[data-lockin] .ph-holo-visor::after { background: repeating-linear-gradient(to bottom, rgba(255, 77, 94, 0.08) 0 1px, transparent 1px 3px); }
+.ph[data-lockin] .ph-holo-antenna::after { background: #ff1f3d; box-shadow: 0 0 calc(var(--s) * 0.1) #ff1f3d; }
+.ph[data-lockin] .ph-fab { box-shadow: 0 16px 34px -12px rgba(255, 31, 61, 0.75), 0 4px 0 rgba(0, 0, 0, 0.25); }
+.ph[data-lockin] .ph-option[data-on="true"] { border-color: var(--lime); background: rgba(255, 31, 61, 0.12); }
+.ph[data-lockin] .ph-toast-icon { color: #ff4d5e; }
+.ph[data-lockin] .ph-toast-action { background: #ff1f3d; color: #fff; }
+.ph[data-lockin] .ph-voice[data-state="thinking"] { --aura: #c8102e; }
+.ph[data-lockin] .ph-voice[data-state="speaking"] { --aura: #ff4d5e; }
+.ph[data-lockin] .ph-voice[data-state="hearing"] { --aura: #ff1f3d; }
+.ph[data-lockin] .ph-stats-hero { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 50px -30px rgba(255, 31, 61, 0.8); }
+.ph[data-lockin] .ph-stats-glow { background: conic-gradient(from 0deg, #ff1f3d, #4a0610, #c8102e, #ff4d5e, #ff1f3d); }
+.ph[data-lockin] .ph-stats-ring-fill { stroke: #ff1f3d; }
+.ph[data-lockin] .ph-stats-bar[data-today="true"] .ph-stats-bar-stack { box-shadow: 0 0 16px rgba(255, 31, 61, 0.7); }
+.ph[data-lockin] .ph-stats-heat span[data-level="1"] { background: rgba(255, 31, 61, 0.35); }
+.ph[data-lockin] .ph-stats-heat span[data-level="2"] { background: rgba(255, 31, 61, 0.6); }
+.ph[data-lockin] .ph-stats-heat span[data-level="3"] { background: rgba(255, 31, 61, 0.85); }
+.ph[data-lockin] .ph-stats-heat span[data-level="4"] { background: #ff1f3d; box-shadow: 0 0 10px rgba(255, 31, 61, 0.6); }
+.ph[data-lockin] .ph-fully-pct[data-level="full"], .ph[data-lockin] .ph-fully-call[data-k="full"] b { color: #fff; }
+.ph[data-lockin] .ph-fully-pct[data-level="partial"], .ph[data-lockin] .ph-fully-call[data-k="partial"] b { color: #ff8a95; }
+.ph[data-lockin] .ph-fully-bar span[data-k="full"], .ph[data-lockin] .ph-fully .ph-stats-legend i[data-k="full"] { background: #fff; }
+.ph[data-lockin] .ph-fully-bar span[data-k="partial"], .ph[data-lockin] .ph-fully .ph-stats-legend i[data-k="partial"] { background: #ff8a95; }
+.ph[data-lockin] .ph-fully-bar span[data-k="low"], .ph[data-lockin] .ph-fully .ph-stats-legend i[data-k="low"] { background: #c8102e; }

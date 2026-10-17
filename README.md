@@ -544,6 +544,20 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-17: Lock-in mode covers the whole app, for the whole Lock-in time
+
+- **Why:** after installing, the owner asked: "why is the whole app still not in that?".
+- **Cause 1:** the black-and-red takeover only came on after Start. `SeriousProvider` now also reports **`live`**: a serious block whose time is now and that isn't finished. Lock-in mode (`data-lockin` and the blood-red background) is on while a session runs **or** during a Lock-in block's time, Start pressed or not, in the phone apps and the desktop app.
+- **Cause 2:** some colours were written straight into rules rather than tokens, so they stayed candy-coloured. During Lock-in these now follow too:
+  - the dock orb and its glow;
+  - HOLO's ring, visor, eyes and antenna;
+  - accent glows, toasts and options;
+  - the voice aura;
+  - every stats graphic.
+- **Validation:**
+  - tsc and ESLint are clean.
+  - In the design preview, a serious block whose time was now turned the whole app black and red before Start (`data-lockin` set, no session running). The dock's HOLO and orb went red.
+
 ### 2026-10-05: JARVIS Public asks "girl or guy?" first, and adapts for her (first version, for the owner's review)
 
 - **Why:** the owner: "take into consideration of girls... ask at starting itself... if the user is a girl, the UI changes a bit... the kind of quotes HOLO says, or other stuff... I will say if this is ok".

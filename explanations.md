@@ -128,6 +128,17 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-17 · Claude Code · Lock-in mode during a block's time; no stray colours
+
+- **`SeriousContext`:** gained `live`, a serious block in its window today that
+  isn't done, moved or dropped. It uses a 20 s tick and mirrors the backend's
+  `block_window`.
+- **Lock-in mode:** `PhoneApp`/`DesktopApp` turn it on for `running || live`;
+  so does the fx theme.
+- **phone.css:** a "takeover, part two" block re-colours the hard-coded glows,
+  the dock orb, HOLO, toasts, options, the voice aura and the stats graphics
+  under `.ph[data-lockin]`.
+
 ### 2026-10-05 (later) · Claude Code · "Girl or guy?" and the "her" persona (subagent, reviewed)
 
 - **Onboarding:** step `gender` after `boot`. `Answers.gender` and the profile

@@ -4,18 +4,23 @@
  * Which tasks and blocks are serious, and which one is running, for the whole
  * app (Today, Tasks, the timeline and the Lock-in bar), not just the Lock-in
  * screen. Reloads whenever serious mode changes anywhere (lib/focus.ts
- * announces every change) and while a session runs it turns the live
- * background to embers.
+ * announces every change). Lock-in mode (the whole app black and red, the
+ * live background blood-red) is on while a session runs and, since
+ * 2026-10-17, for the whole time a serious block is on, Start pressed or not
+ * (the owner: "why is the whole app still not in that?").
  */
 import * as React from "react";
 
 import { FOCUS_CHANGED, fetchFocus, fetchMissed, type FocusEvent, type FocusItem, type MissedBlock } from "@/lib/focus";
+import { parseLocal } from "@/lib/utils";
 import { setFxTheme } from "../fx/fxBus";
 
 export interface SeriousState {
   items: ReadonlyMap<string, FocusItem>;
   /** The session in progress, if any (the newest one started). */
   running: { item: FocusItem; event: FocusEvent } | null;
+  /** A serious block whose time is now and that isn't finished: Lock-in time. */
+  live: FocusItem | null;
   eventFor: (uid: string, occurrence: string) => FocusEvent | undefined;
   /** Serious blocks that slipped this week and weren't caught up or let go. */
   missed: MissedBlock[];
@@ -30,7 +35,38 @@ export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
 
+/** "HH:MM" on `day`, as a Date. */
+function clockOn(day: Date, clock: string | null): Date | null {
+  const match = clock ? /^(\d{1,2}):(\d{2})/.exec(clock) : null;
+  if (!match) return null;
+  const at = new Date(day);
+  at.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  return at;
+}
+
+/** When a serious block happens today (the backend's `block_window`), or null. */
+function todaysWindow(item: FocusItem, now: Date): [Date, Date] | null {
+  if (item.kind !== "block") return null;
+  if ((item.block_kind ?? "").toUpperCase() === "SESSION") {
+    const start = parseLocal(item.time_start);
+    if (!start || dayKey(start) !== dayKey(now)) return null;
+    const end = parseLocal(item.time_end) ?? new Date(start.getTime() + 3_600_000);
+    return [start, end > start ? end : new Date(start.getTime() + 3_600_000)];
+  }
+  if (item.day_of_week !== (now.getDay() + 6) % 7) return null;
+  const start = clockOn(now, item.start_time);
+  if (!start) return null;
+  const end = clockOn(now, item.end_time);
+  return [start, end && end > start ? end : new Date(start.getTime() + 3_600_000)];
+}
+
 export function SeriousProvider({ children }: { children: React.ReactNode }) {
+  // Ticks so Lock-in time switches on and off as blocks start and end.
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 20_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [items, setItems] = React.useState<ReadonlyMap<string, FocusItem>>(() => new Map());
   const [events, setEvents] = React.useState<FocusEvent[]>([]);
   const [missed, setMissed] = React.useState<MissedBlock[]>([]);
@@ -79,15 +115,30 @@ export function SeriousProvider({ children }: { children: React.ReactNode }) {
     return best;
   }, [events, items]);
 
-  // The whole app changes mood while a serious session runs.
+  const live = React.useMemo(() => {
+    const at = new Date(now);
+    const today = dayKey(at);
+    for (const item of items.values()) {
+      const window = todaysWindow(item, at);
+      if (!window || at < window[0] || at >= window[1]) continue;
+      let status: FocusEvent["status"] | undefined;
+      for (const event of events) if (event.item_uid === item.uid && event.occurrence === today) status = event.status;
+      if (status === "done" || status === "moved" || status === "dropped") continue;
+      return item;
+    }
+    return null;
+  }, [items, events, now]);
+
+  // The whole app changes mood in Lock-in: a session running, or a serious block's time.
   React.useEffect(() => {
-    setFxTheme(running ? "lockin" : "normal");
-  }, [running]);
+    setFxTheme(running || live ? "lockin" : "normal");
+  }, [running, live]);
   React.useEffect(() => () => setFxTheme("normal"), []);
 
   const value = React.useMemo<SeriousState>(() => ({
     items,
     running,
+    live,
     eventFor: (uid, occurrence) => {
       let found: FocusEvent | undefined;
       for (const event of events) {
@@ -97,7 +148,7 @@ export function SeriousProvider({ children }: { children: React.ReactNode }) {
     },
     missed,
     reload,
-  }), [items, running, events, missed, reload]);
+  }), [items, running, live, events, missed, reload]);
 
   return <SeriousContext.Provider value={value}>{children}</SeriousContext.Provider>;
 }
