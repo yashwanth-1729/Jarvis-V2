@@ -522,6 +522,30 @@ class AuraBank:
                 **{"streamed": False, **record},
             ))
 
+    async def record_system(self, user_id: str, endpoint: str, model: str, record: dict[str, Any]) -> None:
+        """Usage the service spends for everyone (the nightly news refresh).
+        Kept for cost reporting; never charged to an account and, with plan
+        ``system``, never counted against the free pool."""
+        async with self.db.tx() as conn:
+            await conn.execute(insert(usage).values(
+                user_id=user_id, endpoint=endpoint, model=model, milli_aura=0,
+                reserve_milli=0, created_at=self.clock(), plan="system",
+                **{"streamed": False, **record},
+            ))
+
+    async def system_spend_usd(self, user_id: str, since: datetime) -> float:
+        """What ``record_system`` has logged for ``user_id`` since then."""
+        async with self.db.read() as conn:
+            spent = (await conn.execute(
+                select(func.coalesce(func.sum(usage.c.cost_usd), 0.0))
+                .where(usage.c.user_id == user_id, usage.c.created_at >= since)
+            )).scalar_one()
+        return float(spent)
+
+    def day_start(self, now: datetime) -> datetime:
+        """Midnight of ``now``'s local day (the daily caps' zone, IST)."""
+        return self._day_start(now)
+
     async def _free_pool_exhausted(self, conn: AsyncConnection, amount_milli: int, now: datetime) -> bool:
         """Whether this would take today's free spend past the shared pool.
 

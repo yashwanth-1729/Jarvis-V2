@@ -544,6 +544,33 @@ microphone-to-answer measurement. On-device listening checks remain necessary.
 
 ## Maintenance and latest changes
 
+### 2026-10-17 (third): News, gateway side (app tab not built yet)
+
+- **Why:** the owner asked for a News tab with sections (cricket, esports, India and world politics, IT, AI, current affairs and more), refreshed nightly by Grok through OpenRouter. They also said to keep it ready but not running until the Play Store launch, and to let them post news by hand.
+- **Gateway (`gateway/app/news.py`, new table `news_sections`):**
+  - 13 sections;
+  - Grok 4.3 with OpenRouter's native web search and strict JSON;
+  - every item cleaned, dated, de-duplicated and link-checked against the search's citations;
+  - a failed refresh keeps yesterday's copy;
+  - `GET /v1/news` is public, IP-limited and has no per-user cost;
+  - `POST /v1/admin/news/refresh` refreshes on demand;
+  - `POST /v1/admin/news/items` posts stories by hand; they stay pinned on top until older than the section's window;
+  - `DELETE /v1/admin/news/items/{section}[/{id}]` removes stories;
+  - spend is logged as `system:news` (plan `system`), so it never charges anyone or touches the free pool;
+  - `NEWS_DAILY_BUDGET_USD` is a hard stop.
+- **Off by default:** `NEWS_REFRESH_ENABLED=false`. Set it to true at launch; refreshes then run nightly at 04:30 IST, plus a catch-up if stale.
+- **`gateway/news_admin.py`:** a standard-library CLI for posting, listing, removing, clearing and refreshing. It reads `ADMIN_TOKEN` from the environment.
+- **Cost, measured with two live probes on 2026-10-17:**
+  - ~$0.079 a section when Grok searched freely (5 searches, 58k prompt tokens);
+  - ~$0.027 with the 2-search budget now in the prompt (19 s, 8 items, all cited);
+  - so roughly $0.35 a night for all 13 sections.
+- **Verified:** the offline suite `gateway/tests/news_test.py` passes 110/110, and all 9 gateway suites pass. The CLI was smoke-tested against a throwaway local gateway.
+- **Not done yet:**
+  - the app's News tab;
+  - the link-opener plugin;
+  - a VPS deploy (VPS access is lost);
+  - builds and installs.
+
 ### 2026-10-17 (second): Roadmap features, part 1: Weekly Wrapped, roast/hype voice, exam countdown
 
 - **Why:** the owner: "now implement the extra features of JARVIS Public". These three run on the device. The native ones (Lock-in timer in the notification shade, Focus Guard, home-screen widget) are in a separate change.

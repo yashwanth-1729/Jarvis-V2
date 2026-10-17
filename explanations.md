@@ -128,6 +128,23 @@ Medium, worth doing:
 
 ## Log
 
+### 2026-10-17 · Claude Code · News: gateway done, app tab pending
+
+- **Built:**
+  - `gateway/app/news.py` (nightly Grok refresh, off by default; hand-posting; admin refresh and removal);
+  - the `news_sections` table;
+  - `AuraBank.record_system`, `system_spend_usd` and `day_start`;
+  - `Gateway.news_lock` and `news_tasks`;
+  - the CLI `gateway/news_admin.py`;
+  - tests in `tests/news_test.py`, all passing (110/110; 9/9 suites).
+- **Decision:** the news model is priced inside `news.py`, not in `DEFAULT_MODEL_PRICES`, so Grok 4.3 does not become a chat model users can pick through the proxy.
+- **Left:**
+  - a frontend `lib/news.ts`, a NewsScreen and a fifth dock tab, shown only once `/v1/news` has sections;
+  - in the public edition, a 3-story teaser per section unless the plan has `news`;
+  - `tauri-plugin-opener` for article links;
+  - `NEXT_PUBLIC_NEWS_URL` for the personal builds;
+  - a VPS deploy with a new SSH key.
+
 ### 2026-10-17 · Claude Code · Lock-in mode during a block's time; no stray colours
 
 - **`SeriousContext`:** gained `live`, a serious block in its window today that

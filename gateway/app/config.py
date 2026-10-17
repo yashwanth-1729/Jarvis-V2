@@ -171,6 +171,33 @@ class Settings(BaseSettings):
     #: renewal notification, before the account drops to Spawn.
     plan_expiry_grace_minutes: int = 60
 
+    # --- News (news.py) -------------------------------------------------------------
+    #: The nightly refresh. OFF until the owner launches it (2026-10-17: "keep
+    #: it ready... when i release it to playstore, then i will tell when to
+    #: start"). Off, ``GET /v1/news`` still serves what is stored, hand-posted
+    #: stories (``POST /v1/admin/news/items``) work, and an admin can still
+    #: run one refresh by hand.
+    news_refresh_enabled: bool = False
+    #: Grok with OpenRouter's native web search (web + X). Measured
+    #: 2026-10-17: ~$0.027 a section with a 2-search budget (19 s), ~$0.079
+    #: when the model searched freely (5 searches, 58k prompt tokens).
+    news_model: str = "x-ai/grok-4.3"
+    #: Local time of the nightly refresh, in the daily caps' zone (IST).
+    news_refresh_at: str = "04:30"
+    #: Comma-separated section ids to refresh; empty = all of news.SECTIONS.
+    news_sections: str = ""
+    news_items_per_section: int = 8
+    #: Searches the model is told it may make per section (cost scales with it).
+    news_searches_per_section: int = 2
+    #: Sections refreshed at once.
+    news_concurrency: int = 3
+    #: At startup, sections older than this are refreshed straight away (a
+    #: gateway that was down at refresh time catches up).
+    news_stale_hours: int = 26
+    #: Hard stop on news spend per local day, nightly run and admin refreshes
+    #: together. The remaining sections keep yesterday's copy.
+    news_daily_budget_usd: float = 1.0
+
     # --- Admin and billing --------------------------------------------------------
     #: Protects POST /v1/admin/grant. Empty disables the endpoint.
     admin_token: str = ""

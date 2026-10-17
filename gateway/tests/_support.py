@@ -231,6 +231,8 @@ class Harness:
             database_url=TEST_DB or f"sqlite+aiosqlite:///{(self.tmp / 'gateway.db').as_posix()}",
             admin_token=ADMIN["X-Admin-Token"],
             play_push_token="push-test-token",
+            # No background news refresh: news_test.py calls news.refresh().
+            news_refresh_enabled=False,
             # Expected refusals log at WARNING/ERROR; keep test output to
             # PASS/FAIL lines. A crash still prints its traceback via run().
             log_level="CRITICAL",

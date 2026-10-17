@@ -191,6 +191,26 @@ play_topups = Table(
     _ts("created_at", nullable=False),
 )
 
+#: The News tab (news.py): one shared copy per section, written by the
+#: nightly refresh (or posted by hand) and read by everyone. A failed refresh
+#: leaves ``stories`` alone (yesterday's copy stays up) and only records the attempt. A new
+#: table, so ``create_all`` adds it to an existing database by itself.
+news_sections = Table(
+    "news_sections", metadata,
+    Column("section", String(32), primary_key=True),
+    #: JSON list of {id, title, summary, source, url, published, trending,
+    #: manual, posted_at (hand-posted only)}.
+    Column("stories", Text, nullable=False),
+    Column("model", String(128)),
+    #: What the refresh that wrote these items cost, in USD.
+    Column("cost_usd", Float, nullable=False, default=0.0),
+    #: When ``stories`` last changed. Null until the first refresh or post.
+    _ts("refreshed_at"),
+    #: The newest attempt, kept even when it failed.
+    _ts("attempted_at"),
+    Column("last_error", Text),
+)
+
 schema_meta = Table(
     "schema_meta", metadata,
     Column("key", String(64), primary_key=True),

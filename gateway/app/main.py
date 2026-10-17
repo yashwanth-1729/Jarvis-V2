@@ -9,8 +9,9 @@ app offline -- no OpenRouter, Google or Supabase call is possible from them.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import AsyncIterator
 
 import httpx
@@ -20,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import account_routes, billing, compliance, planner, proxy
+from app import account_routes, billing, compliance, news, planner, proxy
 from app.accounts import AuraBank, Clock
 from app.auth import TokenVerifier
 from app.config import Settings
@@ -57,6 +58,7 @@ def create_app(
     unknown = sorted(p for p in settings.play_product_plans.values() if not plans.exists(p))
     if unknown:
         raise ValueError(f"PLAY_PRODUCT_PLANS maps to unknown plans: {unknown}")
+    news.validate_settings(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -87,6 +89,11 @@ def create_app(
             logger.warning("charged stale holds for %d account(s) at startup", swept)
         if not settings.openrouter_api_key:
             logger.warning("OPENROUTER_API_KEY is not set: AI endpoints will answer 503")
+        # The nightly news refresh (news.py). Off in the tests, which call
+        # news.refresh() themselves.
+        nightly = None
+        if settings.news_refresh_enabled and settings.openrouter_api_key:
+            nightly = asyncio.create_task(news.nightly(app.state.gw), name="news-nightly")
         logger.info(
             "%s gateway up: models %s", settings.app_name,
             {k: models.allowed(k) for k in ("chat", "stt", "tts")},
@@ -94,6 +101,11 @@ def create_app(
         try:
             yield
         finally:
+            for task in [nightly, *app.state.gw.news_tasks]:
+                if task is not None:
+                    task.cancel()
+                    with suppress(asyncio.CancelledError, Exception):
+                        await task
             await upstream.aclose()
             await auth_http.aclose()
             await db.close()
@@ -137,4 +149,5 @@ def create_app(
     app.include_router(billing.router)
     app.include_router(compliance.router)
     app.include_router(planner.router)
+    app.include_router(news.router)
     return app

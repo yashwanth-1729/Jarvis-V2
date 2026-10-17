@@ -8,8 +8,9 @@ endpoint, once the body says what the request is.
 
 from __future__ import annotations
 
+import asyncio
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -39,6 +40,10 @@ class Gateway:
     upstream: httpx.AsyncClient
     play: PlayVerifier
     clock: Clock
+    #: One news refresh at a time (news.py), nightly or admin.
+    news_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    #: Admin refreshes running in the background, cancelled at shutdown.
+    news_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
 
 
 def gateway(request: Request) -> Gateway:
